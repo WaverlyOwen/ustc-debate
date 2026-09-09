@@ -15,6 +15,7 @@ Exit code 1 if any mismatch is found.
 """
 import argparse
 import re
+import signal
 import sys
 
 NUM = re.compile(r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*(%|％|倍|万|亿|千|百|年|人|个|次|元|美元|小时|分钟|天|岁|名|篇|项|例|份|家|所|万人|亿人|万元|亿元|千米|公里|米|分)?")
@@ -22,20 +23,27 @@ IGNORE_UNITS = {"秒", "字", "分钟", "分"}  # timing / length descriptors us
 SECTION = re.compile(r"^\s*(#+\s*)?\d+(\.\d+)*\s")  # 5.1 xxx style headings
 
 
+SECTION_REF = re.compile(r"(见|第|节|章|条|附录|表|图)")
+
+
 def tokens(text, skip_format=True):
     found = []
     for ln, line in enumerate(text.split("\n"), 1):
-        if skip_format and (SECTION.match(line) or re.search(r"\d+\s*(秒|字)", line) and len(re.findall(r"\d", line)) <= 8):
-            # lines like "约 700 字 / 180 秒" are format metadata; still scan the rest of the line
-            scan = re.sub(r"\d+\s*(秒|字)", "", line)
-        else:
-            scan = line
+        scan = line
+        if skip_format:
+            scan = SECTION.sub(" ", scan, count=1)            # "### 2.6 标题" -> drop the heading number
+            scan = re.sub(r"^\s*\|\s*\d+\s*\|", "| |", scan)     # "| 18 | ..." table row index
+            scan = re.sub(r"\d+\s*(秒|字)", " ", scan)         # "约 700 字 / 180 秒" is format metadata
         for m in NUM.finditer(scan):
             num, unit = m.group(1), m.group(2) or ""
             if unit in IGNORE_UNITS:
                 continue
             if unit == "" and len(num.replace(",", "")) <= 1:
                 continue  # single digits without units are list/section markers
+            if unit == "" and "." in num and skip_format:
+                ctx = scan[max(0, m.start() - 4): m.end() + 4]
+                if SECTION_REF.search(ctx):
+                    continue  # "见 2.7 第 1 条" style cross-references
             found.append((num.replace(",", ""), unit, ln, line.strip()))
     return found
 
@@ -69,4 +77,8 @@ def main():
 
 
 if __name__ == "__main__":
+    try:
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    except (AttributeError, ValueError):
+        pass
     sys.exit(main())
