@@ -33,6 +33,8 @@ def tokens(text, skip_format=True):
         if skip_format:
             scan = SECTION.sub(" ", scan, count=1)            # "### 2.6 标题" -> drop the heading number
             scan = re.sub(r"^\s*\|\s*\d+\s*\|", "| |", scan)     # "| 18 | ..." table row index
+            scan = re.sub(r"(?<![\d.])\d+-(?=[^\d\s])", " ", scan)   # "01-备赛文档" file-name prefixes
+            scan = re.sub(r"\b\d{1,2}\s*[–—-]\s*\d{1,2}\s*(个|条|次|句|点|问)", " ", scan)  # "6–8 个" template wording
             scan = re.sub(r"\d+\s*(秒|字)", " ", scan)         # "约 700 字 / 180 秒" is format metadata
         for m in NUM.finditer(scan):
             num, unit = m.group(1), m.group(2) or ""

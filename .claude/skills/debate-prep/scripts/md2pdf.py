@@ -15,6 +15,10 @@ PDF engines are tried in order:
   3. pandoc + xelatex
 If none is available the HTML file is kept and instructions are printed so
 the user can open it in a browser and print to PDF.
+
+Files whose name contains 速查 (quick reference) are laid out compactly
+(smaller type, tighter margins) so they fit on one or two pages; --compact
+forces that layout for every file.
 """
 import argparse
 import glob
@@ -54,6 +58,20 @@ pre code { background: none; padding: 0; }
 hr { border: 0; border-top: 1px solid #bbb; margin: 14pt 0; }
 strong { font-weight: 700; }
 .pb { page-break-before: always; }
+"""
+
+COMPACT_CSS = """
+@page { margin: 10mm 10mm; }
+body { font-size: 9.5pt; line-height: 1.4; }
+h1 { font-size: 15pt; margin-bottom: 6pt; padding-bottom: 2pt; }
+h2 { font-size: 11.5pt; margin: 9pt 0 4pt; }
+h3 { font-size: 10.5pt; margin: 6pt 0 3pt; }
+p { margin: 0 0 4pt; }
+ul, ol { margin: 0 0 4pt; padding-left: 1.3em; }
+li { margin-bottom: 1pt; }
+table { font-size: 8.5pt; margin: 3pt 0 6pt; }
+th, td { padding: 2pt 4pt; }
+blockquote { margin: 3pt 0 5pt; padding: 3pt 6pt; }
 """
 
 
@@ -215,10 +233,11 @@ def _builtin_md(text):
     return "\n".join(out)
 
 
-def wrap_html(body, title):
+def wrap_html(body, title, compact=False):
+    css = CSS + (COMPACT_CSS if compact else "")
     return ('<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
             "<title>%s</title><style>%s</style></head><body>%s</body></html>"
-            % (html.escape(title), CSS, body))
+            % (html.escape(title), css, body))
 
 
 # ----------------------------------------------------------------- engines --
@@ -347,6 +366,7 @@ def main():
     ap.add_argument("paths", nargs="+", help=".md files or directories containing them")
     ap.add_argument("--out-dir", help="write PDFs here instead of next to the source")
     ap.add_argument("--keep-html", action="store_true", help="keep the intermediate .html next to the PDF")
+    ap.add_argument("--compact", action="store_true", help="compact layout for every file (default: only names containing 速查)")
     args = ap.parse_args()
 
     files = collect(args.paths)
@@ -366,8 +386,9 @@ def main():
         base = os.path.splitext(os.path.basename(md_path))[0]
         pdf_path = os.path.join(out_dir, base + ".pdf")
         html_path = os.path.join(out_dir, base + ".html")
+        compact = args.compact or "速查" in base or "quickref" in base.lower()
         with open(html_path, "w", encoding="utf-8") as fh:
-            fh.write(wrap_html(body, title))
+            fh.write(wrap_html(body, title, compact))
 
         ok = False
         used = None
