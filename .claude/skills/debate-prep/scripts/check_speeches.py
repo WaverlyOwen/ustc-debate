@@ -79,8 +79,10 @@ def body_of(section):
         if "临场位" in s and (s.startswith("-") or s.startswith("*") or s.startswith(">")):
             continue
         out.append(ln)
-    # drop a trailing block of bullets (预案 notes)
-    while out and out[-1].strip().startswith(("-", "*", ">")):
+    # Drop the trailing block of 预案 notes. Blank lines must be popped too,
+    # otherwise a section that ends on one shields the notes above it and the
+    # count comes out too high — which on stage means finishing early.
+    while out and (not out[-1].strip() or out[-1].strip().startswith(("-", "*", ">"))):
         out.pop()
     return "\n".join(out)
 
