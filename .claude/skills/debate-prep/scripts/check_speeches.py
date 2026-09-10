@@ -31,7 +31,18 @@ BANDS = {
         "小结·留临场位": (90, 300, 340),
         "结辩·反四": (210, 875, 980),
         "结辩·正四": (175, 730, 815),
-    }
+    },
+    # 2025 校赛: 盘问小结 runs 120 s here, not 90; 奇袭申论 is a 120 s speech.
+    "ustc-school-cup-2025": {
+        "立论": (180, 750, 840),
+        "驳论": (120, 500, 560),
+        "驳论·留临场位": (120, 400, 460),
+        "小结": (120, 500, 560),
+        "小结·留临场位": (120, 400, 460),
+        "奇袭申论": (120, 500, 560),
+        "结辩·反四": (210, 875, 980),
+        "结辩·正四": (175, 730, 815),
+    },
 }
 
 STAGE = re.compile(r"〔[^〕]*〕|【[^】]*】|（[^）]*）|\([^)]*\)")
@@ -56,6 +67,8 @@ def classify(heading):
     """
     h = heading
     reserve = "临场位" in h or "临场回应" in h
+    if "奇袭" in h and "申论" in h:
+        return "奇袭申论"
     if "立论" in h and "稿" in h:
         return "立论"
     if "驳论" in h and "稿" in h:
@@ -90,13 +103,28 @@ def body_of(section):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="+", help="03-文稿-*.md files")
-    ap.add_argument("--format", default="ustc-freshman-cup", help="format key (default: ustc-freshman-cup)")
+    ap.add_argument("--format", default=None,
+                    help="format key; omit to detect from the file (校赛 headings say 反二质询/正四对辩), "
+                         "default ustc-freshman-cup. Known: " + ", ".join(BANDS))
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args()
 
-    bands = BANDS.get(args.format)
+    fmt = args.format
+    if fmt is None:
+        fmt = "ustc-freshman-cup"
+        for path in args.files:
+            try:
+                head = open(path, encoding="utf-8").read(4000)
+            except OSError:
+                continue
+            # 校赛 gives 质询 to 二辩 and 对辩 to 四辩; the freshman cup does the opposite.
+            if "奇袭" in head or re.search(r"[正反]四对辩", head) or re.search(r"[正反]二质询", head):
+                fmt = "ustc-school-cup-2025"
+                break
+        print("(format: %s%s)" % (fmt, "" if args.format else "，自动判断；用 --format 可指定"))
+    bands = BANDS.get(fmt)
     if bands is None:
-        print("unknown format %r; known: %s" % (args.format, ", ".join(BANDS)), file=sys.stderr)
+        print("unknown format %r; known: %s" % (fmt, ", ".join(BANDS)), file=sys.stderr)
         return 2
 
     bad = 0
