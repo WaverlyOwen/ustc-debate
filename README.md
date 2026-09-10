@@ -20,6 +20,7 @@
 │   │   ├── ustc-freshman-cup.md     # 中科大新生辩论赛赛制（默认）
 │   │   └── _template.md             # 新增赛制的模板
 │   ├── case-building.md             # 定义三分法、判准与论证义务、论点三件套、对抗迭代、反驳库、优劣评估、口径表
+│   ├── speech-voice.md              # 讲稿语感：怎么写得像人在说话而不是念稿
 │   ├── evidence.md                  # 来源等级、引用格式、核实流程、研究/理论/案例的描述方法
 │   └── stage-playbooks.md           # 各环节打法与写法
 ├── assets/
@@ -29,6 +30,7 @@
 ├── scripts/
 │   ├── md2pdf.py                    # Markdown → PDF（无需额外安装包，自动寻找 Chrome/Chromium/Edge）
 │   ├── check_speeches.py            # 按写死的计数规则核对每篇稿件的口播字数是否落在时长区间内
+│   ├── check_voice.py               # 检出念稿腔：破折号、每段金句、等长句串、书面连接词、口语黏合剂不足
 │   └── check_consistency.py         # 检查速查与文稿中的数字是否都在口径表内
 └── evals/
     └── evals.json                   # 测试用例
