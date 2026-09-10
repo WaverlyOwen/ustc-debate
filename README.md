@@ -28,6 +28,7 @@
 │   └── script-doc-template.md       # 正赛文稿模板
 ├── scripts/
 │   ├── md2pdf.py                    # Markdown → PDF（无需额外安装包，自动寻找 Chrome/Chromium/Edge）
+│   ├── check_speeches.py            # 按写死的计数规则核对每篇稿件的口播字数是否落在时长区间内
 │   └── check_consistency.py         # 检查速查与文稿中的数字是否都在口径表内
 └── evals/
     └── evals.json                   # 测试用例
