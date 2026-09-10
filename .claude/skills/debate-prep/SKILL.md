@@ -22,7 +22,7 @@ description: 华语辩论赛备赛助手。给定辩题（可选题解、赛制�
 |---|---|---|
 | 辩题 | 必需 | 完整原文，含正反双方表述。缺失时直接问 |
 | 题解 | 可选 | 赛事方的解释，是**硬约束**：定义与讨论范围不能违背，只能在其内部找空间 |
-| 赛制 | 可选 | 默认中科大新生辩论赛（`references/formats/ustc-freshman-cup.md`）。用户提到其他赛事时先查 `references/formats/`；没有就请用户贴流程，并按 `references/formats/_template.md` 新建赛制文件 |
+| 赛制 | 可选 | 默认中科大新生辩论赛（`references/formats/ustc-freshman-cup.md`）。用户提到"校赛""2025 校赛"时用 `ustc-school-cup-2025.md`，它的质询由二辩执行、对辩由四辩执行、盘问小结 120 秒，并且有奇袭环节。提到其他赛事时先查 `references/formats/`；没有就请用户贴流程，并按 `references/formats/_template.md` 新建赛制文件 |
 | 我方持方 | 可选 | 决定交付摘要的重点以及优劣评估后的建议。双方文档照样全出 |
 | 其他 | 可选 | 比赛日期、队员分工、对手信息、已有草稿、想加强的环节 |
 
@@ -115,7 +115,7 @@ python3 <skill目录>/scripts/check_consistency.py --canon prep/<题>/01-备赛�
 python3 <skill目录>/scripts/md2pdf.py prep/<题>/
 ```
 
-`check_speeches.py` 报 OUT、`check_voice.py` 报 FAIL 的稿件都必须改完再交付，改完重跑。字数不要只改标题上的数字；语感问题不要只删破折号了事，破折号只是最好数的那一条。
+`check_speeches.py` 会自动判断赛制（校赛文稿里有奇袭与四辩对辩），也可以用 `--format` 指定。`check_speeches.py` 报 OUT、`check_voice.py` 报 FAIL 的稿件都必须改完再交付，改完重跑。字数不要只改标题上的数字；语感问题不要只删破折号了事，破折号只是最好数的那一条。
 
 一致性检查报出的数字逐条判断：数据类的必须处理，要么稿子写错了，改稿，要么口径表漏了，补上并附出处；编号、交叉引用之类的误报可以忽略。`md2pdf.py` 不需要额外安装包，依次尝试 Chrome/Chromium/Edge、weasyprint、pandoc；都没有时保留 HTML 并打印说明，把说明转告用户。不要自行 pip 安装任何包，那是用户机器上的决定。文件名含“速查”的会自动用紧凑排版，速查内容本身也要控制在两页以内。
 

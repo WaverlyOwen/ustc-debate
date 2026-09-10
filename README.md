@@ -18,6 +18,7 @@
 ├── references/
 │   ├── formats/
 │   │   ├── ustc-freshman-cup.md     # 中科大新生辩论赛赛制（默认）
+│   │   ├── ustc-school-cup-2025.md  # 2025 中科大校赛赛制（二辩质询、四辩对辩、小结 120 秒、含奇袭）
 │   │   └── _template.md             # 新增赛制的模板
 │   ├── case-building.md             # 定义三分法、判准与论证义务、论点三件套、对抗迭代、反驳库、优劣评估、口径表
 │   ├── speech-voice.md              # 讲稿语感：怎么写得像人在说话而不是念稿
