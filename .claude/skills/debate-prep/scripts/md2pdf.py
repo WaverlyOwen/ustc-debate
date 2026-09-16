@@ -150,7 +150,8 @@ ol.steps > li::before { content: counter(step); position: absolute; left: 0; top
                         border: 1.2px solid var(--accent); color: var(--accent); font-size: 8.5pt; font-weight: 700;
                         display: flex; align-items: center; justify-content: center; line-height: 1; }
 .role-evidence { grid-template-columns: 1fr; padding: 0; border-top: 0; margin: 6pt 0; }
-.role-evidence > dt { display: flex; align-items: center; gap: 8pt; font-size: 8.5pt; padding: 0 0 4pt; }
+.role-evidence > dt { display: flex; align-items: baseline; gap: 8pt; font-size: 8.5pt; padding: 0 0 4pt; }
+.role-evidence > dt .st { margin-left: auto; }
 .role-evidence > dt .kind { display: inline-block; padding: 2.5pt 7pt; background: var(--ink); color: #fff; border-radius: 2px; letter-spacing: .14em; font-size: 8pt; }
 .role-evidence > dt .kind.pro { background: var(--pro); } .role-evidence > dt .kind.con { background: var(--con); }
 .role-evidence > dd { border: 1px solid var(--rule); border-left: 3px solid var(--accent); padding: 8pt 12pt 8pt; background: #FDFCFA; }
@@ -163,11 +164,21 @@ ol.steps > li::before { content: counter(step); position: absolute; left: 0; top
 .role-clash > dd .pair > .rsp > .tag { color: var(--accent); }
 .role-card { grid-template-columns: 1fr; border-top: 0; padding: 0; margin: 8pt 0; }
 .role-card > dt { font-size: 10pt; letter-spacing: .04em; padding: 0 0 4pt; color: var(--ink); }
+.role-card > dd > .oneline { font-size: 11pt; font-weight: 600; line-height: 1.6; color: var(--ink); margin: 0 0 5pt;
+                             padding-left: 9pt; border-left: 2px solid var(--accent); }
+.role-card.side-pro > dd > .oneline { border-left-color: var(--pro); }
+.role-card.side-con > dd > .oneline { border-left-color: var(--con); }
+.role-card.side-neutral > dd > .oneline { border-left-color: var(--ink); }
 .role-card.side-pro > dt { color: var(--pro); } .role-card.side-con > dt { color: var(--con); }
 .role-card > dd { border-left: 3px solid var(--both); padding: 6pt 12pt; }
 .role-card.side-pro > dd { border-left-color: var(--pro); } .role-card.side-con > dd { border-left-color: var(--con); }
 .role-card.side-neutral > dd { background: var(--panel); border-left-color: var(--ink); padding: 9pt 12pt; }
 .role-card.side-neutral > dd > .main { font-weight: 600; }
+.warnbox { border: 1.5px solid #C08A3E; background: #FDF6EA; padding: 10pt 14pt 8pt; margin: 10pt 0 14pt; break-inside: avoid; }
+.warnbox > .whead { font-size: 9pt; font-weight: 700; letter-spacing: .14em; color: #8A5B12; margin: 0 0 6pt; }
+.warnbox .fields { margin: 0; }
+.warnbox .field { border-top-color: #E8D6B4; }
+.warnbox .role-card > dd { background: #fff; border-left-width: 3px; padding: 7pt 11pt; }
 .role-thesis { grid-template-columns: 1fr; border-top: 0; padding: 0; }
 .role-thesis > dt { font-size: 8pt; padding: 0 0 3pt; }
 .role-thesis > dd { padding: 8pt 12pt; background: var(--panel); border-left: 4px solid var(--both); font-size: 11pt; line-height: 1.65; }
@@ -185,6 +196,18 @@ ol.steps > li::before { content: counter(step); position: absolute; left: 0; top
 .role-checklist > dd > ul { list-style: none; padding: 0; }
 .role-checklist > dd > ul > li { padding-left: 1.6em; position: relative; }
 .role-checklist > dd > ul > li::before { content: ""; position: absolute; left: 0; top: .35em; width: .8em; height: .8em; border: 1.2px solid var(--ink-2); border-radius: 1.5px; }
+.evlist { margin: 6pt 0 12pt; }
+.evrow { display: grid; grid-template-columns: 1.8em 1fr auto; gap: 0 8pt; padding: 6pt 0; border-top: 1px solid var(--rule-soft); break-inside: avoid; }
+.evrow:first-child { border-top: 1.5px solid var(--ink); }
+.evrow > .n { color: var(--ink-3); font-size: 9pt; padding-top: 1pt; }
+.evrow > .claim { font-size: 10pt; line-height: 1.55; }
+.evrow > .claim > .src { display: block; font-size: 8.5pt; color: var(--ink-2); margin-top: 3pt; line-height: 1.5; }
+.evrow > .claim > .src > b { font-weight: 500; color: var(--ink-3); letter-spacing: .06em; margin-right: 4pt; }
+.evrow > .st { padding-top: 1pt; }
+/* flow table grouped by scoring block */
+.tablewrap tr.blk td { background: var(--panel); font-weight: 700; font-size: 8.5pt; letter-spacing: .1em; color: var(--ink-2);
+                       padding: 5pt 8pt; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.tablewrap tr.blk td .goal { font-weight: 400; letter-spacing: 0; color: var(--ink-3); margin-left: 10pt; }
 .summary .fields { margin: 0; } .summary .field { border-top-color: var(--rule); }
 .summary .role-lead > dd { font-size: 11pt; font-weight: 500; }
 """
@@ -194,37 +217,29 @@ PREP_CSS = """
 """
 
 QUICK_CSS = """
-@page { size: A4; margin: 9mm 10mm 10mm; }
-html { font-size: 9pt; }
-body { line-height: 1.34; }
-.titleblock { margin: 0 0 8pt; padding: 0 0 5pt; }
-.titleblock .eyebrow { margin-bottom: 3pt; font-size: 7.5pt; }
-.titleblock h1 { font-size: 14pt; line-height: 1.25; }
-.titleblock .sidebadge { font-size: 8pt; padding: 2.5pt 6pt; margin-top: 4pt; }
-.titleblock .meta { margin-top: 5pt; font-size: 8pt; }
-h2 { font-size: 10pt; margin: 9pt 0 3pt; padding-top: 5pt; letter-spacing: .1em; color: var(--accent); }
-h3 { font-size: 9.5pt; margin: 6pt 0 2pt; }
-p { margin: 0 0 3pt; }
-ul, ol { margin: 0 0 3pt; padding-left: 1.25em; } li { margin-bottom: 1pt; }
-blockquote { margin: 5pt 0 7pt; padding: 5pt 9pt; font-size: 9.5pt; line-height: 1.45; }
-.tablewrap { margin: 2pt 0 6pt; }
-.tablewrap table { font-size: 8pt; line-height: 1.3; }
-.tablewrap thead th { padding: 2.5pt 4.5pt; font-size: 7.8pt; } .tablewrap td { padding: 2.5pt 4.5pt; }
-table.page > tbody > tr > td.pagebody { padding-top: 8pt; }
-.fields { margin: 2pt 0 6pt; }
-.field { display: block; padding: 2.5pt 0; border-top: 1px solid var(--rule-soft); }
-.field > dt { display: inline; font-size: 7.5pt; letter-spacing: .08em; padding: 0; margin-right: 6pt; }
-.field > dt .lsuf { display: inline; margin-left: 2pt; }
-.field > dd { display: inline; }
-.field > dd > p { display: inline; margin: 0; }
-.field > dd > p + p::before { content: " "; }
-.field.role-lead > dd { font-size: 9.5pt; }
-.field.role-card, .field.role-thesis, .field.role-evidence { display: grid; grid-template-columns: 1fr; }
-.field.role-card > dt, .field.role-thesis > dt, .field.role-evidence > dt { display: block; }
-.field.role-card > dd, .field.role-thesis > dd, .field.role-evidence > dd { display: block; }
-.sub { margin-top: 1pt; }
-.sub { font-size: 8.5pt; grid-template-columns: 5.5em 1fr; margin-top: 2pt; } .sub > .sublabel { font-size: 7.2pt; }
-.role-lead > dd { font-size: 10pt; }
+@page { size: A4; margin: 11mm 12mm 12mm; }
+html { font-size: 9.5pt; }
+body { line-height: 1.5; }
+.titleblock { margin: 0 0 9pt; padding: 0 0 6pt; }
+.titleblock .eyebrow { margin-bottom: 4pt; font-size: 8pt; }
+.titleblock h1 { font-size: 15pt; line-height: 1.3; }
+.titleblock .sidebadge { font-size: 8.5pt; padding: 3pt 7pt; margin-top: 5pt; }
+.titleblock .meta { margin-top: 6pt; font-size: 8.5pt; }
+h2 { font-size: 10.5pt; margin: 11pt 0 4pt; padding-top: 6pt; letter-spacing: .1em; color: var(--accent); }
+h3 { font-size: 10pt; margin: 7pt 0 3pt; }
+p { margin: 0 0 4pt; }
+ul, ol { margin: 0 0 4pt; padding-left: 1.3em; } li { margin-bottom: 1.5pt; }
+blockquote { margin: 6pt 0 8pt; padding: 6pt 10pt; font-size: 10pt; line-height: 1.55; }
+.tablewrap { margin: 3pt 0 7pt; }
+.tablewrap table { font-size: 8.8pt; line-height: 1.45; }
+.tablewrap thead th { padding: 3pt 5pt; font-size: 8.2pt; } .tablewrap td { padding: 3pt 5pt; }
+table.page > tbody > tr > td.pagebody { padding-top: 9pt; }
+.fields { margin: 3pt 0 7pt; }
+.field { grid-template-columns: 5em 1fr; padding: 4pt 0; gap: 0 9pt; }
+.field > dt { font-size: 8pt; letter-spacing: .08em; padding-top: 2pt; }
+.sub { grid-template-columns: 5em 1fr; font-size: 9pt; margin-top: 3pt; } .sub > .sublabel { font-size: 7.5pt; }
+.role-lead > dd { font-size: 10.5pt; }
+.fieldcard { padding: 6pt 10pt 4pt; margin: 5pt 0 7pt; } .fieldcard > .fh { font-size: 9.5pt; }
 """
 
 SCRIPT_CSS = """
@@ -238,6 +253,9 @@ SCRIPT_CSS = """
 .stage.speech > p { font-size: 12pt; line-height: 1.95; margin: 0 0 11pt; }
 .stage.speech > p strong { font-weight: 600; -webkit-text-emphasis: filled sesame var(--accent); text-emphasis: filled sesame var(--accent);
                            -webkit-text-emphasis-position: under right; text-emphasis-position: under right; }
+.fieldcard { border: 1px solid var(--rule); border-left: 3px solid var(--accent); padding: 8pt 12pt 6pt; margin: 8pt 0 10pt; break-inside: avoid; }
+.fieldcard > .fh { font-size: 10.5pt; font-weight: 700; color: var(--accent); margin: 0 0 5pt; }
+.fieldcard .fields { margin: 0; }
 .contingency { margin: 12pt 0 4pt; padding: 8pt 12pt; border: 1px dashed var(--rule); background: #FCFBF9; font-size: 9.5pt;
                color: var(--ink-2); line-height: 1.55; break-inside: avoid; }
 .contingency .label { font-weight: 700; letter-spacing: .14em; font-size: 8.5pt; color: var(--ink-3); margin: 0 0 4pt; }
@@ -605,8 +623,21 @@ def render_fields(items, depth=0):
                 it = Item()  # children consumed
             body = (("<p>%s</p>" % main) if main else "") + body
         elif role == "role-evidence":
-            kind = re.sub(r"[（(].*?[）)]", "", label).strip()
-            label = '<span class="kind">%s</span>' % kind
+            kind = re.sub(r"<[^>]+>", "", label)
+            kind = re.sub(r"[（(].*?[）)]", "", kind).strip()
+            st = ""
+            keep = []
+            for lab, sb in subs:
+                if lab == "状态" and not st:
+                    sm_ = re.match(r"(?:<strong>)?(已核实|有把握|【待核实】|待核实)(?:</strong>)?\s*(.*)$", sb.strip(), re.S)
+                    if sm_:
+                        st = chip(sm_.group(1))
+                        if sm_.group(2).strip():
+                            keep.append(("状态说明", sm_.group(2).strip()))
+                        continue
+                keep.append((lab, sb))
+            subs = keep
+            label = '<span class="kind">%s</span>%s' % (kind, ('<span class="st">%s</span>' % st) if st else "")
             body = ('<div class="main">%s</div>' % main if main else "") + render_subs(subs)
             subs = []
         elif role == "role-clash":
@@ -641,7 +672,13 @@ def render_fields(items, depth=0):
             it = Item()
             body = (("<p>%s</p>" % main) if main else "") + "<ul>" + "".join('<li><span class="when">%s</span><span>%s</span></li>' % r for r in rows) + "</ul>"
         elif role == "role-card":
-            body = ('<div class="main">%s</div>' % main if main else "") + render_subs(subs)
+            one = ""
+            if main and ("定义" in label or "判准" in label):
+                mm = re.match(r"\s*(?:<strong>)?(.{6,60}?[。．.])(?:</strong>)?\s*(.*)$", main, re.S)
+                if mm:
+                    one, main = mm.group(1).strip(), mm.group(2).strip()
+            body = (('<div class="oneline">%s</div>' % one) if one else "") \
+                 + ('<div class="main">%s</div>' % main if main else "") + render_subs(subs)
             subs = []
         else:
             if len(re.findall(r"(?:^|\s)[1-9]\.\s", main)) >= 2:
@@ -690,6 +727,59 @@ def transform_tables(body):
         # chips in cells
         tbl = re.sub(r"<td>\s*(已核实|有把握|【待核实】|待核实|偏正|略偏正|偏反|略偏反|均衡|最终|淘汰|常见)\s*</td>",
                      lambda c: "<td>%s</td>" % chip(c.group(1)), tbl)
+        if heads and heads[0] == "#" and "一句话反驳" in heads:
+            ix = {h: i for i, h in enumerate(heads)}
+            rows = re.findall(r"<tr>(.*?)</tr>", tbl, re.S)[1:]
+            cards = []
+            for r in rows:
+                c = re.findall(r"<td[^>]*>(.*?)</td>", r, re.S)
+                if len(c) < 2:
+                    continue
+                g = lambda k: c[ix[k]].strip() if k in ix and ix[k] < len(c) else ""
+                num = re.sub(r"<[^>]+>", "", g("#")).strip()
+                claim_key = next((h for h in heads if h.endswith("论点")), heads[1])
+                src = g("来源")
+                rows_html = []
+                for k in heads:
+                    if k in ("#", claim_key, "来源") or not g(k):
+                        continue
+                    rows_html.append('<div class="field"><dt>%s</dt><dd><p>%s</p></dd></div>' % (k, g(k)))
+                cards.append('<div class="fieldcard"><div class="fh">%s · %s%s</div><dl class="fields">%s</dl></div>'
+                             % (num, g(claim_key), (" " + src) if src else "", "".join(rows_html)))
+            return "".join(cards)
+        if heads and heads[0] == "#" and "出处" in heads and "核实日期" in heads:
+            ix = {h: i for i, h in enumerate(heads)}
+            rows = re.findall(r"<tr>(.*?)</tr>", tbl, re.S)[1:]
+            items = []
+            for r in rows:
+                c = re.findall(r"<td[^>]*>(.*?)</td>", r, re.S)
+                if len(c) < len(heads):
+                    continue
+                g = lambda k: c[ix[k]].strip() if k in ix else ""
+                src_bits = []
+                for k in ("出处", "核实日期", "用在", "查证方向"):
+                    v = re.sub(r"<[^>]+>", "", g(k)).strip()
+                    if v and v not in ("—", "-", ""):
+                        src_bits.append("<b>%s</b>%s" % (k, v))
+                items.append('<div class="evrow"><div class="n">%s</div><div class="claim">%s<span class="src">%s</span></div>'
+                             '<div class="st">%s</div></div>'
+                             % (re.sub(r"<[^>]+>", "", g("#")), g("论据"), " · ".join(src_bits), g("状态")))
+            return '<div class="evlist">%s</div>' % "".join(items)
+        if heads and heads[0] == "块" and "环节" in heads:
+            rows = re.findall(r"<tr>(.*?)</tr>", tbl, re.S)
+            body_rows, last, new_rows = rows[1:], None, []
+            ncol = len(heads) - 1
+            for r in body_rows:
+                c = re.findall(r"<td[^>]*>(.*?)</td>", r, re.S)
+                if not c:
+                    continue
+                blk = re.sub(r"<[^>]+>", "", c[0]).strip()
+                if blk and blk != last:
+                    new_rows.append('<tr class="blk"><td colspan="%d">%s 块</td></tr>' % (ncol, blk)); last = blk
+                new_rows.append("<tr>" + "".join("<td>%s</td>" % x for x in c[1:]) + "</tr>")
+            head_cells = "".join("<th>%s</th>" % h for h in heads[1:])
+            tbl = "<table><thead><tr>%s</tr></thead><tbody>%s</tbody></table>" % (head_cells, "".join(new_rows))
+            return '<div class="tablewrap">%s</div>' % tbl
         if heads and heads[0] == "类别" and "标准表述" in heads:
             # group rows by 类别; mark 禁止的说法 column
             forbid = heads.index("禁止的说法") if "禁止的说法" in heads else -1
@@ -706,14 +796,44 @@ def transform_tables(body):
                 cells[0] = ""
                 tds = []
                 for ci, c in enumerate(cells):
-                    k = ' class="forbid"' if ci == forbid else (' class="lead"' if ci == 1 else "")
-                    tds.append("<td%s>%s</td>" % (k, c))
+                    if ci == forbid:
+                        txt = re.sub(r"<[^>]+>", "", c).strip()
+                        tds.append('<td class="forbid">%s</td>' % (("⊘ " + c) if txt and txt not in ("—", "-") else c))
+                    else:
+                        tds.append("<td%s>%s</td>" % (' class="lead"' if ci == 1 else "", c))
                 new_rows.append("<tr>" + "".join(tds) + "</tr>")
             tbl = re.sub(r"<tbody>.*?</tbody>", "<tbody>" + "".join(new_rows) + "</tbody>", tbl, flags=re.S)
         elif heads and heads[0] == "维度":
             pass
         return '<div class="tablewrap">%s</div>' % tbl
     return re.sub(r"<table>.*?</table>", one, body, flags=re.S)
+
+
+def wrap_warnbox(body):
+    """The 定义杀 subsection becomes a warning box: both sides must memorise it."""
+    m = re.search(r"<h3[^>]*>([^<]*定义杀[^<]*)</h3>", body)
+    if not m:
+        return body
+    nxt = re.search(r"<h[23]", body[m.end():])
+    end = m.end() + (nxt.start() if nxt else len(body) - m.end())
+    inner = body[m.end():end]
+    head = re.sub(r"<[^>]+>", "", m.group(1)).strip()
+    return body[:m.start()] + '<aside class="warnbox"><div class="whead">⚠ %s</div>%s</aside>' % (html.escape(head), inner) + body[end:]
+
+
+def wrap_battlegrounds(body):
+    """Each 自由辩 battleground (an h3 named 战场…) becomes its own card."""
+    out = []
+    pos = 0
+    for m in re.finditer(r"<h3[^>]*>([^<]*战场[^<]*)</h3>", body):
+        nxt = re.search(r"<h[23]", body[m.end():])
+        end = m.end() + (nxt.start() if nxt else len(body) - m.end())
+        name = re.sub(r"<[^>]+>", "", m.group(1)).strip()
+        out.append(body[pos:m.start()])
+        out.append('<div class="fieldcard"><div class="fh">%s</div>%s</div>' % (html.escape(name), body[m.end():end]))
+        pos = end
+    out.append(body[pos:])
+    return "".join(out)
 
 
 def decorate(body, kind, side):
@@ -766,6 +886,8 @@ def decorate(body, kind, side):
         body = re.sub(r"<ul>\s*<li>\s*(?:<strong>)?如果……就……(?:</strong>)?[：:]?\s*(<ul>.*?</ul>)\s*</li>\s*</ul>", r"\1", body, flags=re.S)
     body = transform_lists(body)
     body = transform_tables(body)
+    body = wrap_warnbox(body)
+    body = wrap_battlegrounds(body)
 
     # summary panel with the thesis pair and stat tiles
     sm = re.search(r"<h2>[^<]*结论速览[^<]*</h2>", body)
@@ -773,6 +895,8 @@ def decorate(body, kind, side):
         nxt = re.search(r"<h2", body[sm.end():])
         end = sm.end() + (nxt.start() if nxt else len(body) - sm.end())
         inner = re.sub(r"<hr>\s*$", "", body[sm.start():end].strip())
+        # 结论速览 carries the judgement only: the verification tally lives in the evidence list
+        inner = re.sub(r'<div class="field role-stats[^"]*">.*?</dd></div>', "", inner, flags=re.S)
         body = body[:sm.start()] + '<section class="summary">' + inner + "</section>" + body[end:]
 
     # script stages
