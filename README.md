@@ -2,7 +2,7 @@
 
 面向中国科学技术大学新生辩论赛的华语辩论备赛 Skill（Claude Code / Claude 通用）。
 
-给它一道辩题（可选题解、赛制、你的持方），它会**始终为正反双方对称备赛**，并交付三类文档，每类都有 Markdown 与 PDF：
+给它一道辩题（可选题解、赛制），它会**始终为正反双方对称备赛**，并交付三类文档，每类都有 Markdown 与 PDF：
 
 | 文档 | 内容 |
 |---|---|
@@ -43,13 +43,22 @@
 
 > 辩题：XXX / YYY，我方反方，中科大新生赛，帮我备赛。
 
-也可以把 `.claude/skills/debate-prep` 复制到 `~/.claude/skills/` 供所有项目使用。生成的文档默认放在 `prep/<辩题简称>/`。
+也可以把 `.claude/skills/debate-prep` 复制到 `~/.claude/skills/` 供所有项目使用。生成的文档默认放在 `prep/<辩题简称>/`，文件名带辩题不带编号：
+
+```
+prep/宠物之爱/
+├── 备赛文档-宠物之爱.md / .pdf       # 双方共用
+├── 速查-正方-宠物之爱.md / .pdf      # 每方一份，两页以内
+├── 速查-反方-宠物之爱.md / .pdf
+├── 文稿-正方-宠物之爱.md / .pdf      # 每方按赛制的全部环节
+└── 文稿-反方-宠物之爱.md / .pdf
+```
 
 **在 Claude.ai 中**：把 `.claude/skills/debate-prep` 目录打包为 `.skill` 文件上传。Claude.ai 环境没有文件工具时会在对话中分段输出。
 
 ## PDF 生成
 
-`scripts/md2pdf.py` 不依赖任何 Python 包。它依次尝试本机的 Chrome / Chromium / Edge（无头打印）、weasyprint、pandoc + xelatex；都没有时保留 HTML 并提示用浏览器"打印 → 另存为 PDF"。手动用法：
+`scripts/md2pdf.py` 不依赖任何 Python 包。它依次尝试本机的 Chrome / Chromium / Edge（无头打印）、weasyprint、pandoc + xelatex；都没有时保留 HTML 并提示用浏览器"打印 → 另存为 PDF"。版式按文件名自动选择：备赛文档用阅读版式，速查用紧凑两页版式，文稿用 12pt 朗读版式并把"如果……就……"预案收进备注框；文件名里的正方、反方决定整份文档用红还是蓝，这是华语辩论的惯例色。手动用法：
 
 ```
 python3 .claude/skills/debate-prep/scripts/md2pdf.py prep/<辩题简称>/
@@ -62,7 +71,6 @@ python3 .claude/skills/debate-prep/scripts/md2pdf.py prep/<辩题简称>/
 | 辩题（含正反表述） | 必需 |
 | 题解 | 可选，视为硬约束 |
 | 赛制 | 可选，默认中科大新生辩论赛 |
-| 我方持方 | 可选，只影响摘要重点与建议，双方文档都会生成 |
 | 比赛日期、队员分工、对手信息 | 可选 |
 
 ## 新增赛制

@@ -2,7 +2,7 @@
 """Check that numbers quoted in match documents all appear in the canonical 口径表.
 
 Usage:
-    python3 check_consistency.py --canon 01-备赛文档.md 02-速查-正方.md 03-文稿-正方.md ...
+    python3 check_consistency.py --canon 备赛文档-<题>.md 速查-*.md 文稿-*.md
 
 Every number-like token (35%, 1.2亿, 2023年, 3.4倍, 12000人 ...) found in the
 checked files must also appear somewhere in the canonical document. Numbers

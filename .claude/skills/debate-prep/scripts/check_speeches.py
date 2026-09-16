@@ -2,7 +2,7 @@
 """Count the spoken length of each speech in a 文稿 file and check it against the format's band.
 
 Usage:
-    python3 check_speeches.py prep/<题>/03-文稿-*.md [--format ustc-freshman-cup] [--json]
+    python3 check_speeches.py prep/<题>/文稿-*.md [--format ustc-freshman-cup] [--json]
 
 Counting rule (the single canonical one, mirrored from the format file):
   counted    汉字, 阿拉伯数字 (one char each), English words (two chars each)
@@ -102,7 +102,7 @@ def body_of(section):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("files", nargs="+", help="03-文稿-*.md files")
+    ap.add_argument("files", nargs="+", help="文稿-*.md files")
     ap.add_argument("--format", default=None,
                     help="format key; omit to detect from the file (校赛 headings say 反二质询/正四对辩), "
                          "default ustc-freshman-cup. Known: " + ", ".join(BANDS))

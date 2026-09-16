@@ -2,7 +2,7 @@
 """Flag the mechanical tells that make a debate script sound read rather than spoken.
 
 Usage:
-    python3 check_voice.py prep/<题>/03-文稿-*.md [--verbose]
+    python3 check_voice.py prep/<题>/文稿-*.md [--verbose]
 
 Checks the five tells that can be counted objectively (see
 references/speech-voice.md for the other four, which need a human ear):
