@@ -4,10 +4,10 @@
 Usage:
     python3 md2pdf.py FILE_OR_DIR [FILE_OR_DIR ...] [--out-dir DIR] [--keep-html]
 
-Zero required dependencies. Markdown is rendered by the `markdown` package
-if installed, otherwise by a small built-in converter that understands
-headings, paragraphs, emphasis, links, lists, tables, blockquotes, fenced
-code and horizontal rules (everything the debate templates use).
+Zero required dependencies. Markdown is rendered by a small built-in
+converter that understands headings, paragraphs, emphasis, links, lists
+(nested on two-space indents), tables, blockquotes, fenced code and rules —
+everything the debate templates use — so output is identical on every machine.
 
 PDF engines are tried in order:
   1. Chrome / Chromium / Edge headless (most students already have one)
@@ -93,19 +93,100 @@ blockquote p { margin: 0 0 4pt; } blockquote p:last-child { margin: 0; }
 .summary ul { padding-left: 1.2em; margin: 0; } .summary li { margin-bottom: 6pt; }
 .summary li:last-child { margin-bottom: 0; }
 
-/* ---- tables ---- */
-.tablewrap { margin: 8pt 0 14pt; overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-size: 9.5pt; line-height: 1.5; }
-thead th { text-align: left; font-weight: 600; color: var(--ink-2); font-size: 9pt; letter-spacing: .04em; padding: 6pt 8pt;
-           border-top: 1.5px solid var(--ink); border-bottom: 1px solid var(--rule); background: var(--panel); }
-td { padding: 6pt 8pt; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
-tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
-tr { break-inside: avoid; page-break-inside: avoid; }
+/* ---- page frame: thead repeats on every printed page, so this is the running header ---- */
+table.page { width: 100%; border-collapse: collapse; }
+table.page > thead > tr > td.pagehead { padding: 0 0 5pt; font-size: 8pt; color: var(--ink-3); letter-spacing: .06em;
+                                        border-bottom: 1px solid var(--rule); }
+table.page > thead > tr > td.pagehead .r { float: right; color: var(--accent); font-weight: 600; }
+table.page > tbody > tr > td.pagebody { padding: 14pt 0 0; }
 
-/* ---- running footer ---- */
-.runfoot { position: fixed; left: 0; right: 0; bottom: -13mm; display: flex; justify-content: space-between;
-           font-size: 8pt; color: var(--ink-3); letter-spacing: .06em; }
-.runfoot .side { color: var(--accent); font-weight: 600; }
+/* ---- content tables ---- */
+.tablewrap { margin: 8pt 0 14pt; overflow-x: auto; }
+.tablewrap table { border-collapse: collapse; width: 100%; font-size: 9.5pt; line-height: 1.5; }
+.tablewrap thead th { text-align: left; font-weight: 600; color: var(--ink-2); font-size: 9pt; letter-spacing: .04em; padding: 6pt 8pt;
+                      border-top: 1.5px solid var(--ink); border-bottom: 1px solid var(--rule); background: var(--panel); }
+.tablewrap td { padding: 6pt 8pt; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+.tablewrap tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
+.tablewrap tr { break-inside: avoid; page-break-inside: avoid; }
+.tablewrap tr.grp td { background: var(--panel); font-weight: 700; font-size: 8.5pt; letter-spacing: .12em; color: var(--ink-2);
+                       padding: 4pt 8pt; border-bottom: 1px solid var(--rule); }
+.tablewrap td.forbid { color: #7A2E25; }
+.tablewrap td.lead { font-weight: 600; }
+
+/* ---- chips ---- */
+.chip { display: inline-block; font-size: 8pt; line-height: 1; padding: 3pt 6pt; border-radius: 2px; letter-spacing: .06em;
+        font-weight: 600; white-space: nowrap; vertical-align: middle; }
+.chip-ok { background: #E4EFE6; color: #24512F; }
+.chip-mid { background: transparent; color: #5E5748; border: 1px solid #B9B2A5; }
+.chip-warn { background: #FBEBD7; color: #8A4B0B; }
+.chip-pro { background: var(--pro-tint); color: var(--pro); }
+.chip-con { background: var(--con-tint); color: var(--con); }
+.chip-neutral { background: var(--panel); color: var(--ink-2); }
+.chip-tag { background: var(--panel); color: var(--ink-3); font-weight: 500; }
+
+/* ---- fields: a labelled list rendered as label / content rows ---- */
+.fields { margin: 4pt 0 12pt; }
+.field { display: grid; grid-template-columns: 6.5em 1fr; gap: 0 12pt; padding: 7pt 0; border-top: 1px solid var(--rule-soft);
+         align-items: start; break-inside: avoid; }
+.field:first-child { border-top: 0; padding-top: 2pt; }
+.field > dt { font-size: 8.5pt; letter-spacing: .12em; color: var(--ink-3); font-weight: 600; padding-top: 3pt; line-height: 1.4; }
+.field > dt .lsuf { display: block; font-weight: 400; letter-spacing: .02em; color: var(--ink-3); }
+.field > dd { margin: 0; min-width: 0; }
+.field > dd > p:last-child, .field > dd > ul:last-child, .field > dd > ol:last-child { margin-bottom: 0; }
+.field .fields { margin: 4pt 0 0; }
+.field .field { grid-template-columns: 5.5em 1fr; padding: 4pt 0; }
+.field .field > dt { font-size: 8pt; }
+.sub { display: grid; grid-template-columns: 7em 1fr; gap: 0 8pt; margin: 5pt 0 0; font-size: 10pt; color: var(--ink-2); line-height: 1.6; }
+.sub > .sublabel { color: var(--ink-3); font-size: 8pt; letter-spacing: .08em; padding-top: 2.5pt; font-weight: 600; }
+.sub > .subtext { min-width: 0; }
+.sub > .subtext > .chip { margin-right: 5pt; }
+
+/* roles */
+.role-lead > dd { font-size: 12pt; font-weight: 600; line-height: 1.6; color: var(--ink); }
+.role-lead.side-pro > dd { color: var(--pro); } .role-lead.side-con > dd { color: var(--con); }
+ol.steps { list-style: none; padding: 0; margin: 2pt 0 0; counter-reset: step; }
+ol.steps > li { counter-increment: step; position: relative; padding-left: 2em; margin-bottom: 4pt; }
+ol.steps > li::before { content: counter(step); position: absolute; left: 0; top: .15em; width: 1.4em; height: 1.4em; border-radius: 50%;
+                        border: 1.2px solid var(--accent); color: var(--accent); font-size: 8.5pt; font-weight: 700;
+                        display: flex; align-items: center; justify-content: center; line-height: 1; }
+.role-evidence { grid-template-columns: 1fr; padding: 0; border-top: 0; margin: 6pt 0; }
+.role-evidence > dt { display: flex; align-items: center; gap: 8pt; font-size: 8.5pt; padding: 0 0 4pt; }
+.role-evidence > dt .kind { display: inline-block; padding: 2.5pt 7pt; background: var(--ink); color: #fff; border-radius: 2px; letter-spacing: .14em; font-size: 8pt; }
+.role-evidence > dt .kind.pro { background: var(--pro); } .role-evidence > dt .kind.con { background: var(--con); }
+.role-evidence > dd { border: 1px solid var(--rule); border-left: 3px solid var(--accent); padding: 8pt 12pt 8pt; background: #FDFCFA; }
+.role-evidence > dd > .main { margin: 0 0 4pt; }
+.role-closing > dd { color: var(--ink-2); border-left: 3px solid var(--accent); padding-left: 10pt; }
+.role-clash > dd .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--rule); margin: 0 0 6pt; break-inside: avoid; }
+.role-clash > dd .pair > div { padding: 7pt 10pt; font-size: 10pt; line-height: 1.6; }
+.role-clash > dd .pair > .atk { background: var(--panel); color: var(--ink-2); border-right: 1px solid var(--rule); }
+.role-clash > dd .pair > div > .tag { display: block; font-size: 7.5pt; letter-spacing: .16em; color: var(--ink-3); font-weight: 700; margin-bottom: 3pt; }
+.role-clash > dd .pair > .rsp > .tag { color: var(--accent); }
+.role-card { grid-template-columns: 1fr; border-top: 0; padding: 0; margin: 8pt 0; }
+.role-card > dt { font-size: 10pt; letter-spacing: .04em; padding: 0 0 4pt; color: var(--ink); }
+.role-card.side-pro > dt { color: var(--pro); } .role-card.side-con > dt { color: var(--con); }
+.role-card > dd { border-left: 3px solid var(--both); padding: 6pt 12pt; }
+.role-card.side-pro > dd { border-left-color: var(--pro); } .role-card.side-con > dd { border-left-color: var(--con); }
+.role-card.side-neutral > dd { background: var(--panel); border-left-color: var(--ink); padding: 9pt 12pt; }
+.role-card.side-neutral > dd > .main { font-weight: 600; }
+.role-thesis { grid-template-columns: 1fr; border-top: 0; padding: 0; }
+.role-thesis > dt { font-size: 8pt; padding: 0 0 3pt; }
+.role-thesis > dd { padding: 8pt 12pt; background: var(--panel); border-left: 4px solid var(--both); font-size: 11pt; line-height: 1.65; }
+.role-thesis.side-pro > dt { color: var(--pro); } .role-thesis.side-pro > dd { background: var(--pro-tint); border-left-color: var(--pro); }
+.role-thesis.side-con > dt { color: var(--con); } .role-thesis.side-con > dd { background: var(--con-tint); border-left-color: var(--con); }
+.stats { display: flex; gap: 8pt; margin: 6pt 0 2pt; }
+.stats > div { flex: 1; border: 1px solid var(--rule); padding: 7pt 10pt; background: #fff; }
+.stats > div > .n { font-size: 18pt; font-weight: 700; line-height: 1.1; }
+.stats > div > .l { font-size: 8pt; letter-spacing: .1em; color: var(--ink-3); margin-top: 2pt; }
+.stats > .ok > .n { color: #24512F; } .stats > .mid > .n { color: #5E5748; } .stats > .warn > .n { color: #8A4B0B; }
+.role-timeline > dd > ul { list-style: none; padding: 0; margin: 0; }
+.role-timeline > dd > ul > li { display: grid; grid-template-columns: 6em 1fr; gap: 0 10pt; padding: 4pt 0; border-top: 1px dotted var(--rule); }
+.role-timeline > dd > ul > li:first-child { border-top: 0; }
+.role-timeline > dd > ul > li > .when { font-weight: 700; color: var(--accent); font-size: 10pt; }
+.role-checklist > dd > ul { list-style: none; padding: 0; }
+.role-checklist > dd > ul > li { padding-left: 1.6em; position: relative; }
+.role-checklist > dd > ul > li::before { content: ""; position: absolute; left: 0; top: .35em; width: .8em; height: .8em; border: 1.2px solid var(--ink-2); border-radius: 1.5px; }
+.summary .fields { margin: 0; } .summary .field { border-top-color: var(--rule); }
+.summary .role-lead > dd { font-size: 11pt; font-weight: 500; }
 """
 
 PREP_CSS = """
@@ -127,9 +208,12 @@ p { margin: 0 0 3pt; }
 ul, ol { margin: 0 0 3pt; padding-left: 1.25em; } li { margin-bottom: 1pt; }
 blockquote { margin: 5pt 0 7pt; padding: 5pt 9pt; font-size: 9.5pt; line-height: 1.45; }
 .tablewrap { margin: 2pt 0 6pt; }
-table { font-size: 8.2pt; line-height: 1.33; }
-thead th { padding: 2.5pt 4.5pt; font-size: 7.8pt; } td { padding: 2.5pt 4.5pt; }
-.runfoot { bottom: -8mm; font-size: 7.2pt; }
+.tablewrap table { font-size: 8.2pt; line-height: 1.33; }
+.tablewrap thead th { padding: 2.5pt 4.5pt; font-size: 7.8pt; } .tablewrap td { padding: 2.5pt 4.5pt; }
+table.page > tbody > tr > td.pagebody { padding-top: 8pt; }
+.field { grid-template-columns: 4.5em 1fr; padding: 3pt 0; gap: 0 8pt; } .field > dt { font-size: 7.5pt; letter-spacing: .08em; }
+.sub { font-size: 8.5pt; grid-template-columns: 5.5em 1fr; margin-top: 2pt; } .sub > .sublabel { font-size: 7.2pt; }
+.role-lead > dd { font-size: 10pt; }
 """
 
 SCRIPT_CSS = """
@@ -152,11 +236,11 @@ SCRIPT_CSS = """
 
 # ---------------------------------------------------------------- markdown --
 def md_to_html(text):
-    try:
-        import markdown  # type: ignore
-        return markdown.markdown(text, extensions=["tables", "fenced_code", "sane_lists"])
-    except ImportError:
-        return _builtin_md(text)
+    """Always the built-in converter. python-markdown needs four-space indents to
+    nest a list, so it flattens the two-space sub-items these documents use, and
+    then the field/role layout cannot see the structure. Same input, same output,
+    on every machine."""
+    return _builtin_md(text)
 
 
 _INLINE_RULES = [
@@ -325,8 +409,8 @@ def classify_file(base):
 
 
 def _side_of(text):
-    pro, con = "正方" in text or "正一" in text or "正二" in text or "正三" in text or "正四" in text, \
-               "反方" in text or "反一" in text or "反二" in text or "反三" in text or "反四" in text
+    pro = any(k in text for k in ("正方", "正一", "正二", "正三", "正四"))
+    con = any(k in text for k in ("反方", "反一", "反二", "反三", "反四"))
     if pro and not con:
         return "pro"
     if con and not pro:
@@ -334,19 +418,308 @@ def _side_of(text):
     return None
 
 
-def decorate(body, kind, side):
-    """Turn the flat converter output into the document structure the CSS styles.
+# ------------------------------------------------------------ list model --
+TOK = re.compile(r"(<ul>|</ul>|<ol>|</ol>|<li>|</li>)")
+LABEL = re.compile(r"^\s*(?:在中立判准下[，,]\s*)?(?:<strong>)?((?:[^<>：:]|</?strong>){1,40}?)(?:</strong>)?(\s*[（(][^（）()<>]{1,24}[）)])?\s*[：:]\s*(.*)$", re.S)
+SUBLABELS = ("有利之处", "合理性", "核心主张", "支撑", "边界", "口头版", "出处", "来源", "方法", "主要发现", "局限",
+             "代表性", "贴合度", "状态", "补充学理", "词典义", "学术义", "法规义", "行业义", "国际组织义", "自律口径",
+             "正方的自律口径", "反方的自律口径", "反方如何反驳它", "正方如何反驳它", "反方如何反驳", "正方如何反驳",
+             "正方需要证明", "反方需要证明", "打法", "回应", "查证方向", "赛场口头引用")
+SUB_RE = re.compile(r"(?:(?<=^)|(?<=[。；;）)（(\s\"”’」』])|(?<=</strong>))\s*(?:<strong>)?(" + "|".join(map(re.escape, sorted(SUBLABELS, key=len, reverse=True)))
+                    + r")(?:</strong>)?\s*[：:]\s*")
+BOLD_SUB_RE = re.compile(r"(?:(?<=^)|(?<=[。；;）)（(\s\"”’」』]))\s*<strong>([^<]{2,14})</strong>\s*[：:]\s*")
+CHIP = {"已核实": "ok", "有把握": "mid", "待核实": "warn", "【待核实】": "warn", "偏正": "pro", "略偏正": "pro", "偏反": "con",
+        "略偏反": "con", "均衡": "neutral", "最终": "tag", "淘汰": "tag", "常见": "tag", "双方": "neutral"}
 
-    The Markdown is the source of truth; this only adds wrappers and classes:
-    a title block from the H1 + its meta list, a summary panel for 结论速览,
-    side colouring on headings, table wrappers, and for scripts the
-    number / name / 字数 badge split plus a boxed 如果……就…… note.
+
+def chip(text):
+    t = text.strip()
+    k = CHIP.get(t)
+    return '<span class="chip chip-%s">%s</span>' % (k, t.strip("【】")) if k else text
+
+
+class Item:
+    __slots__ = ("text", "children")
+
+    def __init__(self):
+        self.text = ""
+        self.children = []   # (list_tag, [Item])
+
+
+def parse_list(tokens, i):
+    """tokens[i] is <ul>/<ol>; returns (tag, items, next_i)."""
+    tag = tokens[i][1:-1]
+    i += 1
+    items = []
+    cur = None
+    while i < len(tokens):
+        t = tokens[i]
+        if t == "</%s>" % tag:
+            return tag, items, i + 1
+        if t == "<li>":
+            cur = Item(); items.append(cur); i += 1
+        elif t == "</li>":
+            cur = None; i += 1
+        elif t in ("<ul>", "<ol>"):
+            sub_tag, sub_items, i = parse_list(tokens, i)
+            if cur is None:
+                cur = Item(); items.append(cur)
+            cur.children.append((sub_tag, sub_items))
+        elif t in ("</ul>", "</ol>"):
+            return tag, items, i + 1      # tolerate mismatch
+        else:
+            if cur is not None:
+                cur.text += re.sub(r"</?p>", " ", t)
+            i += 1
+    return tag, items, i
+
+
+def split_subs(text):
+    """Split 'main text 有利之处：… 反方如何反驳它：…' into (main, [(label, body), …])."""
+    marks = []
+    for m in SUB_RE.finditer(text):
+        marks.append((m.start(), m.end(), m.group(1)))
+    for m in BOLD_SUB_RE.finditer(text):
+        if not any(abs(m.start() - x[0]) < 3 for x in marks):
+            marks.append((m.start(), m.end(), m.group(1)))
+    marks.sort()
+    if not marks:
+        return text.strip(), []
+    main = text[:marks[0][0]].strip()
+    subs = []
+    for idx, (st, en, lab) in enumerate(marks):
+        end = marks[idx + 1][0] if idx + 1 < len(marks) else len(text)
+        subs.append((lab, text[en:end].strip()))
+    return main, subs
+
+
+def render_subs(subs):
+    out = []
+    for lab, body in subs:
+        body = body.strip()
+        if lab == "状态":
+            m = re.match(r"(?:<strong>)?(已核实|有把握|【待核实】|待核实)(?:</strong>)?\s*(.*)$", body, re.S)
+            if m:
+                body = chip(m.group(1)) + m.group(2)
+        out.append('<div class="sub"><span class="sublabel">%s</span><span class="subtext">%s</span></div>' % (lab, body))
+    return "".join(out)
+
+
+def render_plain(tag, items, cls=""):
+    out = ["<%s%s>" % (tag, ' class="%s"' % cls if cls else "")]
+    for it in items:
+        out.append("<li>" + it.text.strip() + "".join(render_list(t, its) for t, its in it.children) + "</li>")
+    out.append("</%s>" % tag)
+    return "".join(out)
+
+
+def is_labelled(items):
+    """A list is a field list when its first item carries a label and most do.
+    Stray unlabelled items are attached to the field before them (see attach_strays)."""
+    if not items or not LABEL.match(items[0].text):
+        return False
+    n = sum(1 for it in items if LABEL.match(it.text))
+    return n >= max(1, round(len(items) * 0.6))
+
+
+def attach_strays(items):
+    out = []
+    for it in items:
+        if LABEL.match(it.text) or not out:
+            out.append(it)
+        else:
+            out[-1].children.append(("ul", [it]))
+    return out
+
+
+def role_for(label):
+    l = re.sub(r"<[^>]+>", "", label)
+    l = re.sub(r"[（(].*?[）)]", "", l).strip()
+    side = _side_of(label)
+    if l in ("主张", "判准是什么", "结论", "持方优劣评估", "辩题性质"):
+        return "role-lead", side
+    if l.startswith("机制"):
+        return "role-steps", None
+    if l in ("学理", "数据", "案例", "补充学理"):
+        return "role-evidence", None
+    if l.startswith("回扣"):
+        return "role-closing", None
+    if "最强攻击" in l or l == "攻防":
+        return "role-clash", None
+    if l in ("正方有利定义", "反方有利定义", "正方有利判准", "反方有利判准"):
+        return "role-card", side
+    if l in ("中立定义", "中立判准"):
+        return "role-card", "neutral"
+    if "定义杀" in l or "打法" in l or "要防" in l:
+        return "role-card", side
+    if l.endswith("一句话立论"):
+        return "role-thesis", side
+    if l == "论据核实":
+        return "role-stats", None
+    if l == "时间表":
+        return "role-timeline", None
+    if "背下来" in l or "清单" in l:
+        return "role-checklist", None
+    return "", side
+
+
+def render_fields(items, depth=0):
+    out = ['<dl class="fields">']
+    for it in attach_strays(items):
+        m = LABEL.match(it.text)
+        label, rest = m.group(1).strip(), m.group(3)
+        suffix = (m.group(2) or "").strip()
+        role, side = role_for(label)
+        if suffix and role not in ("role-evidence",):
+            label = label + '<span class="lsuf">%s</span>' % suffix
+        cls = " ".join(c for c in (role, "side-%s" % side if side else "") if c)
+        main, subs = split_subs(rest)
+        body = ""
+        # ---- role-specific bodies ----
+        if role == "role-steps":
+            steps = None
+            for t, its in it.children:
+                if t == "ol":
+                    steps = its
+            if steps is None and re.search(r"[（(]\s*[1１一]\s*[）)]", main):
+                parts = [p.strip() for p in re.split(r"[（(]\s*[0-9０-９一二三四五六七八九]+\s*[）)]", main) if p.strip()]
+                body = '<ol class="steps">' + "".join("<li>%s</li>" % p for p in parts) + "</ol>"
+                main = ""
+            elif steps is None and len(re.findall(r"(?:^|\s)[1-9]\.\s", main)) >= 2:
+                head, *parts = re.split(r"(?:^|\s)[1-9]\.\s", main)
+                body = '<ol class="steps">' + "".join("<li>%s</li>" % x.strip() for x in parts if x.strip()) + "</ol>"
+                main = head.strip()
+            elif steps is not None:
+                body = '<ol class="steps">' + "".join("<li>%s</li>" % s_.text.strip() for s_ in steps) + "</ol>"
+                it = Item()  # children consumed
+            body = (("<p>%s</p>" % main) if main else "") + body
+        elif role == "role-evidence":
+            kind = re.sub(r"[（(].*?[）)]", "", label).strip()
+            label = '<span class="kind">%s</span>' % kind
+            body = ('<div class="main">%s</div>' % main if main else "") + render_subs(subs)
+            subs = []
+        elif role == "role-clash":
+            pairs = []
+            for t, its in it.children:
+                for c in its:
+                    txt = c.text.strip()
+                    pm = re.match(r"(?:<strong>)?攻击(?:（[^）]*）)?(?:</strong>)?\s*[：:]\s*(.*?)\s*(?:→|->|—>)\s*(?:<strong>)?回应(?:</strong>)?\s*[：:]\s*(.*)$", txt, re.S)
+                    if pm:
+                        pairs.append((pm.group(1), pm.group(2)))
+                    else:
+                        pairs.append((txt, ""))
+            it = Item()
+            if pairs:
+                body = "".join('<div class="pair"><div class="atk"><span class="tag">对方攻击</span>%s</div><div class="rsp"><span class="tag">我方回应</span>%s</div></div>' % (a_, r_) for a_, r_ in pairs)
+            body = (("<p>%s</p>" % main) if main else "") + body
+        elif role == "role-stats":
+            nums = re.findall(r"(已核实|有把握|【待核实】|待核实)\s*<?[^0-9<]*?(\d+)\s*条", main)
+            if nums:
+                body = '<div class="stats">' + "".join('<div class="%s"><div class="n">%s</div><div class="l">%s</div></div>' % (CHIP.get(k, "tag"), n, k.strip("【】")) for k, n in nums) + "</div>"
+                tail = re.sub(r".*?(?:条)(?=[（(]|$)", "", main, count=1)
+                if "（" in main:
+                    body += '<p class="muted">%s</p>' % main[main.rindex("（"):]
+                main = ""
+            body = (("<p>%s</p>" % main) if main else "") + body
+        elif role == "role-timeline":
+            rows = []
+            for t, its in it.children:
+                for c in its:
+                    cm = re.match(r"\s*(?:<strong>)?([^：:<]{2,14})(?:</strong>)?\s*[：:]\s*(.*)$", c.text.strip(), re.S)
+                    rows.append((cm.group(1), cm.group(2)) if cm else ("", c.text.strip()))
+            it = Item()
+            body = (("<p>%s</p>" % main) if main else "") + "<ul>" + "".join('<li><span class="when">%s</span><span>%s</span></li>' % r for r in rows) + "</ul>"
+        elif role == "role-card":
+            body = ('<div class="main">%s</div>' % main if main else "") + render_subs(subs)
+            subs = []
+        else:
+            if len(re.findall(r"(?:^|\s)[1-9]\.\s", main)) >= 2:
+                head, *parts = re.split(r"(?:^|\s)[1-9]\.\s", main)
+                body = (("<p>%s</p>" % head.strip()) if head.strip() else "") + '<ol class="steps">' + "".join("<li>%s</li>" % x.strip() for x in parts if x.strip()) + "</ol>"
+            else:
+                body = ("<p>%s</p>" % main) if main else ""
+        if subs:
+            body += render_subs(subs)
+        for t, its in it.children:
+            body += render_list(t, its, depth + 1)
+        out.append('<div class="field %s"><dt>%s</dt><dd>%s</dd></div>' % (cls, label, body))
+    out.append("</dl>")
+    return "".join(out)
+
+
+def render_list(tag, items, depth=0):
+    if tag == "ul" and is_labelled(items):
+        return render_fields(items, depth)
+    if tag == "ol":
+        return render_plain("ol", items, "steps" if depth > 0 else "")
+    return render_plain(tag, items)
+
+
+def transform_lists(body):
+    """Re-render every top-level list; labelled lists become field blocks."""
+    tokens = [t for t in TOK.split(body) if t != ""]
+    out = []
+    i = 0
+    while i < len(tokens):
+        t = tokens[i]
+        if t in ("<ul>", "<ol>"):
+            tag, items, i = parse_list(tokens, i)
+            out.append(render_list(tag, items, 0))
+        else:
+            out.append(t); i += 1
+    merged = "".join(out)
+    # a blank line between items makes the converter close the list; rejoin the field blocks
+    return re.sub(r'</dl>\s*<dl class="fields">', "", merged)
+
+
+def transform_tables(body):
+    def one(m):
+        tbl = m.group(0)
+        heads = [re.sub(r"<[^>]+>", "", h).strip() for h in re.findall(r"<th>(.*?)</th>", tbl, re.S)]
+        # chips in cells
+        tbl = re.sub(r"<td>\s*(已核实|有把握|【待核实】|待核实|偏正|略偏正|偏反|略偏反|均衡|最终|淘汰|常见)\s*</td>",
+                     lambda c: "<td>%s</td>" % chip(c.group(1)), tbl)
+        if heads and heads[0] == "类别" and "标准表述" in heads:
+            # group rows by 类别; mark 禁止的说法 column
+            forbid = heads.index("禁止的说法") if "禁止的说法" in heads else -1
+            rows = re.findall(r"<tr>(.*?)</tr>", tbl, re.S)
+            head_row, body_rows = rows[0], rows[1:]
+            new_rows, last = [], None
+            for r in body_rows:
+                cells = re.findall(r"<td>(.*?)</td>", r, re.S)
+                if not cells:
+                    continue
+                cat = re.sub(r"<[^>]+>", "", cells[0]).strip()
+                if cat != last:
+                    new_rows.append('<tr class="grp"><td colspan="%d">%s</td></tr>' % (len(cells), cat)); last = cat
+                cells[0] = ""
+                tds = []
+                for ci, c in enumerate(cells):
+                    k = ' class="forbid"' if ci == forbid else (' class="lead"' if ci == 1 else "")
+                    tds.append("<td%s>%s</td>" % (k, c))
+                new_rows.append("<tr>" + "".join(tds) + "</tr>")
+            tbl = re.sub(r"<tbody>.*?</tbody>", "<tbody>" + "".join(new_rows) + "</tbody>", tbl, flags=re.S)
+        elif heads and heads[0] == "维度":
+            pass
+        return '<div class="tablewrap">%s</div>' % tbl
+    return re.sub(r"<table>.*?</table>", one, body, flags=re.S)
+
+
+def decorate(body, kind, side):
+    """Build the document structure the CSS styles from the converter's flat output.
+
+    The Markdown stays the source of truth. This adds: a title block from the
+    H1 and its meta list; a repeating page header; the 结论速览 panel; side
+    colouring on headings; labelled lists rendered as field rows with roles
+    (主张 / 机制 / 学理·数据·案例 / 回扣 / 攻防 / 三版定义与判准 …); chips for
+    评估倾向 and 核实状态; grouped 口径表; and for scripts the numbered stage
+    header with its 字数 badge plus the boxed 临场预案.
     """
-    # -- title block --
     m = re.search(r"<h1>(.*?)</h1>\s*(?:<ul>(.*?)</ul>)?", body, re.S)
     eyebrow = KIND_LABEL[kind]
     badge = ""
     meta_html = ""
+    title = ""
     if m:
         title = re.sub(r"<[^>]+>", "", m.group(1)).strip()
         title = re.sub(r"^(备赛文档|正赛速查|正赛文稿|备赛手册)[：:]\s*", "", title)
@@ -358,32 +731,15 @@ def decorate(body, kind, side):
         for li in re.findall(r"<li>(.*?)</li>", m.group(2) or "", re.S):
             li = li.strip()
             km = re.match(r"<strong>(.*?)</strong>\s*[：:]\s*(.*)$", li, re.S)
-            if km:
-                chips.append("<span><b>%s</b>%s</span>" % (km.group(1), km.group(2)))
-            else:
-                chips.append("<span>%s</span>" % li)
+            chips.append("<span><b>%s</b>%s</span>" % (km.group(1), km.group(2)) if km else "<span>%s</span>" % li)
         if chips:
             meta_html = '<div class="meta">%s</div>' % "".join(chips)
         block = ('<header class="titleblock"><div class="eyebrow">%s</div><h1>%s</h1>%s%s</header>'
                  % (eyebrow, html.escape(title), badge, meta_html))
         body = body[:m.start()] + block + body[m.end():]
-        foot_title = title
-    else:
-        foot_title = ""
 
-    # -- summary panel: first h2 named 结论速览 up to the next h2 --
-    sm = re.search(r"<h2>[^<]*结论速览[^<]*</h2>", body)
-    if sm:
-        nxt = re.search(r"<h2>", body[sm.end():])
-        end = sm.end() + (nxt.start() if nxt else len(body) - sm.end())
-        inner = body[sm.start():end]
-        inner = re.sub(r"<hr>\s*$", "", inner.strip())
-        body = body[:sm.start()] + '<section class="summary">' + inner + "</section>" + body[end:]
-
-    # -- side classes on headings, h3 inheriting from the enclosing h2 --
-    cur = None
-    out = []
-    pos = 0
+    # side classes on headings, h3 inheriting from its h2
+    cur = None; out = []; pos = 0
     for hm in re.finditer(r"<(h2|h3)>(.*?)</\1>", body, re.S):
         tag, text = hm.group(1), re.sub(r"<[^>]+>", "", hm.group(2))
         sd = _side_of(text)
@@ -393,45 +749,52 @@ def decorate(body, kind, side):
         out.append(body[pos:hm.start()])
         out.append("<%s%s>%s</%s>" % (tag, ' class="h-%s"' % cls if cls else "", hm.group(2), tag))
         pos = hm.end()
-    out.append(body[pos:])
-    body = "".join(out)
+    out.append(body[pos:]); body = "".join(out)
 
-    # -- tables --
-    body = re.sub(r"(<table>.*?</table>)", r'<div class="tablewrap">\1</div>', body, flags=re.S)
+    if kind == "script":
+        body = re.sub(r"<ul>\s*<li>\s*(?:<strong>)?如果……就……(?:</strong>)?[：:]?\s*(<ul>.*?</ul>)\s*</li>\s*</ul>", r"\1", body, flags=re.S)
+    body = transform_lists(body)
+    body = transform_tables(body)
 
-    # -- script stages --
+    # summary panel with the thesis pair and stat tiles
+    sm = re.search(r"<h2>[^<]*结论速览[^<]*</h2>", body)
+    if sm:
+        nxt = re.search(r"<h2", body[sm.end():])
+        end = sm.end() + (nxt.start() if nxt else len(body) - sm.end())
+        inner = re.sub(r"<hr>\s*$", "", body[sm.start():end].strip())
+        body = body[:sm.start()] + '<section class="summary">' + inner + "</section>" + body[end:]
+
+    # script stages
     if kind == "script":
         parts = re.split(r"(?=<h2)", body)
         rebuilt = [parts[0]]
         for sec in parts[1:]:
             hm = re.match(r"<h2( class=\"[^\"]*\")?>(.*?)</h2>", sec, re.S)
             if not hm:
-                rebuilt.append(sec)
-                continue
+                rebuilt.append(sec); continue
             htext = re.sub(r"<[^>]+>", "", hm.group(2)).strip()
             nm = re.match(r"(\d+)[.、]\s*(.+?)(?:（(.+?)）)?\s*$", htext)
             if nm:
-                num, name, meta = nm.group(1), nm.group(2), nm.group(3)
-                meta = (meta or "").replace(" / ", " · ")
+                num, name, meta = nm.group(1), nm.group(2), (nm.group(3) or "").replace(" / ", " · ")
                 h2 = ('<h2%s><span class="num">%s</span><span class="name">%s</span>%s</h2>'
-                      % (hm.group(1) or "", num, html.escape(name),
-                         '<span class="meta">%s</span>' % html.escape(meta) if meta else ""))
+                      % (hm.group(1) or "", num, html.escape(name), '<span class="meta">%s</span>' % html.escape(meta) if meta else ""))
             else:
                 h2 = hm.group(0)
             rest = sec[hm.end():]
             is_speech = "稿" in htext and "预案" not in htext
             if is_speech:
-                cm = re.search(r"(<p><strong>如果[^<]*</strong>[^<]*</p>\s*)?(<ul>(?:(?!<ul>).)*?</ul>)\s*(?:<hr>)?\s*$", rest, re.S)
+                cm = re.search(r"(<p><strong>如果[^<]*</strong>[^<]*</p>\s*)?(<ul>(?:(?!<ul>).)*?</ul>|<dl class=\"fields\">.*?</dl>)\s*(?:<hr>)?\s*$", rest, re.S)
                 if cm and "如果" in cm.group(0):
+                    inner = re.sub(r"^<ul>\s*<li>\s*如果……就……[：:]?\s*(<ul>.*</ul>)\s*</li>\s*</ul>$", r"\1", cm.group(2).strip(), flags=re.S)
                     rest = (rest[:cm.start()] + '<aside class="contingency"><div class="label">临场预案 · 如果……就……</div>'
-                            + cm.group(2) + "</aside>" + rest[cm.end():])
+                            + inner + "</aside>" + rest[cm.end():])
             rebuilt.append('<section class="stage%s">%s%s</section>' % (" speech" if is_speech else "", h2, rest))
         body = "".join(rebuilt)
 
     side_label = {"pro": "正方", "con": "反方", "both": "正反双方"}[side]
-    body += ('<div class="runfoot"><span>%s</span><span class="side">%s · %s</span></div>'
-             % (html.escape(foot_title), KIND_LABEL[kind], side_label))
-    return body
+    head = ('<table class="page"><thead><tr><td class="pagehead">%s<span class="r">%s · %s</span></td></tr></thead>'
+            '<tbody><tr><td class="pagebody">' % (html.escape(title), KIND_LABEL[kind], side_label))
+    return head + body + "</td></tr></tbody></table>"
 
 
 def wrap_html(body, title, kind="prep", side="both"):
@@ -441,6 +804,7 @@ def wrap_html(body, title, kind="prep", side="both"):
             "<title>%s</title><style>%s</style></head>"
             '<body class="doc-%s side-%s">%s</body></html>'
             % (html.escape(title), css, kind, side, body))
+
 
 
 # ----------------------------------------------------------------- engines --

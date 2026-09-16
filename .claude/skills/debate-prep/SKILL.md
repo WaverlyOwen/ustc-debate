@@ -81,7 +81,7 @@ description: 华语辩论赛备赛助手。给定辩题（可选题解、赛制�
 
 ### 第 7 步：文稿
 
-写法见 `references/stage-playbooks.md`，语感见 `references/speech-voice.md`（先读语感那篇，它决定句子长什么样）。按赛制为双方各写全部环节。特别要求：
+写法见 `references/stage-playbooks.md`，语感见 `references/speech-voice.md`（先读语感那篇，它决定句子长什么样）。三类文档的写法约定见 `references/document-structure.md`：标签项、句内子标签、表格固定词决定排版层次，写备赛文档前也要读它。按赛制为双方各写全部环节。特别要求：
 
 - **一辩稿**必须包含：所有重要定义、中立判准与双方义务、全部论点、后场会反复追问对方的问题
 - **结辩稿**：总结前场之外，要有一段让人眼前一亮的价值升华。不是宏大叙事，是具体的个人感受或体验，引人深思、引起共鸣。写法见 `stage-playbooks.md` 第 10 节
