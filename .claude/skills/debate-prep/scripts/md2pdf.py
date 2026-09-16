@@ -16,9 +16,11 @@ PDF engines are tried in order:
 If none is available the HTML file is kept and instructions are printed so
 the user can open it in a browser and print to PDF.
 
-Files whose name contains 速查 (quick reference) are laid out compactly
-(smaller type, tighter margins) so they fit on one or two pages; --compact
-forces that layout for every file.
+Layout follows the file name: 备赛文档 gets the study layout, 速查 the compact
+two-page layout, 文稿 the reading layout with 12pt speech text and boxed
+临场预案 notes. 正方 / 反方 in the name colours the document red or blue, the
+convention Chinese debate uses for the two sides. --compact forces the 速查
+layout for every file.
 """
 import argparse
 import glob
@@ -31,47 +33,120 @@ import subprocess
 import sys
 import tempfile
 
-CSS = """
-@page { size: A4; margin: 18mm 16mm; @bottom-center { content: counter(page); font-size: 9pt; color: #888; } }
+BASE_CSS = """
+:root {
+  --ink: #1C1A17; --ink-2: #4A4740; --ink-3: #8A8378;
+  --rule: #D5D0C7; --rule-soft: #E9E5DE; --panel: #F6F4EF; --paper: #FFFFFF;
+  --pro: #B4362A; --pro-tint: #FBEFED;
+  --con: #1F4E8C; --con-tint: #EDF2F9;
+  --both: #6B6357; --both-tint: #F6F4EF;
+  --accent: var(--both); --tint: var(--both-tint);
+}
+body.side-pro { --accent: var(--pro); --tint: var(--pro-tint); }
+body.side-con { --accent: var(--con); --tint: var(--con-tint); }
 * { box-sizing: border-box; }
+html { font-size: 11pt; }
 body { font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑",
        "Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Zen Hei", "WenQuanYi Micro Hei",
        "Helvetica Neue", Arial, sans-serif;
-       font-size: 11pt; line-height: 1.65; color: #111; max-width: 100%; margin: 0; }
-h1 { font-size: 20pt; border-bottom: 2px solid #333; padding-bottom: 4pt; margin: 0 0 12pt; }
-h2 { font-size: 15pt; margin: 20pt 0 8pt; border-left: 4px solid #444; padding-left: 8pt; page-break-after: avoid; }
-h3 { font-size: 12.5pt; margin: 14pt 0 6pt; page-break-after: avoid; }
-h4 { font-size: 11.5pt; margin: 10pt 0 4pt; page-break-after: avoid; }
-p { margin: 0 0 7pt; text-align: justify; }
-ul, ol { margin: 0 0 7pt; padding-left: 1.6em; }
-li { margin-bottom: 2pt; }
+       color: var(--ink); background: var(--paper); line-height: 1.7; margin: 0;
+       font-variant-numeric: tabular-nums; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+/* ---- title block ---- */
+.titleblock { margin: 0 0 22pt; padding: 0 0 12pt; border-bottom: 2px solid var(--accent); break-after: avoid; }
+.titleblock .eyebrow { font-size: 9pt; letter-spacing: .16em; color: var(--ink-3); margin: 0 0 8pt; }
+.titleblock .eyebrow .sep { margin: 0 .5em; color: var(--rule); }
+.titleblock h1 { font-size: 22pt; line-height: 1.3; margin: 0; font-weight: 700; letter-spacing: .01em; text-wrap: balance; }
+.titleblock .sidebadge { display: inline-block; font-size: 10pt; line-height: 1; padding: 4pt 9pt; border: 1.5px solid var(--accent);
+                         color: var(--accent); border-radius: 2px; margin: 8pt 0 0; font-weight: 600; letter-spacing: .06em; }
+.titleblock .meta { display: flex; flex-wrap: wrap; gap: 4pt 20pt; margin: 12pt 0 0; font-size: 9.5pt; color: var(--ink-2); }
+.titleblock .meta b { color: var(--ink-3); font-weight: 500; margin-right: 5pt; letter-spacing: .06em; }
+
+/* ---- headings ---- */
+h2 { font-size: 15pt; margin: 26pt 0 10pt; padding-top: 10pt; border-top: 1px solid var(--rule); font-weight: 700;
+     letter-spacing: .01em; line-height: 1.35; break-after: avoid; page-break-after: avoid; }
+h2.h-pro { color: var(--pro); } h2.h-con { color: var(--con); }
+h3 { font-size: 12pt; margin: 16pt 0 6pt; font-weight: 700; line-height: 1.4; break-after: avoid; page-break-after: avoid; }
+h3.h-pro { border-left: 3px solid var(--pro); padding-left: 8pt; }
+h3.h-con { border-left: 3px solid var(--con); padding-left: 8pt; }
+h4 { font-size: 11pt; margin: 12pt 0 4pt; font-weight: 700; break-after: avoid; }
+hr { display: none; }
+
+/* ---- text ---- */
+p { margin: 0 0 8pt; text-align: justify; }
+ul, ol { margin: 0 0 8pt; padding-left: 1.5em; }
+li { margin-bottom: 3pt; }
 li > p { margin: 0; }
-blockquote { margin: 6pt 0 8pt; padding: 6pt 10pt; border-left: 4px solid #999; background: #f5f5f5; }
-blockquote p { margin: 0; }
-table { border-collapse: collapse; width: 100%; margin: 6pt 0 10pt; font-size: 10pt; page-break-inside: auto; }
-tr { page-break-inside: avoid; }
-th, td { border: 1px solid #999; padding: 4pt 6pt; vertical-align: top; text-align: left; }
-th { background: #ececec; font-weight: 600; }
-code { font-family: "SFMono-Regular", Menlo, Consolas, "Noto Sans Mono CJK SC", monospace; font-size: 9.5pt; background: #f2f2f2; padding: 0 3px; }
-pre { background: #f2f2f2; padding: 8pt; overflow-x: auto; white-space: pre-wrap; page-break-inside: avoid; }
-pre code { background: none; padding: 0; }
-hr { border: 0; border-top: 1px solid #bbb; margin: 14pt 0; }
 strong { font-weight: 700; }
-.pb { page-break-before: always; }
+code { font-family: Menlo, Consolas, "Noto Sans Mono CJK SC", monospace; font-size: 9.5pt; background: var(--panel); padding: 0 3px; border-radius: 2px; }
+pre { background: var(--panel); padding: 8pt 10pt; white-space: pre-wrap; break-inside: avoid; font-size: 9.5pt; }
+pre code { background: none; padding: 0; }
+
+/* ---- callout (一句话立论 etc.) ---- */
+blockquote { margin: 12pt 0 14pt; padding: 10pt 14pt; background: var(--tint); border-left: 4px solid var(--accent);
+             font-size: 11.5pt; line-height: 1.7; break-inside: avoid; }
+blockquote p { margin: 0 0 4pt; } blockquote p:last-child { margin: 0; }
+
+/* ---- summary panel (结论速览) ---- */
+.summary { background: var(--panel); border-left: 4px solid var(--both); padding: 12pt 16pt 8pt; margin: 0 0 22pt; break-inside: avoid; }
+.summary h2 { border: 0; margin: 0 0 8pt; padding: 0; font-size: 10pt; letter-spacing: .18em; color: var(--ink-3); font-weight: 700; }
+.summary ul { padding-left: 1.2em; margin: 0; } .summary li { margin-bottom: 6pt; }
+.summary li:last-child { margin-bottom: 0; }
+
+/* ---- tables ---- */
+.tablewrap { margin: 8pt 0 14pt; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 9.5pt; line-height: 1.5; }
+thead th { text-align: left; font-weight: 600; color: var(--ink-2); font-size: 9pt; letter-spacing: .04em; padding: 6pt 8pt;
+           border-top: 1.5px solid var(--ink); border-bottom: 1px solid var(--rule); background: var(--panel); }
+td { padding: 6pt 8pt; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
+tr { break-inside: avoid; page-break-inside: avoid; }
+
+/* ---- running footer ---- */
+.runfoot { position: fixed; left: 0; right: 0; bottom: -13mm; display: flex; justify-content: space-between;
+           font-size: 8pt; color: var(--ink-3); letter-spacing: .06em; }
+.runfoot .side { color: var(--accent); font-weight: 600; }
 """
 
-COMPACT_CSS = """
-@page { margin: 10mm 10mm; }
-body { font-size: 9.5pt; line-height: 1.4; }
-h1 { font-size: 15pt; margin-bottom: 6pt; padding-bottom: 2pt; }
-h2 { font-size: 11.5pt; margin: 9pt 0 4pt; }
-h3 { font-size: 10.5pt; margin: 6pt 0 3pt; }
-p { margin: 0 0 4pt; }
-ul, ol { margin: 0 0 4pt; padding-left: 1.3em; }
-li { margin-bottom: 1pt; }
-table { font-size: 8.5pt; margin: 3pt 0 6pt; }
-th, td { padding: 2pt 4pt; }
-blockquote { margin: 3pt 0 5pt; padding: 3pt 6pt; }
+PREP_CSS = """
+@page { size: A4; margin: 20mm 18mm 22mm; }
+"""
+
+QUICK_CSS = """
+@page { size: A4; margin: 10mm 11mm 12mm; }
+html { font-size: 9.2pt; }
+body { line-height: 1.38; }
+.titleblock { margin: 0 0 8pt; padding: 0 0 5pt; }
+.titleblock .eyebrow { margin-bottom: 3pt; font-size: 7.5pt; }
+.titleblock h1 { font-size: 14pt; line-height: 1.25; }
+.titleblock .sidebadge { font-size: 8pt; padding: 2.5pt 6pt; margin-top: 4pt; }
+.titleblock .meta { margin-top: 5pt; font-size: 8pt; }
+h2 { font-size: 10pt; margin: 9pt 0 3pt; padding-top: 5pt; letter-spacing: .1em; color: var(--accent); }
+h3 { font-size: 9.5pt; margin: 6pt 0 2pt; }
+p { margin: 0 0 3pt; }
+ul, ol { margin: 0 0 3pt; padding-left: 1.25em; } li { margin-bottom: 1pt; }
+blockquote { margin: 5pt 0 7pt; padding: 5pt 9pt; font-size: 9.5pt; line-height: 1.45; }
+.tablewrap { margin: 2pt 0 6pt; }
+table { font-size: 8.2pt; line-height: 1.33; }
+thead th { padding: 2.5pt 4.5pt; font-size: 7.8pt; } td { padding: 2.5pt 4.5pt; }
+.runfoot { bottom: -8mm; font-size: 7.2pt; }
+"""
+
+SCRIPT_CSS = """
+@page { size: A4; margin: 20mm 18mm 22mm; }
+.stage { break-before: auto; }
+.stage > h2 { display: flex; align-items: baseline; gap: 10pt; flex-wrap: wrap; }
+.stage > h2 .num { font-size: 11pt; color: var(--accent); font-weight: 700; min-width: 1.6em; letter-spacing: .04em; }
+.stage > h2 .name { flex: 1 1 auto; }
+.stage > h2 .meta { font-size: 8.5pt; color: var(--ink-3); font-weight: 500; letter-spacing: .06em; border: 1px solid var(--rule);
+                    padding: 2pt 7pt; border-radius: 2px; white-space: nowrap; }
+.stage.speech > p { font-size: 12pt; line-height: 1.95; margin: 0 0 11pt; }
+.stage.speech > p strong { font-weight: 600; -webkit-text-emphasis: filled sesame var(--accent); text-emphasis: filled sesame var(--accent);
+                           -webkit-text-emphasis-position: under right; text-emphasis-position: under right; }
+.contingency { margin: 12pt 0 4pt; padding: 8pt 12pt; border: 1px dashed var(--rule); background: #FCFBF9; font-size: 9.5pt;
+               color: var(--ink-2); line-height: 1.55; break-inside: avoid; }
+.contingency .label { font-weight: 700; letter-spacing: .14em; font-size: 8.5pt; color: var(--ink-3); margin: 0 0 4pt; }
+.contingency ul { margin: 0; padding-left: 1.3em; } .contingency li { margin-bottom: 3pt; }
 """
 
 
@@ -233,11 +308,139 @@ def _builtin_md(text):
     return "\n".join(out)
 
 
-def wrap_html(body, title, compact=False):
-    css = CSS + (COMPACT_CSS if compact else "")
+KIND_LABEL = {"prep": "备赛文档", "quick": "正赛速查", "script": "正赛文稿"}
+KIND_CSS = {"prep": PREP_CSS, "quick": QUICK_CSS, "script": SCRIPT_CSS}
+
+
+def classify_file(base):
+    """(kind, side) from the file name: 备赛文档 / 速查 / 文稿, 正方 / 反方 / both."""
+    if "速查" in base or "quickref" in base.lower():
+        kind = "quick"
+    elif "文稿" in base or "script" in base.lower():
+        kind = "script"
+    else:
+        kind = "prep"
+    side = "pro" if "正方" in base else "con" if "反方" in base else "both"
+    return kind, side
+
+
+def _side_of(text):
+    pro, con = "正方" in text or "正一" in text or "正二" in text or "正三" in text or "正四" in text, \
+               "反方" in text or "反一" in text or "反二" in text or "反三" in text or "反四" in text
+    if pro and not con:
+        return "pro"
+    if con and not pro:
+        return "con"
+    return None
+
+
+def decorate(body, kind, side):
+    """Turn the flat converter output into the document structure the CSS styles.
+
+    The Markdown is the source of truth; this only adds wrappers and classes:
+    a title block from the H1 + its meta list, a summary panel for 结论速览,
+    side colouring on headings, table wrappers, and for scripts the
+    number / name / 字数 badge split plus a boxed 如果……就…… note.
+    """
+    # -- title block --
+    m = re.search(r"<h1>(.*?)</h1>\s*(?:<ul>(.*?)</ul>)?", body, re.S)
+    eyebrow = KIND_LABEL[kind]
+    badge = ""
+    meta_html = ""
+    if m:
+        title = re.sub(r"<[^>]+>", "", m.group(1)).strip()
+        title = re.sub(r"^(备赛文档|正赛速查|正赛文稿|备赛手册)[：:]\s*", "", title)
+        bm = re.search(r"[（(]\s*(正方|反方)\s*[：:]\s*(.*?)\s*[）)]\s*$", title)
+        if bm:
+            badge = '<span class="sidebadge">%s · %s</span>' % (bm.group(1), html.escape(bm.group(2)))
+            title = title[:bm.start()].strip()
+        chips = []
+        for li in re.findall(r"<li>(.*?)</li>", m.group(2) or "", re.S):
+            li = li.strip()
+            km = re.match(r"<strong>(.*?)</strong>\s*[：:]\s*(.*)$", li, re.S)
+            if km:
+                chips.append("<span><b>%s</b>%s</span>" % (km.group(1), km.group(2)))
+            else:
+                chips.append("<span>%s</span>" % li)
+        if chips:
+            meta_html = '<div class="meta">%s</div>' % "".join(chips)
+        block = ('<header class="titleblock"><div class="eyebrow">%s</div><h1>%s</h1>%s%s</header>'
+                 % (eyebrow, html.escape(title), badge, meta_html))
+        body = body[:m.start()] + block + body[m.end():]
+        foot_title = title
+    else:
+        foot_title = ""
+
+    # -- summary panel: first h2 named 结论速览 up to the next h2 --
+    sm = re.search(r"<h2>[^<]*结论速览[^<]*</h2>", body)
+    if sm:
+        nxt = re.search(r"<h2>", body[sm.end():])
+        end = sm.end() + (nxt.start() if nxt else len(body) - sm.end())
+        inner = body[sm.start():end]
+        inner = re.sub(r"<hr>\s*$", "", inner.strip())
+        body = body[:sm.start()] + '<section class="summary">' + inner + "</section>" + body[end:]
+
+    # -- side classes on headings, h3 inheriting from the enclosing h2 --
+    cur = None
+    out = []
+    pos = 0
+    for hm in re.finditer(r"<(h2|h3)>(.*?)</\1>", body, re.S):
+        tag, text = hm.group(1), re.sub(r"<[^>]+>", "", hm.group(2))
+        sd = _side_of(text)
+        if tag == "h2":
+            cur = sd
+        cls = sd or (cur if tag == "h3" else None)
+        out.append(body[pos:hm.start()])
+        out.append("<%s%s>%s</%s>" % (tag, ' class="h-%s"' % cls if cls else "", hm.group(2), tag))
+        pos = hm.end()
+    out.append(body[pos:])
+    body = "".join(out)
+
+    # -- tables --
+    body = re.sub(r"(<table>.*?</table>)", r'<div class="tablewrap">\1</div>', body, flags=re.S)
+
+    # -- script stages --
+    if kind == "script":
+        parts = re.split(r"(?=<h2)", body)
+        rebuilt = [parts[0]]
+        for sec in parts[1:]:
+            hm = re.match(r"<h2( class=\"[^\"]*\")?>(.*?)</h2>", sec, re.S)
+            if not hm:
+                rebuilt.append(sec)
+                continue
+            htext = re.sub(r"<[^>]+>", "", hm.group(2)).strip()
+            nm = re.match(r"(\d+)[.、]\s*(.+?)(?:（(.+?)）)?\s*$", htext)
+            if nm:
+                num, name, meta = nm.group(1), nm.group(2), nm.group(3)
+                meta = (meta or "").replace(" / ", " · ")
+                h2 = ('<h2%s><span class="num">%s</span><span class="name">%s</span>%s</h2>'
+                      % (hm.group(1) or "", num, html.escape(name),
+                         '<span class="meta">%s</span>' % html.escape(meta) if meta else ""))
+            else:
+                h2 = hm.group(0)
+            rest = sec[hm.end():]
+            is_speech = "稿" in htext and "预案" not in htext
+            if is_speech:
+                cm = re.search(r"(<p><strong>如果[^<]*</strong>[^<]*</p>\s*)?(<ul>(?:(?!<ul>).)*?</ul>)\s*(?:<hr>)?\s*$", rest, re.S)
+                if cm and "如果" in cm.group(0):
+                    rest = (rest[:cm.start()] + '<aside class="contingency"><div class="label">临场预案 · 如果……就……</div>'
+                            + cm.group(2) + "</aside>" + rest[cm.end():])
+            rebuilt.append('<section class="stage%s">%s%s</section>' % (" speech" if is_speech else "", h2, rest))
+        body = "".join(rebuilt)
+
+    side_label = {"pro": "正方", "con": "反方", "both": "正反双方"}[side]
+    body += ('<div class="runfoot"><span>%s</span><span class="side">%s · %s</span></div>'
+             % (html.escape(foot_title), KIND_LABEL[kind], side_label))
+    return body
+
+
+def wrap_html(body, title, kind="prep", side="both"):
+    body = decorate(body, kind, side)
+    css = BASE_CSS + KIND_CSS[kind]
     return ('<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
-            "<title>%s</title><style>%s</style></head><body>%s</body></html>"
-            % (html.escape(title), css, body))
+            "<title>%s</title><style>%s</style></head>"
+            '<body class="doc-%s side-%s">%s</body></html>'
+            % (html.escape(title), css, kind, side, body))
 
 
 # ----------------------------------------------------------------- engines --
@@ -366,7 +569,7 @@ def main():
     ap.add_argument("paths", nargs="+", help=".md files or directories containing them")
     ap.add_argument("--out-dir", help="write PDFs here instead of next to the source")
     ap.add_argument("--keep-html", action="store_true", help="keep the intermediate .html next to the PDF")
-    ap.add_argument("--compact", action="store_true", help="compact layout for every file (default: only names containing 速查)")
+    ap.add_argument("--compact", action="store_true", help="force the compact 速查 layout for every file")
     args = ap.parse_args()
 
     files = collect(args.paths)
@@ -386,9 +589,11 @@ def main():
         base = os.path.splitext(os.path.basename(md_path))[0]
         pdf_path = os.path.join(out_dir, base + ".pdf")
         html_path = os.path.join(out_dir, base + ".html")
-        compact = args.compact or "速查" in base or "quickref" in base.lower()
+        kind, side = classify_file(base)
+        if args.compact:
+            kind = "quick"
         with open(html_path, "w", encoding="utf-8") as fh:
-            fh.write(wrap_html(body, title, compact))
+            fh.write(wrap_html(body, title, kind, side))
 
         ok = False
         used = None
