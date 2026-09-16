@@ -211,7 +211,18 @@ blockquote { margin: 5pt 0 7pt; padding: 5pt 9pt; font-size: 9.5pt; line-height:
 .tablewrap table { font-size: 8.2pt; line-height: 1.33; }
 .tablewrap thead th { padding: 2.5pt 4.5pt; font-size: 7.8pt; } .tablewrap td { padding: 2.5pt 4.5pt; }
 table.page > tbody > tr > td.pagebody { padding-top: 8pt; }
-.field { grid-template-columns: 4.5em 1fr; padding: 3pt 0; gap: 0 8pt; } .field > dt { font-size: 7.5pt; letter-spacing: .08em; }
+.fields { margin: 2pt 0 6pt; }
+.field { display: block; padding: 2.5pt 0; border-top: 1px solid var(--rule-soft); }
+.field > dt { display: inline; font-size: 7.5pt; letter-spacing: .08em; padding: 0; margin-right: 6pt; }
+.field > dt .lsuf { display: inline; margin-left: 2pt; }
+.field > dd { display: inline; }
+.field > dd > p { display: inline; margin: 0; }
+.field > dd > p + p::before { content: " "; }
+.field.role-lead > dd { font-size: 9.5pt; }
+.field.role-card, .field.role-thesis, .field.role-evidence { display: grid; grid-template-columns: 1fr; }
+.field.role-card > dt, .field.role-thesis > dt, .field.role-evidence > dt { display: block; }
+.field.role-card > dd, .field.role-thesis > dd, .field.role-evidence > dd { display: block; }
+.sub { margin-top: 1pt; }
 .sub { font-size: 8.5pt; grid-template-columns: 5.5em 1fr; margin-top: 2pt; } .sub > .sublabel { font-size: 7.2pt; }
 .role-lead > dd { font-size: 10pt; }
 """
