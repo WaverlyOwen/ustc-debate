@@ -194,9 +194,9 @@ PREP_CSS = """
 """
 
 QUICK_CSS = """
-@page { size: A4; margin: 10mm 11mm 12mm; }
-html { font-size: 9.2pt; }
-body { line-height: 1.38; }
+@page { size: A4; margin: 9mm 10mm 10mm; }
+html { font-size: 9pt; }
+body { line-height: 1.34; }
 .titleblock { margin: 0 0 8pt; padding: 0 0 5pt; }
 .titleblock .eyebrow { margin-bottom: 3pt; font-size: 7.5pt; }
 .titleblock h1 { font-size: 14pt; line-height: 1.25; }
@@ -208,7 +208,7 @@ p { margin: 0 0 3pt; }
 ul, ol { margin: 0 0 3pt; padding-left: 1.25em; } li { margin-bottom: 1pt; }
 blockquote { margin: 5pt 0 7pt; padding: 5pt 9pt; font-size: 9.5pt; line-height: 1.45; }
 .tablewrap { margin: 2pt 0 6pt; }
-.tablewrap table { font-size: 8.2pt; line-height: 1.33; }
+.tablewrap table { font-size: 8pt; line-height: 1.3; }
 .tablewrap thead th { padding: 2.5pt 4.5pt; font-size: 7.8pt; } .tablewrap td { padding: 2.5pt 4.5pt; }
 table.page > tbody > tr > td.pagebody { padding-top: 8pt; }
 .fields { margin: 2pt 0 6pt; }
