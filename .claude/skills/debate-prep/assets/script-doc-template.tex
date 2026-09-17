@@ -1,0 +1,123 @@
+% 正赛文稿模板：每方一份。speech 的标题按赛制文件「各持方文稿标题」原样使用（新生赛十个，2025 校赛十一个）；
+% 括号里的字数用 scripts/check_speeches.py 数出来再填。质询、盘问、对辩、自由辩是 stage，不计字数。
+% 稿件正文里：重音用 \stress{…}（每篇最多两处），舞台提示用 \aside{…}，临场位用 \reserve{…}，都不计字数。
+\documentclass[script,pro]{debate}   % 正方 pro，反方 con
+\motion{<辩题>}
+\stance{正方}{<持方表述>}
+\meta{赛制}{<…>}
+\meta{口径来源}{备赛文档 第十节 <正方 / 反方> 口径表}
+\begin{document}
+\debatetitle
+\begin{thesisbox}[全场一句话立论]<…>\end{thesisbox}
+
+\begin{speech}{1. 正一开篇立论稿}{正文 NNN 字 / 180 秒}
+谢谢主席。<定义 → 中立判准与双方义务 → 论点一（主张 → 机制 → 论据 → 回扣）→ 论点二 → 抛出后场问题 → 价值一句 → 收束>
+\end{speech}
+\begin{contingency}
+\ifthen{<对方定义与我方不同>}{<30 秒定义之争口径>}
+\ifthen{<时间不够>}{<删哪一句>}
+\end{contingency}
+
+\begin{stage}{2. 正一被质询防守预案}{反四质询，120 秒双边计时}
+\textbf{原则}：<回答短、守住前提、不否认常识>
+\begin{qa}
+\qarow{<对方会问>}{<我方回答（简短，守住前提）>}
+\end{qa}
+\end{stage}
+
+\begin{stage}{3. 正四质询反一问题链}{120 秒，双边计时}
+\textbf{总目标}：<拿到什么承认 / 暴露什么矛盾>
+\begin{chain}{链一：<名称>}{<目标>}
+\q{<问题，25 字内>}{答“是”：<下一问>；答“否”：<下一问>}
+\q{<…>}{<…>}
+\cut{<打断用语>}
+\close{<收束语>}
+\end{chain}
+\begin{chain}{链二：<名称>}{<目标>}
+\q{<…>}{<…>}
+\end{chain}
+\end{stage}
+
+\begin{speech}{4. 正二驳论稿}{正文 NNN 字 + 临场位 NNN 字 / 120 秒}
+<总起 → 驳点一 → 驳点二 → 收束；反方先驳，正方后驳并预留约 100 字临场位>
+\reserve{<临场回应反二的位置与口径，约 100 字>}
+\end{speech}
+\begin{contingency}
+\ifthen{<…>}{<…>}
+\end{contingency}
+
+\begin{stage}{5. 正二对辩要点}{90 秒，单边计时}
+\begin{points}{进攻点（4–5 个，每个 15–20 秒）}
+\item <…>
+\end{points}
+\begin{points}{备用点（6–8 个）}
+\item <…>
+\end{points}
+\begin{points}{对方最可能问的三个问题 → 回应}
+\item <…>
+\end{points}
+\end{stage}
+
+\begin{stage}{6. 正三盘问问题链}{90 秒，单边计时}
+\begin{chain}{链一：<名称>}{问二辩 → 问四辩同一问题，检验口径}
+\q{（问反二）<…>}{<…>}
+\q{（问反四）同样的问题}{<两人若不一致，小结重锤>}
+\end{chain}
+\begin{chain}{链二：<名称>}{<目标>}
+\q{<…>}{<…>}
+\end{chain}
+\textbf{盘问目标}：<小结里要证明什么>
+\end{stage}
+
+\begin{stage}{7. 正二、正四被盘问防守预案}{两人口径必须一致}
+\begin{qaa}
+\qaarow{<对方会问>}{<二辩答>}{<四辩答（必须一致）>}
+\end{qaa}
+\end{stage}
+
+\begin{speech}{8. 正三盘问小结稿}{正文 NNN 字 / 90 秒}
+<盘问成果 → 与论点的连接 → 当前战场总结；反方小结预留约 80 字临场位并在标题里写「+ 临场位 NNN 字」>
+\end{speech}
+
+\begin{stage}{9. 自由辩战场设计}{240 秒}
+\begin{battleground}{战场一：<名称>（前 90 秒，主战场）}
+\begin{fields}
+\field{目标}{<…>}
+\field{开场问题}{<封闭式，20 字内>}
+\field{对方答 A → 追问}{<…>}
+\field{对方答 B → 追问}{<…>}
+\field{对方可能反攻 → 我方防守}{<…>}
+\field{收束语}{<…>}
+\end{fields}
+\end{battleground}
+\begin{battleground}{战场二：<名称>（中 90 秒）}
+<同上>
+\end{battleground}
+\begin{points}{必问（前两分钟内问完）}
+\item <…>
+\end{points}
+\begin{points}{必答（15 秒以内正面回答）}
+\item <问题 → 答案>
+\end{points}
+\textbf{时间分配与站位}：<…>
+\end{stage}
+
+\begin{speech}{10. 正四结辩稿}{正文 NNN 字 / 210 秒，留 30–40 秒临场回应}
+<归纳分歧 → 处理对方最强点 → 我方论点收束（回到一辩稿抛出的问题）→ 价值升华（具体的人与时刻，不是宏大叙事）→ 结尾短句。反四写封路式，标题用「封路式」；正四留 30–40 秒临场位>
+\end{speech}
+\begin{contingency}
+\ifthen{<…>}{<…>}
+\end{contingency}
+
+% 仅 2025 校赛：第 11 节奇袭预案。新生赛文稿把整节删掉（标题里的「奇袭」会让 check_speeches.py 判成校赛）。
+% \begin{stage}{11. 正方奇袭预案}{质询 150 秒双边 / 申论 120 秒，二选一}
+% \textbf{发动判断}：<什么条件下发动、在哪个环节之后、由谁喊、暗号是什么>
+% \begin{chain}{奇袭质询链一：<通用链，打定义或判准>}{<目标>}
+% \q{<…>}{<…>}
+% \end{chain}
+% \begin{speech}{奇袭申论稿}{正文 NNN 字 / 120 秒}
+% <开头留一句接场上刚发生的事，正文重建被打塌的论点或立起未被触碰的战场>
+% \end{speech}
+% \textbf{不发动的情况}：<…>
+% \end{stage}
+\end{document}

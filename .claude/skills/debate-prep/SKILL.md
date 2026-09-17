@@ -1,6 +1,6 @@
 ---
 name: debate-prep
-description: 华语辩论赛备赛助手。给定辩题（可选题解、赛制），始终对称地为正反双方完成备赛：关键词定义调研（正方有利 / 反方有利 / 中立三版及反驳）、判准与论证义务（三版及反驳）、经多轮对抗迭代的 2–3 个精炼论点（每个配学理、数据、案例，注明出处与研究方法）、覆盖对方全部可能论点的反驳库、持方优劣评估、全队口径表，并按赛制产出三类文档：备赛文档、正赛速查、正赛文稿，全部输出 Markdown 与 PDF。只要用户提到辩题、辩论赛、立论、质询、驳论、盘问、自由辩、结辩、持方、正方/反方、新生辩论赛、辩论备赛、陪练、模辩，或贴出一个"XX是/不是YY""应该/不应该""利大于弊/弊大于利""A比B更……"式的题目，就使用本技能，即使用户没有明说"备赛"或只想要某一个环节的稿子。Chinese (Mandarin) competitive debate preparation for both sides: definitions, burden of proof, case building, rebuttals, stage scripts, quick-reference sheets, PDF output.
+description: 华语辩论赛备赛助手。给定辩题（可选题解、赛制），始终对称地为正反双方完成备赛：关键词定义调研（正方有利 / 反方有利 / 中立三版及反驳）、判准与论证义务（三版及反驳）、经多轮对抗迭代的 2–3 个精炼论点（每个配学理、数据、案例，注明出处与研究方法）、覆盖对方全部可能论点的反驳库、持方优劣评估、全队口径表，并按赛制产出三类文档：备赛文档、正赛速查、正赛文稿，源文件为 LaTeX（自带文档类），编译为 PDF。只要用户提到辩题、辩论赛、立论、质询、驳论、盘问、自由辩、结辩、持方、正方/反方、新生辩论赛、辩论备赛、陪练、模辩，或贴出一个"XX是/不是YY""应该/不应该""利大于弊/弊大于利""A比B更……"式的题目，就使用本技能，即使用户没有明说"备赛"或只想要某一个环节的稿子。Chinese (Mandarin) competitive debate preparation for both sides: definitions, burden of proof, case building, rebuttals, stage scripts, quick-reference sheets, PDF output.
 ---
 
 # 华语辩论备赛（debate-prep）
@@ -15,6 +15,7 @@ description: 华语辩论赛备赛助手。给定辩题（可选题解、赛制�
 4. **有据可查**：每条数据、研究、理论、案例都必须注明出处，没有出处就不能进文档；研究附研究方法；标「已核实」的必须同时有**可追溯的出处**（机构或作者、年份、报告或论文名，有链接就给链接）、**核实日期**和**原文引句**（从原始来源抄下的含该数字的一句话），三者缺一就降级为「有把握」；核实不了的标【待核实】，不写成确定的样子，也不写进速查和文稿。检索次数不设上限，宁可多花时间也不要放过一条没查证的数据。交付前用 `scripts/check_evidence.py` 查，它会抓出没日期的「已核实」和进了稿件的【待核实】。
 5. **宁缺毋滥**：每方两到三个论点，互不重叠。三个讲浅不如两个讲透。
 6. **能说出口**：稿子是给人念的，不是给人读的。评委听不见破折号，也记不住每段结尾都来一句的漂亮话。写完出声念一遍，念着别扭就改。规则见 `references/speech-voice.md`，交稿前用 `scripts/check_voice.py` 跑一遍。
+7. **源文件是 LaTeX**：三类文档直接写成 `.tex`，用 `assets/latex/debate.cls` 的语义宏（主张、机制、学理、问题链……），版式由类决定，检查脚本也按宏解析。宏的清单见 `references/document-structure.md`，写任何文档之前先读它；不要自造宏、不要在正文里写排版命令。
 
 ## 输入
 
@@ -84,11 +85,11 @@ description: 华语辩论赛备赛助手。给定辩题（可选题解、赛制�
 
 ### 第 7 步：文稿
 
-写法见 `references/stage-playbooks.md`，语感见 `references/speech-voice.md`（先读语感那篇，它决定句子长什么样）。三类文档的写法约定见 `references/document-structure.md`：标签项、句内子标签、表格固定词决定排版层次，写备赛文档前也要读它。按赛制为双方各写全部环节。特别要求：
+写法见 `references/stage-playbooks.md`，语感见 `references/speech-voice.md`（先读语感那篇，它决定句子长什么样）。三类文档的宏见 `references/document-structure.md`：字段、证据卡、攻防对、问题链、稿件环境各有专用宏，写备赛文档前也要读它。按赛制为双方各写全部环节。特别要求：
 
 - **一辩稿**必须包含：所有重要定义、中立判准与双方义务、全部论点、后场会反复追问对方的问题
 - **结辩稿**：总结前场之外，要有一段让人眼前一亮的价值升华。不是宏大叙事，是具体的个人感受或体验，引人深思、引起共鸣。写法见 `stage-playbooks.md` 第 10 节
-- **标题写死**：文稿的十个二级标题按赛制文件「各持方文稿标题」一节原样使用，不要自己改写。三份文档并排时队员靠编号找稿子
+- **标题写死**：文稿里每个 `\begin{speech}` / `\begin{stage}` 的标题与括号内容按赛制文件「各持方文稿标题」一节原样使用，不要自己改写。三份文档并排时队员靠编号找稿子
 - **字数按计数规则**：赛制文件「时长与字数换算」一节定义了唯一口径（只数汉字、数字、英文单词，不数标点与舞台提示，临场位单独标注）。不要手工估，用 `scripts/check_speeches.py` 数——手工估三次会得到三个结果，赛前压时间就会出问题
 - 质询、盘问、对辩、自由辩是问题链与战场表，不是稿子，不计字数；但问题链里每一问不超过 25 字、尽量封闭式，`check_speeches.py` 会数
 - 写完依次跑 `scripts/check_speeches.py`、`scripts/check_consistency.py`、`scripts/check_evidence.py`：超区间的按「论据 → 修饰语 → 机制中间步骤」的顺序删（价值升华段不删），数字与口径表对不上的改稿或补口径表，【待核实】的数据进了稿件就删掉
@@ -103,31 +104,31 @@ description: 华语辩论赛备赛助手。给定辩题（可选题解、赛制�
 
 | 文件 | 内容 | 模板 |
 |---|---|---|
-| `备赛文档-<题>.md` | 双方共用：赛制要点、定义三版与反驳、判准三版与义务、双方论点（三件套 + 出处）、双方反驳库、优劣评估、双方口径表、论据出处清单、备赛建议。开头只有赛制与生成日期两行：不写用户持方，不写输入说明，结论速览里不写字数检查 | `assets/prep-doc-template.md` |
-| `速查-正方-<题>.md`、`速查-反方-<题>.md` | 每方一份速查 | `assets/quickref-template.md` |
-| `文稿-正方-<题>.md`、`文稿-反方-<题>.md` | 每方按赛制的全部环节 | `assets/script-doc-template.md` |
+| `备赛文档-<题>.tex` | 双方共用：赛制要点、定义三版与反驳、判准三版与义务、双方论点（三件套 + 出处）、双方反驳库、优劣评估、双方口径表、论据出处清单、备赛建议。开头只有赛制与生成日期两行：不写用户持方，不写输入说明，结论速览里不写字数检查 | `assets/prep-doc-template.tex` |
+| `速查-正方-<题>.tex`、`速查-反方-<题>.tex` | 每方一份速查 | `assets/quickref-template.tex` |
+| `文稿-正方-<题>.tex`、`文稿-反方-<题>.tex` | 每方按赛制的全部环节 | `assets/script-doc-template.tex` |
 | `摘要-<题>.md` | 对话结尾那段摘要的原文（见下），用户直接转发给队友。不生成 PDF | |
-| 以上前五个文件的 `.pdf` | 用 `scripts/md2pdf.py` 生成；它按文件名选版式（备赛文档 / 速查 / 文稿）并按正方、反方上色 | |
+| 以上前五个文件的 `.pdf` | 用 `scripts/build_pdf.py` 编译（XeLaTeX）；版式与颜色由 `\documentclass[prep\|quick\|script, pro\|con\|both]{debate}` 决定 | |
 
 `<题>` 用辩题的简称（四到八个字，能认出是哪道题），文件名里不带编号。
 
-先写完 Markdown，再依次运行：
+先把 `.tex` 写完（从模板复制，往宏里填内容），再依次运行：
 
 ```
-python3 <skill目录>/scripts/check_speeches.py prep/<题>/文稿-*.md
-python3 <skill目录>/scripts/check_voice.py prep/<题>/文稿-*.md
-python3 <skill目录>/scripts/check_consistency.py --canon prep/<题>/备赛文档-*.md prep/<题>/速查-*.md prep/<题>/文稿-*.md
-python3 <skill目录>/scripts/check_evidence.py --canon prep/<题>/备赛文档-*.md prep/<题>/速查-*.md prep/<题>/文稿-*.md
-python3 <skill目录>/scripts/md2pdf.py prep/<题>/
+python3 <skill目录>/scripts/check_speeches.py prep/<题>/文稿-*.tex
+python3 <skill目录>/scripts/check_voice.py prep/<题>/文稿-*.tex
+python3 <skill目录>/scripts/check_consistency.py --canon prep/<题>/备赛文档-*.tex prep/<题>/速查-*.tex prep/<题>/文稿-*.tex
+python3 <skill目录>/scripts/check_evidence.py --canon prep/<题>/备赛文档-*.tex prep/<题>/速查-*.tex prep/<题>/文稿-*.tex
+python3 <skill目录>/scripts/build_pdf.py prep/<题>/
 ```
 
-2025 校赛给 `check_evidence.py` 加 `--strict`。`check_speeches.py` 按文稿的二级标题自动判断赛制（校赛标题里有奇袭、四辩对辩、二辩质询），字数区间直接从 `references/formats/<赛制>.md` 的换算表读，也可以用 `--format` 指定。`check_speeches.py` 报 OUT（稿件超区间、问题链里有超过 25 字的问题）、`check_voice.py` 报 FAIL、`check_evidence.py` 报 FAIL 的都必须改完再交付，改完重跑；WARN 逐条看，非封闭式问题是不是故意的、没链接的已核实能不能补上。字数不要只改标题上的数字；语感问题不要只删破折号了事，破折号只是最好数的那一条；黏合剂不要靠重复同一句"请评委"凑数，脚本会数种类和次数。
+2025 校赛给 `check_evidence.py` 加 `--strict`。`check_speeches.py` 按文稿里 speech / stage 的标题自动判断赛制（校赛标题里有奇袭、四辩对辩、二辩质询），字数区间直接从 `references/formats/<赛制>.md` 的换算表读，也可以用 `--format` 指定。`check_speeches.py` 报 OUT（稿件超区间、问题链里有超过 25 字的问题）、`check_voice.py` 报 FAIL、`check_evidence.py` 报 FAIL 的都必须改完再交付，改完重跑；WARN 逐条看，非封闭式问题是不是故意的、没链接的已核实能不能补上。字数不要只改标题上的数字；语感问题不要只删破折号了事，破折号只是最好数的那一条；黏合剂不要靠重复同一句"请评委"凑数，脚本会数种类和次数。
 
-一致性检查同时读阿拉伯数字和口语数字（六成、一千两百多件），报出的逐条判断：数据类的必须处理，要么稿子写错了，改稿，要么口径表漏了，补上并附出处；编号、交叉引用之类的误报可以忽略。`md2pdf.py` 不需要额外安装包，依次尝试 Chrome/Chromium/Edge、weasyprint、pandoc；都没有时保留 HTML 并打印说明，把说明转告用户。不要自行 pip 安装任何包，那是用户机器上的决定。文件名含“速查”的会自动用紧凑排版，生成后会打印页数，速查超过两页会报 WARN：删内容（对方论点表里最弱的行、合并临场预案），不要缩字号，删完重新生成。
+一致性检查同时读阿拉伯数字和口语数字（六成、一千两百多件），报出的逐条判断：数据类的必须处理，要么稿子写错了，改稿，要么口径表漏了，补上并附出处；编号、交叉引用之类的误报可以忽略。`build_pdf.py` 需要 XeLaTeX + ctex + 中文字体：Claude Code on the web 的容器由 `.claude/hooks/ensure-tex.sh`（SessionStart 钩子）自动装好；用户自己的机器上没有就把脚本打印的安装说明转告用户，`.tex` 已经写好不会丢。不要自行 pip 安装任何包，那是用户机器上的决定。编译失败先看 `.log` 里第一个 `!` 开头的错误，多半是没转义的 `&` `%` `#` 或括号不配对。生成后会打印页数，速查超过两页会报 WARN：删内容（对方论点表里最弱的行、合并临场预案），不要缩字号，删完重新生成。
 
 最后在对话里给一段摘要：优劣评估结论、双方一句话立论、双方各自最关键的攻防点、已核实与【待核实】条目数、文件位置。同一段原样存成 `prep/<题>/摘要-<题>.md`，用户会直接把它发给队友。字数、语感、论据检查必须通过，但通过了就不必在文档或摘要里报告。
 
-没有文件工具的环境：在对话中按同样结构分段输出，先备赛文档，再速查，再文稿。
+没有文件工具的环境：在对话中按同样结构分段输出，先备赛文档，再速查，再文稿，用 Markdown 而不是 LaTeX（那种环境没有编译器，读者要直接读）。
 
 ## 后续互动
 

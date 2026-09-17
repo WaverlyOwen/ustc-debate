@@ -2,15 +2,18 @@
 """Count the spoken length of each speech in a 文稿 file and check it against the format's band.
 
 Usage:
-    python3 check_speeches.py prep/<题>/文稿-*.md [--format ustc-freshman-cup] [--json]
+    python3 check_speeches.py prep/<题>/文稿-*.tex [--format ustc-freshman-cup] [--json]
     python3 check_speeches.py --list-formats
 
-Counting rule (the single canonical one, mirrored from the format file):
+The file is LaTeX written against assets/latex/debate.cls. A speech is
+\begin{speech}{标题}{正文 NNN 字 / 180 秒} … \end{speech}; everything else is a
+\begin{stage}. Counting rule (the single canonical one, mirrored from the
+format file):
   counted    汉字, 阿拉伯数字 (one char each), English words (two chars each)
-  not counted  punctuation, whitespace, Markdown marks
-  not counted  stage directions and asides: 〔…〕【…】(…) （…）
-  not counted  the 临场位 reserve, and the "如果……就……" bullet list at the end
-                of a speech section (those are notes, not spoken text)
+  not counted  punctuation, whitespace, LaTeX macros
+  not counted  \aside{…} stage directions, \reserve{…} 临场位 notes, and
+                parenthesised asides （…）
+  not counted  the contingency box (如果……就……), which sits outside the speech
 
 Bands come from the format file's 「时长与字数换算」 table
 (references/formats/<format>.md), so adding a format means adding a file, not
@@ -38,6 +41,8 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FORMATS_DIR = os.path.join(HERE, "..", "references", "formats")
+sys.path.insert(0, HERE)
+import _tex  # noqa: E402
 
 # Fallback only; the format file is the source of truth.
 BUILTIN_BANDS = {
@@ -71,7 +76,7 @@ MAX_QUESTION = 25
 CLOSED = ["吗", "是不是", "有没有", "会不会", "算不算", "还是", "对不对", "能不能", "是否", "承不承认",
           "该不该", "要不要", "同不同意", "可不可以", "愿不愿意", "认不认", "对吧", "是吧", "有吧", "没错吧"]
 
-STAGE = re.compile(r"〔[^〕]*〕|【[^】]*】|（[^）]*）|\([^)]*\)")
+STAGE = re.compile(r"〔[^〕]*〕|【[^】]*】|（[^）]*）|\([^)]*\)")   # 括注不念
 CJK = re.compile(r"[一-鿿㐀-䶿]")
 DIGIT = re.compile(r"\d")
 LATIN = re.compile(r"[A-Za-z]+")
@@ -79,10 +84,8 @@ RANGE = re.compile(r"(\d+)\s*[–—-]\s*(\d+)")
 
 
 def spoken_len(text):
-    """Spoken-character count under the canonical rule."""
+    """Spoken-character count under the canonical rule (text already macro-free)."""
     t = STAGE.sub(" ", text)
-    t = re.sub(r"`[^`]*`", " ", t)
-    t = re.sub(r"[*_#>|~-]", " ", t)
     return len(CJK.findall(t)) + len(DIGIT.findall(t)) + 2 * len(LATIN.findall(t))
 
 
@@ -172,10 +175,10 @@ def detect_format(files):
     """Look only at the ## headings: the school cup gives 质询 to 二辩, 对辩 to 四辩, and has 奇袭."""
     for path in files:
         try:
-            text = open(path, encoding="utf-8").read()
+            text = _tex.read(path)
         except OSError:
             continue
-        heads = " ".join(re.findall(r"^##\s+(.*)$", text, re.M))
+        heads = " ".join(_tex.heading(t, m) for _, t, m, _ in _tex.sections(text))
         if re.search(r"奇袭", heads) or re.search(r"[正反]四对辩", heads) or re.search(r"[正反]二质询", heads):
             return "ustc-school-cup-2025"
     return "ustc-freshman-cup"
@@ -214,67 +217,37 @@ def question_kind(heading):
     return None
 
 
-def body_of(section):
-    """Strip the heading, the trailing 如果……就…… note list and any 临场位 block."""
-    lines = section.split("\n")[1:]
+def speech_text(body):
+    """What is said: macros stripped, \aside / \reserve dropped, contingency box excluded."""
+    body = re.sub(r"\\begin\{contingency\}.*?\\end\{contingency\}", " ", body, flags=re.S)
+    return _tex.spoken(body)
+
+
+def split_surprise(body):
+    """A 奇袭预案 stage holds question chains and then a 申论稿 as a nested speech
+    (\begin{speech}{奇袭申论稿}{正文 NNN 字 / 120 秒}). Returns (chain_part, speech_body)."""
+    m = re.search(r"\\begin\{speech\}", body)
+    if not m:
+        return body, ""
+    a, i = _tex.args(body, m.end(), 2)
+    end = body.find("\\end{speech}", i)
+    return body[:m.start()], body[i:end if end > 0 else len(body)]
+
+
+def questions_of(body):
+    chains, qs = _tex.questions(body)
     out = []
-    for ln in lines:
-        s = ln.strip()
-        if re.match(r"^\**如果[^*]*就", s) or s.startswith("**如果"):
-            break
-        if "临场位" in s and (s.startswith("-") or s.startswith("*") or s.startswith(">")):
-            continue
-        out.append(ln)
-    while out and (not out[-1].strip() or out[-1].strip().startswith(("-", "*", ">"))):
-        out.pop()
-    return "\n".join(out)
-
-
-SURPRISE_SPEECH = re.compile(r"^\s*(\*\*|#+\s*)?[^\n]*奇袭申论")
-
-
-def split_surprise(section):
-    """A 奇袭预案 section holds the question chains first and the 申论稿 after.
-    Returns (chain_part, speech_part); speech_part is '' if there is none."""
-    lines = section.split("\n")
-    for i, ln in enumerate(lines[1:], 1):
-        if SURPRISE_SPEECH.match(ln.strip()):
-            return "\n".join(lines[:i]), "\n".join([lines[0]] + lines[i + 1:])
-    return section, ""
-
-
-def questions_of(section):
-    """(chains, [(text, spoken_len, closed)]) for a question-chain section."""
-    chains = 0
-    qs = []
-    in_speech = False
-    for ln in section.split("\n")[1:]:
-        s = ln.strip()
-        if re.match(r"^\*\*.*链", s) or re.match(r"^#+\s*链", s) or re.match(r"^链[一二三四五六七八九十]", s):
-            chains += 1
-            in_speech = False
-        if re.match(r"^\*\*.*(申论稿|申论)", s):
-            in_speech = True
-        if in_speech:
-            continue
-        m = re.match(r"^\d+\.\s*(.*)$", s)
-        if not m:
-            continue
-        q = m.group(1)
-        qm = re.search(r'["“]([^"”]+)["”]', q)
-        qt = qm.group(1) if qm else re.split(r"→|（|\(", q)[0]
-        qt = qt.strip()
-        if not qt:
-            continue
+    for qt in qs:
+        qt = re.sub(r"^\s*问[正反][一二三四]\s*[：:]\s*", "", qt)   # 「问反二：」是舞台提示
         n = spoken_len(qt)
         closed = any(c in qt for c in CLOSED) or bool(re.search(r"([一-鿿])不\1", qt))
-        qs.append((qt, n, closed))
-    return chains, qs
+        out.append((qt, n, closed))
+    return chains, out
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("files", nargs="*", help="文稿-*.md files")
+    ap.add_argument("files", nargs="*", help="文稿-*.tex files")
     ap.add_argument("--format", default=None,
                     help="format key (a file in references/formats/); omit to detect from the ## headings")
     ap.add_argument("--list-formats", action="store_true", help="list the formats that have a file")
@@ -300,16 +273,16 @@ def main():
     warn = 0
     report = []
     for path in args.files:
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read()
-        sections = re.split(r"\n(?=## )", text)
+        text = _tex.read(path)
         rows = []
         qrows = []
-        for sec in sections:
-            heading = sec.split("\n")[0].lstrip("# ").strip()
-            key = classify(heading)
+        for kind, title, meta, body in _tex.sections(text):
+            if kind not in ("speech", "stage"):
+                continue
+            heading = _tex.heading(title, meta)
+            key = classify(heading) if kind == "speech" else None
             if key:
-                n = spoken_len(body_of(sec))
+                n = spoken_len(speech_text(body))
                 secs, lo, hi = bands[key]
                 ok = lo <= n <= hi
                 if not ok:
@@ -319,9 +292,9 @@ def main():
                 continue
             qk = question_kind(heading)
             if qk == "奇袭质询" and "预案" in heading:
-                sec, speech = split_surprise(sec)
+                body, speech = split_surprise(body)
                 if speech.strip() and "奇袭申论" in bands:
-                    n = spoken_len(body_of(speech))
+                    n = spoken_len(speech_text(speech))
                     secs, lo, hi = bands["奇袭申论"]
                     ok = lo <= n <= hi
                     if not ok:
@@ -329,7 +302,7 @@ def main():
                     rows.append({"heading": heading[:20] + "·奇袭申论稿", "kind": "奇袭申论", "seconds": secs,
                                  "count": n, "low": lo, "high": hi, "ok": ok})
             if qk:
-                chains, qs = questions_of(sec)
+                chains, qs = questions_of(body)
                 long_qs = [(q, n) for q, n, _ in qs if n > MAX_QUESTION]
                 open_qs = [q for q, _, c in qs if not c]
                 cb = chain_bands.get(qk)
@@ -345,7 +318,7 @@ def main():
         if not args.json:
             print("== %s" % path)
             if not rows:
-                print("   (no full speeches found — check the headings against the format file)")
+                print("   (no \\begin{speech} found — check the headings against the format file)")
             for r in rows:
                 mark = "OK  " if r["ok"] else "OUT "
                 delta = "" if r["ok"] else ("  (%+d)" % (r["count"] - (r["high"] if r["count"] > r["high"] else r["low"])))

@@ -43,7 +43,7 @@
 3. **再改三类文档**。口径表改完，同步备赛文档相关节、两份速查、两份文稿里所有引用了该条的地方。改一处漏一处比不改还糟，用 `check_consistency.py` 抓
 4. **反驳库补条目**。模辩里对方说出了反驳库没有的说法，就加一条，来源标"常见"，并对称检查另一方的反驳库是不是也漏了对应的说法
 5. **不因一次模辩换论点**。论点被打得难看，先看是稿子没讲清还是论点本身站不住。前者改稿，后者才回第 3 步重新迭代，而且要两方一起重看，不能只补一方
-6. **重跑全部检查再生成 PDF**。`check_speeches.py`、`check_voice.py`、`check_consistency.py`、`check_evidence.py`、`md2pdf.py`，一个都不跳
+6. **重跑全部检查再生成 PDF**。`check_speeches.py`、`check_voice.py`、`check_consistency.py`、`check_evidence.py`、`build_pdf.py`，一个都不跳
 
 改完在对话里列一张"改了什么"清单：文件、节、改前 → 改后。用户要拿它去通知队友。
 

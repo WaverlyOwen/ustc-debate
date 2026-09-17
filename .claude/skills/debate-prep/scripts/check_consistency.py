@@ -2,7 +2,9 @@
 """Check that numbers quoted in match documents all appear in the canonical 口径表.
 
 Usage:
-    python3 check_consistency.py --canon 备赛文档-<题>.md 速查-*.md 文稿-*.md
+    python3 check_consistency.py --canon 备赛文档-<题>.tex 速查-*.tex 文稿-*.tex
+
+Files are LaTeX (assets/latex/debate.cls); macros are stripped before numbers are read.
 
 Every number found in the checked files must also appear in the canonical
 document. Two readings are checked:
@@ -28,6 +30,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _numerals import arabic_tokens, spoken_tokens, canon_values, matches, strip_stage  # noqa: E402
+import _tex  # noqa: E402
 
 IGNORE_UNITS = {"秒", "字", "分钟", "分"}  # timing / length descriptors used by the format
 SECTION = re.compile(r"^\s*(#+\s*)?\d+(\.\d+)*\s")  # 5.1 xxx style headings
@@ -70,8 +73,7 @@ def main():
     ap.add_argument("files", nargs="+", help="quick-reference and script files to check")
     args = ap.parse_args()
 
-    with open(args.canon, encoding="utf-8") as fh:
-        canon_text = fh.read()
+    canon_text = _tex.plain(_tex.read(args.canon))
     canon_exact = set()
     for ln, line in enumerate(canon_text.split("\n"), 1):
         for t in arabic_tokens(line, ln, line):
@@ -80,8 +82,7 @@ def main():
 
     bad = 0
     for path in args.files:
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read()
+        text = _tex.plain(_tex.read(path))
         missing = []
         for t in file_tokens(text):
             if t["kind"] == "arabic":

@@ -2,7 +2,7 @@
 
 面向中国科学技术大学新生辩论赛的华语辩论备赛 Skill（Claude Code / Claude 通用）。
 
-给它一道辩题（可选题解、赛制），它会**始终为正反双方对称备赛**，并交付三类文档，每类都有 Markdown 与 PDF：
+给它一道辩题（可选题解、赛制），它会**始终为正反双方对称备赛**，并交付三类文档，源文件是 LaTeX（`.tex`，写在自带的 `debate.cls` 之上），用 XeLaTeX 编译成 PDF：
 
 | 文档 | 内容 |
 |---|---|
@@ -24,20 +24,23 @@
 │   ├── speech-voice.md              # 讲稿语感：怎么写得像人在说话而不是念稿
 │   ├── evidence.md                  # 来源等级、引用格式、核实流程（含原文引句）、校赛论据红线
 │   ├── stage-playbooks.md           # 各环节打法与写法
-│   ├── document-structure.md        # 三类文档的写法约定，决定 PDF 排版层次
+│   ├── document-structure.md        # debate.cls 的宏清单：写文档就是往这些宏里填内容
 │   └── sparring.md                  # 陪练、模辩复盘回流、压字数、打磨单篇的方法
 ├── assets/
-│   ├── prep-doc-template.md         # 备赛文档模板
-│   ├── quickref-template.md         # 正赛速查模板
-│   ├── script-doc-template.md       # 正赛文稿模板
+│   ├── latex/debate.cls             # 文档类：prep / quick / script 三种版式，pro / con / both 三种配色，全部语义宏
+│   ├── prep-doc-template.tex        # 备赛文档模板
+│   ├── quickref-template.tex        # 正赛速查模板
+│   ├── script-doc-template.tex      # 正赛文稿模板
 │   └── agent-prompts.md             # 对抗迭代用的建构 / 攻击子代理提示词，两方共用只换持方
 ├── scripts/
-│   ├── md2pdf.py                    # Markdown → PDF（无需额外安装包，自动寻找 Chrome/Chromium/Edge；打印页数，速查超两页报 WARN）
+│   ├── build_pdf.py                 # .tex → PDF（latexmk / xelatex；打印页数，速查超两页报 WARN；没有 TeX 时打印安装说明）
+│   ├── md2tex.py                    # 旧版 Markdown 产出的迁移工具，正常流程不用
 │   ├── check_speeches.py            # 口播字数是否落在赛制区间（区间从赛制文件读）；问题链每问 ≤25 字、封闭式、链数
 │   ├── check_voice.py               # 检出念稿腔：破折号、金句、等长句、书面连接词、黏合剂种类与重复、未口语化的数字
 │   ├── check_consistency.py         # 速查与文稿中的数字（阿拉伯与口语形式）是否都在口径表内
 │   ├── check_evidence.py            # 出处清单：已核实必须有日期、出处、引句；【待核实】不得进稿件；--strict 为校赛红线
-│   └── _numerals.py                 # 上面两个检查共用的中文数字解析
+│   ├── _numerals.py                 # 中文数字解析（一致性与论据检查共用）
+│   └── _tex.py                      # LaTeX 读取：按 debate.cls 的宏切分节、抽稿件正文、问题链、出处行
 └── evals/
     └── evals.json                   # 测试用例（全套、部分请求、未抽签、校赛、陪练、压字数）
 ```
@@ -52,26 +55,34 @@
 
 ```
 prep/宠物之爱/
-├── 备赛文档-宠物之爱.md / .pdf       # 双方共用
-├── 速查-正方-宠物之爱.md / .pdf      # 每方一份，两页以内
-├── 速查-反方-宠物之爱.md / .pdf
-├── 文稿-正方-宠物之爱.md / .pdf      # 每方按赛制的全部环节
-├── 文稿-反方-宠物之爱.md / .pdf
+├── 备赛文档-宠物之爱.tex / .pdf      # 双方共用
+├── 速查-正方-宠物之爱.tex / .pdf     # 每方一份，两页以内
+├── 速查-反方-宠物之爱.tex / .pdf
+├── 文稿-正方-宠物之爱.tex / .pdf     # 每方按赛制的全部环节
+├── 文稿-反方-宠物之爱.tex / .pdf
 ├── 摘要-宠物之爱.md                  # 对话摘要，直接转发队友
 └── .work/                           # 迭代中间产物，不进仓库
 ```
 
-交付前五个检查脚本都要跑：`check_speeches.py`（字数、问题链）、`check_voice.py`（语感）、`check_consistency.py`（数字口径）、`check_evidence.py`（论据状态；校赛加 `--strict`）、`md2pdf.py`（PDF 与页数）。
+交付前五个脚本都要跑：`check_speeches.py`（字数、问题链）、`check_voice.py`（语感）、`check_consistency.py`（数字口径）、`check_evidence.py`（论据状态；校赛加 `--strict`）、`build_pdf.py`（PDF 与页数）。
 
 **在 Claude.ai 中**：把 `.claude/skills/debate-prep` 目录打包为 `.skill` 文件上传。Claude.ai 环境没有文件工具时会在对话中分段输出。
 
-## PDF 生成
+## PDF 生成与 TeX 环境
 
-`scripts/md2pdf.py` 不依赖任何 Python 包。它依次尝试本机的 Chrome / Chromium / Edge（无头打印）、weasyprint、pandoc + xelatex；都没有时保留 HTML 并提示用浏览器"打印 → 另存为 PDF"。版式按文件名自动选择：备赛文档用阅读版式，速查用紧凑两页版式，文稿用 12pt 朗读版式并把"如果……就……"预案收进备注框；文件名里的正方、反方决定整份文档用红还是蓝，这是华语辩论的惯例色。手动用法：
+文档源文件是 LaTeX，`scripts/build_pdf.py` 用 latexmk（没有就直接跑两遍 xelatex）编译，打印页数，速查超过两页报 WARN。需要 XeLaTeX + ctex + tcolorbox + 一款简体中文字体（Noto / 思源 / 苹方 / 微软雅黑 / 文泉驿，`debate.cls` 按这个顺序找）。
+
+- **Claude Code on the web**：仓库自带 `.claude/settings.json` 的 SessionStart 钩子 `.claude/hooks/ensure-tex.sh`，会话启动时检测到没有 XeLaTeX 就用 apt 装 `texlive-xetex texlive-lang-chinese texlive-latex-extra texlive-plain-generic texlive-fonts-recommended fonts-noto-cjk latexmk`，约两三分钟。不想自动装就在环境变量里设 `DEBATE_PREP_NO_INSTALL=1`
+- **自己的机器**：macOS 装 MacTeX（`brew install --cask mactex-no-gui`），Windows 装 TeX Live 或 MiKTeX，Ubuntu 用上面那串 apt 包。脚本找不到 TeX 时会打印这段说明，`.tex` 已经写好不会丢
+
+手动用法：
 
 ```
-python3 .claude/skills/debate-prep/scripts/md2pdf.py prep/<辩题简称>/
+python3 .claude/skills/debate-prep/scripts/build_pdf.py --check          # 只看环境
+python3 .claude/skills/debate-prep/scripts/build_pdf.py prep/<辩题简称>/
 ```
+
+版式由 `\documentclass[prep|quick|script, pro|con|both]{debate}` 决定：备赛文档用阅读版式，速查用紧凑两页版式，文稿用 12pt 朗读版式并把"如果……就……"预案收进虚线框；正方红、反方蓝，是华语辩论的惯例色。宏的清单见 `references/document-structure.md`。
 
 ## 需要提供的信息
 

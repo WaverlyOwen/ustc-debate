@@ -1,0 +1,145 @@
+% 备赛文档模板。宏的用法见 references/document-structure.md；写完用 scripts/build_pdf.py 编译。
+% 尖括号里的是占位说明，写作时整段替换。不要新增自定义宏，不要在正文里写排版命令。
+\documentclass[prep,both]{debate}
+\motion{<辩题：正方表述 / 反方表述>}
+\meta{赛制}{<赛制名称>}
+\meta{生成日期}{<YYYY-MM-DD>}
+\begin{document}
+\debatetitle
+
+\begin{summary}
+\begin{fields}
+\field{持方优劣评估}{<一段：哪方较劣势、劣势主要在哪个维度、劣势方的核心打法>}
+\thesis{正方}{<一句>}
+\thesis{反方}{<一句>}
+\end{fields}
+\end{summary}
+
+\section{一、赛制要点}
+\begin{flowtable}
+\block{A}
+\flow{1 正方一辩立论}{180 秒}{正一}{<这一块要做到>}
+\flow{2 反方四辩质询正一}{120 秒 双边}{反四 问}{<…>}
+\block{B}
+\flow{6 反方二辩驳论}{120 秒}{反二}{<…>}
+\end{flowtable}
+<计时方式对策略的影响，两三句>
+
+\section{二、辩题性质与争议焦点}
+\begin{fields}
+\claim[辩题性质]{<利弊比较 / 价值倡导 / 事实判断 / 政策选择 / 比较题>，理由}
+\field{正方倾向把题目解释成}{<…>}
+\field{反方倾向解释成}{<…>}
+\field{争议焦点}{<双方必然相遇的两到三个战场>}
+\end{fields}
+
+\section{三、关键词定义}
+\subsection{3.1 <关键词一>}
+\begin{fields}
+\field{调研}{\sub{词典义}{<…>（出处）}\sub{学术义}{<…>（出处）}\sub{法规义}{<…>（出处）}}
+\begin{procard}{正方有利定义}\definition{<定义一句。>}<说明>\sub{有利之处}{<…>}\sub{反方如何反驳它}{<…>}\end{procard}
+\begin{concard}{反方有利定义}\definition{<定义一句。>}<说明>\sub{有利之处}{<…>}\sub{正方如何反驳它}{<…>}\end{concard}
+\begin{neutralcard}{中立定义}<定义>\sub{合理性}{<贴近常识 / 贴近题解 / 让双方都有得打>}\end{neutralcard}
+\end{fields}
+
+\subsection{3.2 <关键词二>}
+<同上>
+
+\subsection{3.3 隐含要素}
+\begin{fields}
+\field{主体}{<…>}\field{范围}{<…>}\field{时间尺度}{<…>}\field{比较对象}{<…>}
+\end{fields}
+
+\begin{warnbox}{3.5 定义杀陷阱：双方都要背}
+\begin{fields}
+\begin{procard}{正方的定义杀陷阱}<正方最容易犯的定义杀，以及评委会怎么看>\end{procard}
+\begin{concard}{反方的定义杀陷阱}<…>\end{concard}
+\end{fields}
+\end{warnbox}
+
+\section{四、判准与论证义务}
+\begin{fields}
+\claim[判准是什么]{<在这道题里，评委凭什么判一方论证成功>}
+\begin{procard}{正方有利判准}\definition{<标准一句。>}\sub{有利之处}{<…>}\sub{反方如何反驳它}{<…>}\end{procard}
+\begin{concard}{反方有利判准}\definition{<标准一句。>}\sub{有利之处}{<…>}\sub{正方如何反驳它}{<…>}\end{concard}
+\begin{neutralcard}{中立判准}<标准>\sub{合理性}{<…>}\sub{正方需要证明}{<…>}\sub{反方需要证明}{<…>}\end{neutralcard}
+\end{fields}
+
+\prosection{五、正方论点}
+\prosubsection{论点一：<标签>}
+\begin{fields}
+\claim{<一句话>}
+\begin{mechanism}\step <第一步>\step <第二步>\step <第三步>\end{mechanism}
+\begin{evidence}{学理}[有把握]<理论名（提出者，年份）>\sub{核心主张}{<一句话>}\sub{支撑}{<对应机制哪一步>}\sub{边界}{<…>}\sub{出处}{<…>}\end{evidence}
+\begin{evidence}{数据}[已核实]<数值>\sub{来源}{<机构 / 作者，年份，标题，链接>}\sub{方法}{<样本、方式、主要发现>}\sub{局限}{<…>}\end{evidence}
+\begin{evidence}{案例}[已核实]<简述>\sub{代表性}{<…>}\sub{出处}{<…>}\end{evidence}
+\closing{<回扣判准>}
+\begin{clash}\pair{<对方最强攻击>}{<我方回应>}\pair{<…>}{<…>}\end{clash}
+\end{fields}
+
+\prosubsection{论点二：<标签>}
+<同上>
+
+\subsection{（被淘汰的正方候选论点，交给反驳库与自由辩备用）}
+\begin{enumerate}[leftmargin=1.8em]
+\item <标签：一句话，淘汰原因>
+\end{enumerate}
+
+\consection{六、反方论点}
+<结构同第五节，用 \consubsection>
+
+\prosection{七、正方反驳库（针对反方全部可能论点）}
+\begin{rebuttals}
+\rebuttal{1}{<反方论点，用对方会用的话>}{<一句话反驳，15 秒>}{<展开反驳，60 秒：打定义 / 判准 / 机制 / 论据里最狠的一到两个>}{<反方追问 → 我方再回应>}{最终}
+\end{rebuttals}
+
+\consection{八、反方反驳库（针对正方全部可能论点）}
+\begin{rebuttals}
+\rebuttal{1}{<…>}{<…>}{<…>}{<…>}{淘汰}
+\end{rebuttals}
+
+\section{九、持方优劣评估}
+\begin{assessment}
+\assess{定义空间}{<分析>}{偏正}
+\assess{论证义务}{<分析>}{均衡}
+\assess{论据可得性}{<分析>}{偏反}
+\assess{评委直觉}{<只用用户给的评委信息和一般性判断>}{略偏反}
+\assess{赛制顺序}{<分析>}{均衡}
+\end{assessment}
+\begin{fields}
+\claim[结论]{<哪一方较劣势，劣势来自哪里>}
+\begin{procard}{劣势方打法}<收窄战场 / 抢先定义 / 判准之争 / 价值层 / 顺序利用，具体到这道题>\end{procard}
+\begin{concard}{优势方要防的}<优势方最容易因为什么翻车>\end{concard}
+\end{fields}
+
+\section{十、口径表}
+\prosubsection{10.1 正方口径表}
+\begin{canon}{正方}
+\canongroup{定义}
+\canonrow{<标签>}{<标准表述>}{<允许的换说法>}{<禁止的说法>}{<出处>}
+\canongroup{判准}
+\canonrow{<…>}{<…>}{<…>}{<…>}{<…>}
+\canongroup{论点}
+\canonrow{<…>}{<…>}{<…>}{<…>}{<…>}
+\canongroup{数据}
+\canonrow{<…>}{<…>}{<…>}{<…>}{<…>}
+\canongroup{案例}
+\canonrow{<…>}{<…>}{<…>}{<…>}{<…>}
+\end{canon}
+\consubsection{10.2 反方口径表}
+<同上>
+
+\section{十一、论据出处清单}
+\begin{sourcelist}
+\source{1}{<论据>}{<机构或作者、年份、报告或论文名、链接>}{<原文引句，40 字内>}{<核实日期>}{已核实}{<用在>}{}
+\source{2}{<论据>}{<出处>}{}{}{有把握}{<用在>}{<查证方向>}
+\source{3}{<论据>}{<二手来源>}{}{}{待核实}{<备用（未进稿件）>}{<查证方向>}
+\end{sourcelist}
+
+\section{十二、备赛建议}
+\begin{fields}
+\begin{timeline}\when{第 N–M 天}{定义与判准对齐}\when{第 …}{稿件成型}\when{第 …}{模辩与复盘}\end{timeline}
+\field{模辩重点检验}{<三件事>}
+\begin{checklist}\item <我方定义>\item <我方判准>\item <论点标签>\end{checklist}
+\end{fields}
+\end{document}

@@ -2,16 +2,20 @@
 """Flag the mechanical tells that make a debate script sound read rather than spoken.
 
 Usage:
-    python3 check_voice.py prep/<题>/文稿-*.md [--verbose]
+    python3 check_voice.py prep/<题>/文稿-*.tex [--verbose]
+
+The file is LaTeX (assets/latex/debate.cls): a speech is \begin{speech}…\end{speech},
+emphasis is \stress{…}, stage directions \aside{…} and 临场位 notes \reserve{…}
+are not spoken and are ignored here.
 
 Checks the tells that can be counted objectively (see
 references/speech-voice.md for the ones that need a human ear):
 
   破折号        must be zero — a dash is inaudible, so it marks a pause the
                 audience hears but cannot account for
-  加粗          at most 2 per speech, and never on the closing sentence of
-                several paragraphs in a row: a bolded flourish every paragraph
-                trains the judge to stop hearing them
+  着重号        \stress{…} at most 2 per speech, and never on the closing
+                sentence of several paragraphs in a row: a flourish every
+                paragraph trains the judge to stop hearing them
   句长落差      no run of 3+ sentences of near-equal length
   三连排比      at most one per speech
   书面连接词    none: 综上所述 / 值得注意的是 / 鉴于 / 旨在 / 因而 / 与此同时 …
@@ -24,8 +28,12 @@ references/speech-voice.md for the ones that need a human ear):
 Exit code 1 if any speech fails.
 """
 import argparse
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _tex  # noqa: E402
 
 BOOKISH = ["综上所述", "值得注意的是", "鉴于", "旨在", "因而", "与此同时", "由此可见",
            "不言而喻", "众所周知", "从某种意义上", "换而言之", "诚然如此", "基于此",
@@ -46,7 +54,6 @@ DECIMAL = re.compile(r"\d+\.\d+|\d+\s*[%％]")
 
 def sentences(text):
     t = STAGE.sub(" ", text)
-    t = re.sub(r"\*+", "", t)
     parts = [p.strip() for p in re.split(r"[。！？\n]", t)]
     return [p for p in parts if len(re.findall(r"[一-鿿]", p)) >= 4]
 
@@ -91,17 +98,10 @@ def flat_runs(sents, window=3, tol=4):
     return runs
 
 
-def body_of(section):
-    lines = section.split("\n")[1:]
-    out = []
-    for ln in lines:
-        s = ln.strip()
-        if re.match(r"^\**如果[^*]*就", s) or s.startswith("**如果"):
-            break
-        out.append(ln)
-    while out and (not out[-1].strip() or out[-1].strip().startswith(("-", "*", ">"))):
-        out.pop()
-    return "\n".join(out)
+def speech_body(body):
+    """Spoken text of a speech: macros stripped, \aside / \reserve dropped, contingency box excluded."""
+    body = re.sub(r"\\begin\{contingency\}.*?\\end\{contingency\}", " ", body, flags=re.S)
+    return _tex.spoken(body), body
 
 
 def glue_counts(body):
@@ -117,18 +117,19 @@ def glue_counts(body):
     return found
 
 
-def check(heading, body, verbose=False):
+def check(heading, raw, verbose=False):
+    body, tex = speech_body(raw)
     problems = []
     dash = len(re.findall(r"——", body))
     if dash:
         problems.append(("破折号", dash, "应为 0；改成句号断句，或换成「也就是说」「比如」"))
 
-    bold = re.findall(r"\*\*([^*\n]{6,})\*\*", body)
+    bold = [x for x in _tex.stresses(tex) if len(x) >= 6]
     if len(bold) > 2:
-        problems.append(("加粗句", len(bold), "最多 2 处；加粗是重音提示，不是每段的收尾装饰"))
+        problems.append(("着重号", len(bold), "\\stress 最多 2 处；着重号是重音提示，不是每段的收尾装饰"))
 
-    paras = [p.strip() for p in body.split("\n") if p.strip() and not p.strip().startswith(("-", "*", ">", "|"))]
-    closers = sum(1 for p in paras if re.search(r"\*\*[^*]{6,}\*\*\s*$", p))
+    paras = _tex.speech_paragraphs(tex)
+    closers = sum(1 for p in paras if re.search(r"\\stress\{[^{}]{6,}\}\s*[。！？]?\s*$", p))
     if closers >= 3:
         problems.append(("段末金句", closers, "让一部分段落平着收，反差才能突出真正的重点"))
 
@@ -156,8 +157,7 @@ def check(heading, body, verbose=False):
     if top[1] > 3:
         problems.append(("黏合剂重复", "「%s」×%d" % top, "同一句话最多 3 次；重复同一句不是口语，是凑数"))
 
-    spoken = STAGE.sub(" ", body)
-    decimals = DECIMAL.findall(spoken)
+    decimals = DECIMAL.findall(body)
     if decimals:
         problems.append(("数字未口语化", "、".join(decimals[:4]), "稿里写「百分之十四出头」「将近六成」，精确值放速查"))
 
@@ -172,21 +172,22 @@ def main():
 
     bad = 0
     for path in args.files:
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read()
+        text = _tex.read(path)
         print("== %s" % path)
-        for sec in re.split(r"\n(?=## )", text):
-            heading = sec.split("\n")[0].lstrip("# ").strip()
+        for kind, title, meta, body in _tex.sections(text):
+            if kind != "speech":
+                continue
+            heading = _tex.heading(title, meta)
             if not re.search(r"(立论|驳论|小结|结辩|申论)稿", heading):
                 continue
-            problems, stats = check(heading, body_of(sec), args.verbose)
+            problems, stats = check(heading, body, args.verbose)
             if problems:
                 bad += 1
                 print("   FAIL %s" % heading[:44])
                 for name, value, fix in problems:
                     print("        %-6s %-14s %s" % (name, value, fix))
             else:
-                print("   OK   %-44s 破折号 %d 加粗 %d 口语 %d（%d 类）"
+                print("   OK   %-44s 破折号 %d 着重 %d 口语 %d（%d 类）"
                       % (heading[:44], stats["dash"], stats["bold"], stats["glue"], stats["kinds"]))
     if bad:
         print("\n%d 篇稿件有机械痕迹。改法见 references/speech-voice.md，"

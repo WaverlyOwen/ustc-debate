@@ -2,11 +2,11 @@
 """Check the 论据出处清单 and make sure only verified data reaches the stage.
 
 Usage:
-    python3 check_evidence.py --canon 备赛文档-<题>.md 速查-*.md 文稿-*.md [--strict]
+    python3 check_evidence.py --canon 备赛文档-<题>.tex 速查-*.tex 文稿-*.tex [--strict]
 
 Two things are checked.
 
-1. The 出处清单 table itself (the table whose header has 出处, 核实日期 and 状态):
+1. The 出处清单 (every \source{#}{论据}{出处}{原文引句}{核实日期}{状态}{用在}{查证方向} row):
      已核实      must carry a 核实日期 and a source with a year; a link or DOI is
                  expected (WARN, FAIL under --strict); the 原文引句 column, when
                  the table has one, must be filled (WARN, FAIL under --strict)
@@ -21,7 +21,7 @@ Two things are checked.
    Under --strict (the 2025 school cup, where a false datum loses the round)
    a number that matches only 有把握 rows also fails in 文稿 files and warns
    in 速查 files. Numbers that match no row at all are left to
-   check_consistency.py.
+   check_consistency.py. Files are LaTeX (assets/latex/debate.cls).
 
 Exit code 1 on any FAIL.
 """
@@ -33,6 +33,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _numerals import arabic_tokens, spoken_tokens, matches, strip_stage  # noqa: E402
+import _tex  # noqa: E402
 
 DATE = re.compile(r"(19|20)\d{2}\s*[-./年]\s*\d{1,2}\s*[-./月]\s*\d{1,2}")
 YEAR = re.compile(r"(19|20)\d{2}")
@@ -41,7 +42,7 @@ EMPTY = {"", "—", "-", "–", "无", "/"}
 
 
 def status_of(cell):
-    c = re.sub(r"<[^>]+>|\*", "", cell).strip()
+    c = cell.strip()
     if "待核实" in c:
         return "待核实"
     if "已核实" in c:
@@ -49,33 +50,6 @@ def status_of(cell):
     if "有把握" in c:
         return "有把握"
     return c
-
-
-def find_table(text):
-    """Return (header_names, rows) for the evidence table, or (None, [])."""
-    lines = text.split("\n")
-    for i, line in enumerate(lines):
-        if not line.strip().startswith("|"):
-            continue
-        heads = [h.strip() for h in line.strip().strip("|").split("|")]
-        if not (any("出处" in h for h in heads) and any("核实日期" in h for h in heads) and "状态" in heads):
-            continue
-        rows = []
-        j = i + 2  # skip the |---| line
-        while j < len(lines) and lines[j].strip().startswith("|"):
-            cells = [c.strip() for c in lines[j].strip().strip("|").split("|")]
-            if len(cells) >= len(heads) - 1:
-                rows.append((j + 1, cells))
-            j += 1
-        return heads, rows
-    return None, []
-
-
-def col(heads, key):
-    for i, h in enumerate(heads):
-        if key in h:
-            return i
-    return None
 
 
 DATA_UNITS = {"%", "％", "倍", "万", "亿", "万人", "亿人", "万元", "亿元"}
@@ -137,29 +111,23 @@ def main():
     ap.add_argument("files", nargs="*", help="速查 / 文稿 files to check against the list")
     args = ap.parse_args()
 
-    with open(args.canon, encoding="utf-8") as fh:
-        canon = fh.read()
-    heads, rows = find_table(canon)
+    canon_tex = _tex.read(args.canon)
+    rows = _tex.sources(canon_tex)
     fails, warns = 0, 0
-    if heads is None:
-        print("FAIL %s: 找不到论据出处清单（表头需含「出处」「核实日期」「状态」）" % args.canon)
+    if not rows:
+        print("FAIL %s: 找不到论据出处清单（没有 \\source{…} 行）" % args.canon)
         return 1
-    c_num, c_claim = col(heads, "#"), col(heads, "论据")
-    c_src, c_date, c_status = col(heads, "出处"), col(heads, "核实日期"), col(heads, "状态")
-    c_dir, c_quote = col(heads, "查证方向"), col(heads, "原文引句")
-    if c_quote is None:
-        print("NOTE %s: 出处清单没有「原文引句」列；新模板要求已核实条目附原文引句（40 字内）" % args.canon)
 
     print("== %s: %d 条论据" % (args.canon, len(rows)))
-    table = []  # (status, values, label)
-    for ln, cells in rows:
-        g = lambda i: cells[i] if i is not None and i < len(cells) else ""
-        st = status_of(g(c_status))
-        label = "#%s" % re.sub(r"<[^>]+>", "", g(c_num)).strip()
-        table.append((st, row_values(g(c_claim)), label, g(c_claim)[:40]))
+    table = []  # (status, values, label, claim)
+    for r in rows:
+        st = status_of(r["status"])
+        label = "#%s" % r["num"]
+        ln = r["line"]
+        table.append((st, row_values(r["claim"]), label, r["claim"][:40]))
         if st == "已核实":
-            src = g(c_src)
-            if not DATE.search(g(c_date)):
+            src = r["src"]
+            if not DATE.search(r["date"]):
                 fails += 1
                 print("   FAIL %s 已核实但没有核实日期（line %d）→ 降级为「有把握」或补上日期" % (label, ln))
             if src.strip() in EMPTY:
@@ -175,7 +143,7 @@ def main():
                 else:
                     warns += 1
                     print("   WARN %s 已核实但没有链接或 DOI，队员赛前复查会慢（line %d）" % (label, ln))
-            if c_quote is not None and g(c_quote).strip() in EMPTY:
+            if r["quote"].strip() in EMPTY:
                 if args.strict:
                     fails += 1
                     print("   FAIL %s 已核实但没有原文引句（校赛严格模式）（line %d）" % (label, ln))
@@ -183,16 +151,15 @@ def main():
                     warns += 1
                     print("   WARN %s 已核实但没有原文引句（line %d）" % (label, ln))
         elif st in ("有把握", "待核实"):
-            if c_dir is not None and g(c_dir).strip() in EMPTY:
+            if r["direction"].strip() in EMPTY:
                 warns += 1
                 print("   WARN %s %s 但没有查证方向（line %d）" % (label, st, ln))
         else:
             fails += 1
-            print("   FAIL %s 状态「%s」不是三种之一（已核实 / 有把握 / 【待核实】）（line %d）" % (label, g(c_status), ln))
+            print("   FAIL %s 状态「%s」不是三种之一（已核实 / 有把握 / 【待核实】）（line %d）" % (label, r["status"], ln))
 
     for path in args.files:
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read()
+        text = _tex.plain(_tex.read(path))
         is_script = "文稿" in os.path.basename(path)
         hits = []
         for t in file_numbers(text):
