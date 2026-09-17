@@ -240,7 +240,7 @@ def questions_of(body):
     for qt in qs:
         qt = re.sub(r"^\s*问[正反][一二三四]\s*[：:]\s*", "", qt)   # 「问反二：」是舞台提示
         n = spoken_len(qt)
-        closed = any(c in qt for c in CLOSED) or bool(re.search(r"([一-鿿])不\1", qt))
+        closed = any(c in qt for c in CLOSED) or bool(re.search(r"([一-鿿]{1,2})不\1", qt))   # 会不会、承认不承认
         out.append((qt, n, closed))
     return chains, out
 
