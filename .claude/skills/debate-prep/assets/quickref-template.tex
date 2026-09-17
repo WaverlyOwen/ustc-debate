@@ -1,4 +1,5 @@
 % 正赛速查模板：每方一份，目标两页。scripts/build_pdf.py 会报页数，超过两页删内容不缩字号。
+% 常见的第三页来源：对方论点表超过 6 行、必答超过 4 条、出处写全卷期页码（速查只写作者 + 年份）、每节都单独起 \section。
 \documentclass[quick,pro]{debate}   % 正方 pro，反方 con
 \motion{<辩题>}
 \stance{正方}{<持方表述>}
@@ -49,9 +50,6 @@
 \ifthen{对方回避必问}{点名、重复、不换题}
 \end{contingency}
 
-\section{各环节发言人与时长}
-\begin{tabularx}{\linewidth}{@{}L{9em}L{5em}L{5em}Y@{}}\toprule
-\thead{环节}&\thead{我方发言人}&\thead{时长}&\thead{一句话提醒}\\\midrule
-<…>&<…>&<…>&<…>\\
-\bottomrule\end{tabularx}
+% 环节顺序与时长写成一行散文，不要做表：这一节做成表就是第三页的来源。流程细节在备赛文档第一节。
+各环节：一辩立论 180 秒 → 四辩质询 120 秒双边 → 二辩驳论 120 秒 → 二辩对辩各 90 秒 → 三辩盘问 90 秒 → 三辩小结 90 秒 → 自由辩各 240 秒 → 四辩结辩 210 秒。<每个环节一句提醒，可省>
 \end{document}

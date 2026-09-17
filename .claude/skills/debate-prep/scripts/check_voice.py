@@ -77,8 +77,9 @@ def parallel_triples(sents):
             if max(lens) - min(lens) <= 2 and len(set(heads)) == 1:
                 n += 1
                 break
-            if max(lens) - min(lens) <= 3 and all(cjk(x) <= 8 for x in trio):
-                n += 1
+            tails = [x.strip()[-1] for x in trio if x.strip()]
+            if max(lens) - min(lens) <= 2 and all(cjk(x) <= 8 for x in trio) and (len(set(heads)) == 1 or len(set(tails)) == 1):
+                n += 1   # short, equal, and rhyming on the same head or tail character: that is parallelism, not a list
                 break
     return n
 
