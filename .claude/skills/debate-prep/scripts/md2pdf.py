@@ -20,7 +20,9 @@ Layout follows the file name: 备赛文档 gets the study layout, 速查 the com
 two-page layout, 文稿 the reading layout with 12pt speech text and boxed
 临场预案 notes. 正方 / 反方 in the name colours the document red or blue, the
 convention Chinese debate uses for the two sides. --compact forces the 速查
-layout for every file.
+layout for every file. After each PDF the page count is printed; a 速查 that
+runs past two pages gets a WARN (the sheet is read on stage, two pages is the
+limit).
 """
 import argparse
 import glob
@@ -757,7 +759,7 @@ def transform_tables(body):
                     continue
                 g = lambda k: c[ix[k]].strip() if k in ix else ""
                 src_bits = []
-                for k in ("出处", "核实日期", "用在", "查证方向"):
+                for k in ("出处", "原文引句", "核实日期", "用在", "查证方向"):
                     v = re.sub(r"<[^>]+>", "", g(k)).strip()
                     if v and v not in ("—", "-", ""):
                         src_bits.append("<b>%s</b>%s" % (k, v))
@@ -1050,6 +1052,28 @@ def pdf_via_pandoc(md_path, pdf_path):
     return False
 
 
+def pdf_pages(pdf_path):
+    """Page count from the PDF's own page objects; None if it cannot be read.
+
+    Chrome and weasyprint write page dictionaries uncompressed, so counting
+    /Type /Page objects works without any library. Falls back to the largest
+    /Count of a /Pages node.
+    """
+    try:
+        with open(pdf_path, "rb") as fh:
+            data = fh.read()
+    except OSError:
+        return None
+    n = len(re.findall(rb"/Type\s*/Page(?![s/a-zA-Z])", data))
+    if n:
+        return n
+    counts = [int(x) for x in re.findall(rb"/Type\s*/Pages[^>]*?/Count\s+(\d+)", data, re.S)]
+    return max(counts) if counts else None
+
+
+QUICKREF_MAX_PAGES = 2
+
+
 # -------------------------------------------------------------------- main --
 def collect(paths):
     files = []
@@ -1077,6 +1101,7 @@ def main():
         return 2
     browser = find_browser()
     failures = []
+    over = []
     for md_path in files:
         with open(md_path, encoding="utf-8") as fh:
             text = fh.read()
@@ -1103,7 +1128,12 @@ def main():
         elif pdf_via_pandoc(md_path, pdf_path):
             ok, used = True, "pandoc"
         if ok:
-            print("OK  %s  ->  %s  [%s]" % (md_path, pdf_path, used))
+            pages = pdf_pages(pdf_path)
+            print("OK  %s  ->  %s  [%s]%s" % (md_path, pdf_path, used, ("  %d 页" % pages) if pages else ""))
+            if kind == "quick" and pages and pages > QUICKREF_MAX_PAGES:
+                over.append((md_path, pages))
+                print("WARN %s 排出 %d 页，速查要控制在 %d 页以内：删对方论点表里最弱的行、合并临场预案，不要缩字号"
+                      % (os.path.basename(md_path), pages, QUICKREF_MAX_PAGES))
             if not args.keep_html:
                 os.remove(html_path)
         else:
@@ -1117,6 +1147,8 @@ def main():
               "  * install pandoc + xelatex\n"
               "  * or open the kept .html in any browser and use Print -> Save as PDF", file=sys.stderr)
         return 1
+    if over:
+        print("\n%d 份速查超过 %d 页（见上方 WARN），内容删到两页以内再重新生成。" % (len(over), QUICKREF_MAX_PAGES))
     return 0
 
 

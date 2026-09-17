@@ -4,8 +4,8 @@
 Usage:
     python3 check_voice.py prep/<题>/文稿-*.md [--verbose]
 
-Checks the five tells that can be counted objectively (see
-references/speech-voice.md for the other four, which need a human ear):
+Checks the tells that can be counted objectively (see
+references/speech-voice.md for the ones that need a human ear):
 
   破折号        must be zero — a dash is inaudible, so it marks a pause the
                 audience hears but cannot account for
@@ -15,9 +15,11 @@ references/speech-voice.md for the other four, which need a human ear):
   句长落差      no run of 3+ sentences of near-equal length
   三连排比      at most one per speech
   书面连接词    none: 综上所述 / 值得注意的是 / 鉴于 / 旨在 / 因而 / 与此同时 …
-  口语黏合剂    at least 3 per speech (a question to the judges, a nudge to the
-                audience, an admission) — the thing that makes a script sound
-                like talking
+  口语黏合剂    at least 3 per speech, of at least 2 different kinds, and no
+                single phrase more than 3 times — "请评委" three times is not
+                talking, it is passing the check
+  数字口语化    no decimals or percent signs in the spoken text; the precise
+                value lives in the 速查 (百分之十四出头, 将近六成 on stage)
 
 Exit code 1 if any speech fails.
 """
@@ -27,11 +29,19 @@ import sys
 
 BOOKISH = ["综上所述", "值得注意的是", "鉴于", "旨在", "因而", "与此同时", "由此可见",
            "不言而喻", "众所周知", "从某种意义上", "换而言之", "诚然如此", "基于此",
-           "在此基础上", "总而言之", "一言以蔽之"]
-COLLOQUIAL = ["请评委", "你想想", "大家想", "说白了", "我举个例子", "打个比方", "这么说吧",
-              "我方承认", "我们承认", "说到底", "你有没有", "各位", "请问", "想一想",
-              "我先说", "先说清", "话说回来", "老实说", "坦白说", "不瞒各位"]
+           "在此基础上", "总而言之", "一言以蔽之", "毋庸置疑", "不可否认的是", "综上"]
+# Each entry is one kind of glue; variants of the same move are listed together
+# so that the "different kinds" rule counts moves, not spellings.
+COLLOQUIAL = {
+    "问评委": ["请评委", "各位评委", "评委您", "请各位", "各位"],
+    "招呼听众": ["你想想", "大家想", "想一想", "你有没有", "你有没有想过", "大家有没有", "您想想", "各位想"],
+    "坦白": ["我方承认", "我们承认", "老实说", "坦白说", "不瞒各位", "我承认", "说实话", "我方不否认"],
+    "口语转折": ["说白了", "说到底", "这么说吧", "话说回来", "换句话说", "也就是说", "打个比方", "我举个例子",
+             "举个例子", "比如说"],
+    "路标": ["我先说", "先说清", "先说一件事", "请问", "我问一句", "问一句", "我再说一遍", "记住这句话"],
+}
 STAGE = re.compile(r"〔[^〕]*〕|【[^】]*】")
+DECIMAL = re.compile(r"\d+\.\d+|\d+\s*[%％]")
 
 
 def sentences(text):
@@ -94,6 +104,19 @@ def body_of(section):
     return "\n".join(out)
 
 
+def glue_counts(body):
+    """{kind: {phrase: count}} counting each occurrence once, longest phrase first."""
+    text = STAGE.sub(" ", body)
+    found = {}
+    phrases = sorted(((p, k) for k, ps in COLLOQUIAL.items() for p in ps), key=lambda x: -len(x[0]))
+    for p, k in phrases:
+        n = text.count(p)
+        if n:
+            found.setdefault(k, {})[p] = n
+            text = text.replace(p, " ")
+    return found
+
+
 def check(heading, body, verbose=False):
     problems = []
     dash = len(re.findall(r"——", body))
@@ -122,11 +145,23 @@ def check(heading, body, verbose=False):
     if found_bookish:
         problems.append(("书面连接词", "、".join(found_bookish), "换成「所以」「说到底」「还有」"))
 
-    glue = sum(body.count(w) for w in COLLOQUIAL)
+    found = glue_counts(body)
+    glue = sum(sum(v.values()) for v in found.values())
+    kinds = len(found)
+    top = max(((p, n) for v in found.values() for p, n in v.items()), key=lambda x: x[1], default=("", 0))
     if glue < 3:
         problems.append(("口语黏合剂", glue, "至少 3 处：问评委一句、招呼听众动脑、坦白一句"))
+    elif kinds < 2:
+        problems.append(("黏合剂单一", "只有「%s」一类" % next(iter(found)), "换着来：问评委、招呼听众、坦白、口语转折至少两类"))
+    if top[1] > 3:
+        problems.append(("黏合剂重复", "「%s」×%d" % top, "同一句话最多 3 次；重复同一句不是口语，是凑数"))
 
-    return problems, {"dash": dash, "bold": len(bold), "glue": glue, "sents": len(sents)}
+    spoken = STAGE.sub(" ", body)
+    decimals = DECIMAL.findall(spoken)
+    if decimals:
+        problems.append(("数字未口语化", "、".join(decimals[:4]), "稿里写「百分之十四出头」「将近六成」，精确值放速查"))
+
+    return problems, {"dash": dash, "bold": len(bold), "glue": glue, "kinds": kinds, "sents": len(sents)}
 
 
 def main():
@@ -142,7 +177,7 @@ def main():
         print("== %s" % path)
         for sec in re.split(r"\n(?=## )", text):
             heading = sec.split("\n")[0].lstrip("# ").strip()
-            if not re.search(r"(立论|驳论|小结|结辩)稿", heading):
+            if not re.search(r"(立论|驳论|小结|结辩|申论)稿", heading):
                 continue
             problems, stats = check(heading, body_of(sec), args.verbose)
             if problems:
@@ -151,11 +186,11 @@ def main():
                 for name, value, fix in problems:
                     print("        %-6s %-14s %s" % (name, value, fix))
             else:
-                print("   OK   %-44s 破折号 %d 加粗 %d 口语 %d"
-                      % (heading[:44], stats["dash"], stats["bold"], stats["glue"]))
+                print("   OK   %-44s 破折号 %d 加粗 %d 口语 %d（%d 类）"
+                      % (heading[:44], stats["dash"], stats["bold"], stats["glue"], stats["kinds"]))
     if bad:
         print("\n%d 篇稿件有机械痕迹。改法见 references/speech-voice.md，"
-              "剩下的四条（画面、数字口语化、形容词、不工整）要自己出声念一遍。" % bad)
+              "剩下的三条（画面、形容词、不工整）要自己出声念一遍。" % bad)
     return 1 if bad else 0
 
 
