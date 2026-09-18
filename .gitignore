@@ -1,2 +1,15 @@
 __pycache__/
 *.pyc
+
+# 备赛工作区：迭代中间产物，不交付
+prep/*/.work/
+
+# LaTeX 编译中间文件
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.xdv
+*.synctex.gz

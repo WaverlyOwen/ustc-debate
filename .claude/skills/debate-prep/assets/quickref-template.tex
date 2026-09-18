@@ -1,0 +1,55 @@
+% 正赛速查模板：每方一份，目标两页。scripts/build_pdf.py 会报页数，超过两页删内容不缩字号。
+% 常见的第三页来源：对方论点表超过 6 行、必答超过 4 条、出处写全卷期页码（速查只写作者 + 年份）、每节都单独起 \section。
+\documentclass[quick,pro]{debate}   % 正方 pro，反方 con
+\motion{<辩题>}
+\stance{正方}{<持方表述>}
+\begin{document}
+\debatetitle
+\begin{thesisbox}<一句话立论>\end{thesisbox}
+
+\section{定义与判准（标准表述）}
+\begin{fields}
+\field{<关键词一>}{<中立定义原话>}
+\field{<关键词二>}{<…>}
+\field{判准}{<中立判准原话>\sub{我方要证明}{<…>}\sub{对方要证明}{<…>}}
+\field{对方提偏向定义或判准时的 30 秒口径}{<…>}
+\end{fields}
+
+\section{我方论点}
+\begin{tabularx}{\linewidth}{@{}L{5em}Y Y L{6em}@{}}\toprule
+\thead{标签}&\thead{一句话}&\thead{核心数据 / 学理 / 案例（各一条）}&\thead{出处}\\\midrule
+\textbf{<标签>}&<一句话>&<数据 / 学理 / 案例>&<出处>\\
+\bottomrule\end{tabularx}
+
+\section{对方论点 → 一句话反驳}
+\begin{tabularx}{\linewidth}{@{}Y Y Y@{}}\toprule
+\thead{对方会说}&\thead{我方一句话回}&\thead{对方追问时}\\\midrule
+<…>&<…>&<…>\\
+\bottomrule\end{tabularx}
+
+\section{必问与必答}
+\begin{points}{必问（对方不答就点名、重复、不换题）}
+\item <三到五个，含一辩稿抛出的那个问题>
+\end{points}
+\begin{points}{必答（15 秒正面回答）}
+\item <问题 → 答案>
+\end{points}
+
+\section{自由辩战场概要}
+\begin{tabularx}{\linewidth}{@{}L{6em}Y Y Y@{}}\toprule
+\thead{战场}&\thead{开场问题}&\thead{目标}&\thead{收束语}\\\midrule
+<…>&<…>&<…>&<…>\\
+\bottomrule\end{tabularx}
+时间分配：前 90 秒 <…>；中 90 秒 <…>；后 60 秒 <…>。站位：一辩 <…>，二辩 <…>，三辩 <…>，四辩 <…>。
+
+\section{如果……就……}
+\begin{contingency}
+\ifthen{对方定义不同}{<…>}
+\ifthen{对方拿出没预料到的数据}{先问出处，再 <…>}
+\ifthen{某论点被打穿}{收缩到 <…>，用判准解释}
+\ifthen{对方回避必问}{点名、重复、不换题}
+\end{contingency}
+
+% 环节顺序与时长写成一行散文，不要做表：这一节做成表就是第三页的来源。流程细节在备赛文档第一节。
+各环节：一辩立论 180 秒 → 四辩质询 120 秒双边 → 二辩驳论 120 秒 → 二辩对辩各 90 秒 → 三辩盘问 90 秒 → 三辩小结 90 秒 → 自由辩各 240 秒 → 四辩结辩 210 秒。<每个环节一句提醒，可省>
+\end{document}
