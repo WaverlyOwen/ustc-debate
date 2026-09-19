@@ -1,0 +1,66 @@
+id: ustc-school-cup-2025
+name: 2025 年中国科学技术大学校辩论赛
+aliases: [校赛, 2025 校赛, 中科大校赛, 校辩论赛, 科大校赛, USTC 校赛]
+teams: 4v4
+level_default: 校队
+speech_rate: [250, 280]
+first_opening: 正方
+first_closing: 反方
+evidence_strict: true
+positions: [一辩, 二辩, 三辩, 四辩]
+
+stages:
+  - {n: 1,  name: 正方一辩开篇立论,        type: 立论,   side: 正方, speaker: 正一, seconds: 180, timing: 单方,   block: A}
+  - {n: 2,  name: 反方二辩质询正方一辩,    type: 质询,   side: 反方, asker: 反二, target: 正一, seconds: 120, timing: 双边计时, block: A, questions: [3, 3, 6, 10]}
+  - {n: 3,  name: 反方一辩开篇立论,        type: 立论,   side: 反方, speaker: 反一, seconds: 180, timing: 单方,   block: A}
+  - {n: 4,  name: 正方二辩质询反方一辩,    type: 质询,   side: 正方, asker: 正二, target: 反一, seconds: 120, timing: 双边计时, block: A, questions: [3, 3, 6, 10]}
+  - {n: 5,  name: 评委打分,                type: 评委打分, seconds: 30}
+  - {n: 6,  name: 反方二辩驳论,            type: 驳论,   side: 反方, speaker: 反二, seconds: 120, timing: 单方,   block: B}
+  - {n: 7,  name: 正方二辩驳论,            type: 驳论,   side: 正方, speaker: 正二, seconds: 120, timing: 单方,   block: B, reserve_seconds: 24}
+  - {n: 8,  name: 正反方四辩对辩,          type: 对辩,   side: 双方, speaker: [正四, 反四], seconds: 90, timing: 单边计时, block: B}
+  - {n: 9,  name: 评委打分,                type: 评委打分, seconds: 30}
+  - {n: 10, name: 正方三辩盘问反方二辩、四辩, type: 盘问, side: 正方, asker: 正三, target: [反二, 反四], seconds: 90, timing: 单边计时, block: C, questions: [2, 2, 5, 8]}
+  - {n: 11, name: 反方三辩盘问正方二辩、四辩, type: 盘问, side: 反方, asker: 反三, target: [正二, 正四], seconds: 90, timing: 单边计时, block: C, questions: [2, 2, 5, 8]}
+  - {n: 12, name: 正方三辩盘问小结,        type: 小结,   side: 正方, speaker: 正三, seconds: 120, timing: 单方,   block: C}
+  - {n: 13, name: 反方三辩盘问小结,        type: 小结,   side: 反方, speaker: 反三, seconds: 120, timing: 单方,   block: C, reserve_seconds: 24}
+  - {n: 14, name: 评委打分,                type: 评委打分, seconds: 30}
+  - {n: 15, name: 自由辩论,                type: 自由辩, side: 双方, speaker: 全员, seconds: 240, timing: 各自计时, block: D}
+  - {n: 16, name: 评委打分,                type: 评委打分, seconds: 30}
+  - {n: 17, name: 反方四辩结辩,            type: 结辩,   side: 反方, speaker: 反四, seconds: 210, timing: 单方,   block: E, style: 封路式}
+  - {n: 18, name: 正方四辩结辩,            type: 结辩,   side: 正方, speaker: 正四, seconds: 210, timing: 单方,   block: E, reserve_seconds: 35}
+  - {n: 19, name: 奇袭（任意大环节结束后发动，每方一次）, type: 奇袭, side: 双方, seconds: 150, timing: 双边计时, questions: [3, 4, 8, 12], surprise: {质询: 150, 申论: 120}}
+
+bands:
+  7:  {body: [400, 460]}
+  13: {body: [400, 460]}
+  18: {body: [730, 815]}
+
+meta_overrides:
+  7:  正文 NNN 字 + 临场位 NNN 字 / 120 秒
+  13: 正文 NNN 字 + 临场位 NNN 字 / 120 秒
+  17: 正文 NNN 字 / 210 秒，封路式
+  18: 正文 NNN 字 / 210 秒，留 30–40 秒临场回应
+  19: 质询 150 秒双边 / 申论 120 秒，二选一
+
+blocks:
+  A: 我方立论清楚、判准站得住；质询拿到对方至少一个关键承认或暴露一个矛盾
+  B: 把对方立论的核心问题讲给评委听；对辩中不丢我方判准，把交锋拉回我方战场
+  C: 盘问链完成，小结把盘问成果与我方论点接上；被盘问时不出现两人口径不一
+  D: 主战场推进到位；对方必答问题我方都正面回应过；没有被对方牵着走
+  E: 回到判准与一句话立论，处理掉对方全场最强的一个点，价值层收束
+
+scoring: |
+  小组赛与淘汰赛第一轮 3 位评委，半决赛 5 位，决赛 7 位。每位评委三票：环节票（各环节单独打分后核算总分）、印象票（可分 0.5:0.5）、决胜票（4.5:4.5 时定胜负）。述票从少数派开始，每人不超过 7 分钟。每场 1 名最佳辩手。
+
+notes: |
+  与新生赛的差异：质询由二辩执行、对辩由四辩执行、盘问小结 120 秒、多了奇袭环节。二辩同时负责质询与驳论，四辩同时负责对辩与结辩。
+  章程第十九条第四款：AI 生成的假数据，印象票判负；第十七条第三款：虚假论据直接判该场负。伪证申诉可在述票前当场提出。
+  奇袭两种形式都要提前准备，上场再决定；不要开场就用掉，也不要留到反四结辩之后。奇袭的打法见 ustc-school-cup-2025.md。
+
+sources:
+  - url: 2025 年中科大校辩论赛章程（队内材料）
+    accessed: "2026-09-10"
+
+unconfirmed:
+  - 章程第九条的赛事日期与流程表不一致，本文件采用流程表日期，领队向组委会确认
+  - 被盘问方回答是否计入盘问方时间

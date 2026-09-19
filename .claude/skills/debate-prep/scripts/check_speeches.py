@@ -15,12 +15,12 @@ format file):
                 parenthesised asides （…）
   not counted  the contingency box (如果……就……), which sits outside the speech
 
-Bands come from the format file's 「时长与字数换算」 table
-(references/formats/<format>.md), so adding a format means adding a file, not
-editing this script. Each row is read as: seconds from column 1, the main
-range from column 2, and an optional 临场位 range from column 3; the 备注 column
-says which speech the row is for (立论 / 驳论 / 小结 / 反四结辩 / 正四结辩 / 奇袭申论).
-If the table cannot be read the built-in bands below are used.
+The format (赛制) comes from references/formats/<id>.yaml: the file's
+\meta{赛制}{…} line is matched against every format's name and aliases, or
+pass --format <id>. Bands are seconds × speech rate (the format's, or the
+--level 新生/校队/高水平 rate); a stage's reserve_seconds and bands overrides
+in the YAML apply. Speeches are matched to stages by the heading title that
+format_info.py --headings prints, so the headings must be used verbatim.
 
 Question chains (质询 / 盘问 / 奇袭质询) are checked too: every numbered
 question must be 25 spoken characters or fewer (OUT), should read as a closed
@@ -33,45 +33,16 @@ that says "约 740 字" ends up being 771 on stage. Run this instead.
 Exit code 1 if any speech falls outside its band or any question is too long.
 """
 import argparse
-import glob
 import json
 import os
 import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FORMATS_DIR = os.path.join(HERE, "..", "references", "formats")
 sys.path.insert(0, HERE)
 import _tex  # noqa: E402
+import _format as F  # noqa: E402
 
-# Fallback only; the format file is the source of truth.
-BUILTIN_BANDS = {
-    "ustc-freshman-cup": {
-        "立论": (180, 750, 840),
-        "驳论": (120, 500, 560),
-        "驳论·留临场位": (120, 400, 460),
-        "小结": (90, 375, 420),
-        "小结·留临场位": (90, 300, 340),
-        "结辩·反四": (210, 875, 980),
-        "结辩·正四": (175, 730, 815),
-    },
-    "ustc-school-cup-2025": {
-        "立论": (180, 750, 840),
-        "驳论": (120, 500, 560),
-        "驳论·留临场位": (120, 400, 460),
-        "小结": (120, 500, 560),
-        "小结·留临场位": (120, 400, 460),
-        "奇袭申论": (120, 500, 560),
-        "结辩·反四": (210, 875, 980),
-        "结辩·正四": (175, 730, 815),
-    },
-}
-# chain-count guidance per question section kind: (chains_lo, chains_hi, q_lo, q_hi)
-BUILTIN_CHAINS = {
-    "质询": (3, 3, 6, 10),
-    "盘问": (2, 2, 5, 8),
-    "奇袭质询": (3, 4, 8, 12),
-}
 MAX_QUESTION = 25
 CLOSED = ["吗", "是不是", "有没有", "会不会", "算不算", "还是", "对不对", "能不能", "是否", "承不承认",
           "该不该", "要不要", "同不同意", "可不可以", "愿不愿意", "认不认", "对吧", "是吧", "有吧", "没错吧"]
@@ -89,131 +60,45 @@ def spoken_len(text):
     return len(CJK.findall(t)) + len(DIGIT.findall(t)) + 2 * len(LATIN.findall(t))
 
 
-# ------------------------------------------------------------ format file --
-def list_formats():
-    return sorted(os.path.splitext(os.path.basename(p))[0]
-                  for p in glob.glob(os.path.join(FORMATS_DIR, "*.md"))
-                  if not os.path.basename(p).startswith("_"))
-
-
-def load_bands(fmt):
-    """Parse the 时长与字数换算 table of references/formats/<fmt>.md.
-
-    Returns (bands, chains, source) where source says where the bands came from.
-    """
-    path = os.path.join(FORMATS_DIR, fmt + ".md")
-    bands, chains = {}, {}
-    try:
-        text = open(path, encoding="utf-8").read()
-    except OSError:
-        return BUILTIN_BANDS.get(fmt, {}), BUILTIN_CHAINS, "builtin (no format file)"
-    sec = re.search(r"##\s*时长与字数换算(.*?)(?=\n##\s|\Z)", text, re.S)
-    if not sec:
-        return BUILTIN_BANDS.get(fmt, {}), BUILTIN_CHAINS, "builtin (table not found)"
-    for line in sec.group(1).split("\n"):
-        if not line.strip().startswith("|"):
-            continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) < 2 or cells[0] in ("时长", "") or set(cells[0]) <= set("-: "):
-            continue
-        secs_m = re.search(r"(\d+)\s*秒", cells[0])
-        if not secs_m:
-            continue
-        secs = int(secs_m.group(1))
-        note = cells[2] if len(cells) > 2 else ""
-        head = cells[0] + " " + cells[1]
-        main = RANGE.search(cells[1])
-        # question / point rows: "3 条问题链，共 6–10 个问题"
-        if "问题" in cells[1]:
-            cm = re.search(r"(\d+)(?:\s*[–—-]\s*(\d+))?\s*条", cells[1])
-            qm = re.search(r"共\s*(\d+)\s*[–—-]\s*(\d+)", cells[1])
-            if cm and qm:
-                lo, hi = int(cm.group(1)), int(cm.group(2) or cm.group(1))
-                key = "奇袭质询" if "奇袭" in head else "质询" if "质询" in head else "盘问" if "盘问" in head else None
-                if key:
-                    chains[key] = (lo, hi, int(qm.group(1)), int(qm.group(2)))
-            continue
-        if not main:
-            continue
-        lo, hi = int(main.group(1)), int(main.group(2))
-        reserve = None
-        rm = re.search(r"临场位[^0-9]*?(\d+)\s*[–—-]\s*(\d+)", note)
-        if rm:
-            reserve = (int(rm.group(1)), int(rm.group(2)))
-        blob = head + " " + note
-        if "奇袭" in blob and "申论" in blob:
-            bands["奇袭申论"] = (secs, lo, hi)
-        elif "立论" in blob:
-            bands["立论"] = (secs, lo, hi)
-        elif "驳论" in blob:
-            bands["驳论"] = (secs, lo, hi)
-            if reserve:
-                bands["驳论·留临场位"] = (secs, reserve[0], reserve[1])
-        elif "小结" in blob:
-            bands["小结"] = (secs, lo, hi)
-            if reserve:
-                bands["小结·留临场位"] = (secs, reserve[0], reserve[1])
-        elif "正四" in blob and "结辩" in blob:
-            rs = re.search(r"留\s*(\d+)\s*秒", cells[0])
-            bands["结辩·正四"] = (secs - int(rs.group(1)) if rs else secs, lo, hi)
-        elif "反四" in blob and "结辩" in blob:
-            bands["结辩·反四"] = (secs, lo, hi)
-        elif "结辩" in blob:
-            bands.setdefault("结辩·反四", (secs, lo, hi))
-    need = {"立论", "驳论", "小结", "结辩·反四", "结辩·正四"}
-    if not need <= set(bands):
-        missing = need - set(bands)
-        fallback = BUILTIN_BANDS.get(fmt, {})
-        for k in missing:
-            if k in fallback:
-                bands[k] = fallback[k]
-        return bands, chains or BUILTIN_CHAINS, "format file + builtin for %s" % "、".join(sorted(missing))
-    return bands, chains or BUILTIN_CHAINS, "format file"
-
-
+# ------------------------------------------------------------ format --
 def detect_format(files):
-    """Look only at the ## headings: the school cup gives 质询 to 二辩, 对辩 to 四辩, and has 奇袭."""
+    """The format named in \\meta{赛制}{…} of the first file that has one; falls back to titles."""
     for path in files:
         try:
             text = _tex.read(path)
         except OSError:
             continue
-        heads = " ".join(_tex.heading(t, m) for _, t, m, _ in _tex.sections(text))
-        if re.search(r"奇袭", heads) or re.search(r"[正反]四对辩", heads) or re.search(r"[正反]二质询", heads):
-            return "ustc-school-cup-2025"
-    return "ustc-freshman-cup"
-
-
-# ------------------------------------------------------------- speeches --
-def classify(heading):
-    """Map a section heading to a band key, or None if it is not a full speech."""
-    h = heading
-    reserve = "临场位" in h or "临场回应" in h
-    if "奇袭" in h and "预案" in h:
-        return None   # composite section: a question chain plus a speech, handled by split_surprise()
-    if "奇袭" in h and "申论" in h:
-        return "奇袭申论"
-    if "立论" in h and "稿" in h:
-        return "立论"
-    if "驳论" in h and "稿" in h:
-        return "驳论·留临场位" if reserve else "驳论"
-    if "小结" in h and "稿" in h:
-        return "小结·留临场位" if reserve else "小结"
-    if "结辩" in h and "稿" in h:
-        first = h.split("结辩")[0]
-        return "结辩·反四" if ("反" in first[-3:] or "封路" in h) else "结辩·正四"
+        m = re.search(r"\\meta\{赛制\}\s*\{", text)
+        if m:
+            a, _ = _tex.args(text, m.end() - 1, 1)
+            fmt = F.find(_tex.plain(a[0]) if a else "")
+            if fmt:
+                return fmt
+        heads = " ".join(_tex.heading(t, mt) for _, t, mt, _ in _tex.sections(text))
+        fmt = F.find(heads)
+        if fmt:
+            return fmt
     return None
 
 
-def question_kind(heading):
-    if "小结" in heading or "防守" in heading or "预案" in heading and "奇袭" not in heading:
-        return None
-    if "奇袭" in heading:
-        return "奇袭质询"
-    if "质询" in heading and "问题链" in heading:
+def side_of_file(path, text):
+    base = os.path.basename(path)
+    if "正方" in base:
+        return "正方"
+    if "反方" in base:
+        return "反方"
+    m = re.search(r"\\stance\{(正方|反方)\}", text)
+    return m.group(1) if m else "正方"
+
+
+def question_kind_of(doc):
+    """Map a document item to the kind of question band it needs."""
+    if doc["slot"] == "质询":
         return "质询"
-    if "盘问" in heading and "问题链" in heading:
+    if doc["slot"] == "盘问":
         return "盘问"
+    if doc["slot"] == "奇袭":
+        return "奇袭质询"
     return None
 
 
@@ -248,50 +133,63 @@ def questions_of(body):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="*", help="文稿-*.tex files")
-    ap.add_argument("--format", default=None,
-                    help="format key (a file in references/formats/); omit to detect from the ## headings")
-    ap.add_argument("--list-formats", action="store_true", help="list the formats that have a file")
+    ap.add_argument("--format", default=None, help="format id or alias; omit to read \\meta{赛制} from the file")
+    ap.add_argument("--level", choices=list(F.LEVEL_RATE), help="队伍水平，决定语速；省略用赛制默认")
+    ap.add_argument("--list-formats", action="store_true", help="list the formats in references/formats/")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args()
 
     if args.list_formats:
-        for f in list_formats():
+        for f in F.list_formats():
             print(f)
         return 0
     if not args.files:
         ap.error("no files given")
 
-    fmt = args.format or detect_format(args.files)
-    bands, chain_bands, source = load_bands(fmt)
-    if not bands:
-        print("unknown format %r; known: %s" % (fmt, ", ".join(list_formats() or BUILTIN_BANDS)), file=sys.stderr)
-        return 2
+    if args.format:
+        fmt = F.load(args.format) if args.format in F.list_formats() else F.find(args.format)
+        if not fmt:
+            print("unknown format %r; known: %s" % (args.format, ", ".join(F.list_formats())), file=sys.stderr)
+            return 2
+    else:
+        fmt = detect_format(args.files)
+        if not fmt:
+            print("无法判断赛制：文稿的 \\meta{赛制}{…} 里写上赛制名或别名，或用 --format 指定。已有：%s"
+                  % ", ".join(F.list_formats()), file=sys.stderr)
+            return 2
+    bands = F.bands(fmt, args.level)
+    qbands = F.question_bands(fmt)
+    lo_r, hi_r = F.rate(fmt, args.level)
     if not args.json:
-        print("(format: %s%s；区间来源：%s)" % (fmt, "" if args.format else "，按二级标题自动判断；用 --format 可指定", source))
+        print("(赛制：%s%s；语速 %d–%d 字/分钟%s)" % (fmt["id"], "" if args.format else "，按 \\meta{赛制} 判断",
+                                                lo_r, hi_r, "，--level " + args.level if args.level else ""))
 
     bad = 0
     warn = 0
     report = []
     for path in args.files:
         text = _tex.read(path)
+        side = side_of_file(path, text)
         rows = []
         qrows = []
         for kind, title, meta, body in _tex.sections(text):
             if kind not in ("speech", "stage"):
                 continue
             heading = _tex.heading(title, meta)
-            key = classify(heading) if kind == "speech" else None
-            if key:
+            doc = F.match_heading(fmt, side, "%s" % title)
+            if doc is None:
+                rows.append({"heading": heading, "kind": "?", "seconds": 0, "count": 0, "low": 0, "high": 0, "ok": True, "unknown": True})
+                continue
+            if kind == "speech" and doc["kind"] == "speech":
                 n = spoken_len(speech_text(body))
-                secs, lo, hi = bands[key]
-                ok = lo <= n <= hi
+                secs, lo, hi = bands.get(doc["n"], (0, 0, 0))
+                ok = lo <= n <= hi if hi else True
                 if not ok:
                     bad += 1
-                rows.append({"heading": heading, "kind": key, "seconds": secs,
-                             "count": n, "low": lo, "high": hi, "ok": ok})
+                rows.append({"heading": heading, "kind": doc["slot"], "seconds": secs, "count": n, "low": lo, "high": hi, "ok": ok})
                 continue
-            qk = question_kind(heading)
-            if qk == "奇袭质询" and "预案" in heading:
+            qk = question_kind_of(doc)
+            if qk == "奇袭质询":
                 body, speech = split_surprise(body)
                 if speech.strip() and "奇袭申论" in bands:
                     n = spoken_len(speech_text(speech))
@@ -305,7 +203,7 @@ def main():
                 chains, qs = questions_of(body)
                 long_qs = [(q, n) for q, n, _ in qs if n > MAX_QUESTION]
                 open_qs = [q for q, _, c in qs if not c]
-                cb = chain_bands.get(qk)
+                cb = qbands.get(doc["n"])
                 counts_ok = True
                 if cb and qs:
                     c_lo, c_hi, q_lo, q_hi = cb
@@ -316,10 +214,14 @@ def main():
                               "long": long_qs, "open": open_qs, "counts_ok": counts_ok, "band": cb})
         report.append({"file": path, "speeches": rows, "questions": qrows})
         if not args.json:
-            print("== %s" % path)
-            if not rows:
-                print("   (no \\begin{speech} found — check the headings against the format file)")
+            print("== %s（%s）" % (path, side))
+            if not rows and not qrows:
+                print("   (no \\begin{speech} found — check the headings against format_info.py --headings)")
             for r in rows:
+                if r.get("unknown"):
+                    print("   ??  %-46s 标题不在赛制的稿件清单里，用 format_info.py --headings %s 核对" % (r["heading"][:46], side))
+                    warn += 1
+                    continue
                 mark = "OK  " if r["ok"] else "OUT "
                 delta = "" if r["ok"] else ("  (%+d)" % (r["count"] - (r["high"] if r["count"] > r["high"] else r["low"])))
                 print("   %s%-46s %4d 字  目标 %d–%d / %d 秒%s"

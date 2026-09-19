@@ -1,0 +1,74 @@
+# 赛制文件模板。复制为 formats/<id>.yaml 填写；策略性提醒（计时对策、打分块胜负点、章程红线）另写同名 <id>.md。
+# 字数区间、稿件清单、文稿标题都由 scripts/format_info.py 从这个文件推出来，不要手写。
+# 填完跑 python3 scripts/check_format.py formats/<id>.yaml 校验。不确定的字段填上后在 unconfirmed 里列出。
+
+id: example-cup                      # 文件名同名，ASCII，用连字符
+name: 示例杯华语辩论赛                 # 全称
+aliases: [示例杯, 示例赛]              # 用户可能怎么称呼它；SKILL 靠这个匹配
+teams: 4v4                           # 4v4 / 3v3 / 2v2
+level_default: 校队                  # 新生 / 校队 / 高水平；决定默认语速与写法（见 case-building 第 10 节）
+speech_rate: [270, 300]              # 口播字/分钟，可省略：省略时按 level_default 取（新生 250–280，校队 270–300，高水平 290–320）
+first_opening: 正方                  # 谁先立论
+first_closing: 反方                  # 谁先结辩
+evidence_strict: false               # true = 章程对虚假论据判负，正赛稿件只许已核实数据（check_evidence --strict）
+positions: [一辩, 二辩, 三辩, 四辩]   # 辩位名称，按上场顺序；发言人写成 正一 / 反三 这种「正反 + 序」
+
+# 环节按实际顺序列，每个环节写成一行的 {…} 或多行缩进都可以，但一行的 {…} 不要跨行。type 只能是下面这些之一：
+#   立论  质询  驳论  对辩  盘问  小结  申论  自由辩  结辩  奇袭  观众提问  评委打分  其他
+# timing：单方 / 双边计时 / 单边计时 / 各自计时
+# speaker：发言人（正一 / 反四 / 全员）；质询、盘问用 asker 与 target（可多人，用列表）
+# reserve_seconds：这一篇稿留给临场回应的秒数（后发言、需回应先发言方的稿件才填）
+# style：结辩可写 封路式；其他环节留空
+# questions：[链数下限, 链数上限, 问题数下限, 问题数上限]，质询 / 盘问 / 奇袭质询才填；省略按时长推
+stages:
+  - n: 1
+    name: 正方一辩开篇立论
+    type: 立论
+    side: 正方
+    speaker: 正一
+    seconds: 180
+    timing: 单方
+    block: A
+  - n: 2
+    name: 反方四辩质询正方一辩
+    type: 质询
+    side: 反方
+    asker: 反四
+    target: 正一
+    seconds: 120
+    timing: 双边计时
+    block: A
+    questions: [3, 3, 6, 10]
+  - n: 3
+    name: 评委打分
+    type: 评委打分
+    seconds: 30
+  # …… 照此把全部环节列完
+
+# 总计时自由分配制（如新国辩）才写：这些环节共用一个时间池，stages 里的 seconds 只是建议分配
+# time_pool:
+#   seconds: 1020
+#   stages: [1, 2, 5, 6, 9, 12]     # 本方共用时间池的环节序号
+#   min_per_stage: 60
+#   note: 每队 17 分钟由队伍临场自由分配到六个个人环节，每环节不少于 1 分钟；自由辩另计
+
+# 每个打分块（block）在这一块要做到什么，给备赛文档「赛制要点」用
+blocks:
+  A: 我方立论清楚、判准站得住；质询拿到对方至少一个关键承认
+
+# 评审方式：几位评委、几票、怎么算，给优劣评估的「赛制顺序」维度用
+scoring: |
+  三位评委各一票，环节票与印象票……
+
+# 只有这个赛制才有的提醒（顺序陷阱、可否打断、特殊环节的打法）；长的写到同名 .md
+notes: |
+  反四结辩在前，要写成封路式……
+
+# 规则出处：链接或文件名，以及查阅日期
+sources:
+  - url: https://example.org/rules-2026
+    accessed: "2026-09-19"
+
+# 没有官方依据、按常见规则推断的字段，一条一句，赛前请队员向组委会确认
+unconfirmed:
+  - 盘问是否只计盘问方时间

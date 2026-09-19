@@ -68,7 +68,7 @@
 
 | 宏 | 说明 |
 |---|---|
-| `\begin{speech}{1. 正一开篇立论稿}{正文 813 字 / 180 秒} … \end{speech}` | 稿件。标题与括号内容按赛制文件「各持方文稿标题」原样写，字数由 `check_speeches.py` 数出来再填。`check_speeches.py`、`check_voice.py` 只认这个环境 |
+| `\begin{speech}{1. 正一开篇立论稿}{正文 813 字 / 180 秒} … \end{speech}` | 稿件。标题与括号内容按 `format_info.py <赛制> --headings 正方` 的输出原样写，字数由 `check_speeches.py` 数出来再填。`check_speeches.py`、`check_voice.py` 只认这个环境 |
 | `\begin{stage}{3. 正四质询反一问题链}{120 秒，双边计时} … \end{stage}` | 非稿件环节：预案、问题链、对辩要点、自由辩 |
 | `\stress{…}` | 着重号（重音提示），每篇最多两处；不要用 `\textbf` |
 | `\aside{…}` | 舞台提示，灰色小字，不计字数 |

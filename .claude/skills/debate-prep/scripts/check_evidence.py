@@ -34,6 +34,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _numerals import arabic_tokens, spoken_tokens, matches, strip_stage  # noqa: E402
 import _tex  # noqa: E402
+import _format as F  # noqa: E402
 
 DATE = re.compile(r"(19|20)\d{2}\s*[-./年]\s*\d{1,2}\s*[-./月]\s*\d{1,2}")
 YEAR = re.compile(r"(19|20)\d{2}")
@@ -107,11 +108,20 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--canon", required=True, help="the 备赛文档 holding the 论据出处清单")
     ap.add_argument("--strict", action="store_true",
-                    help="2025 校赛 rule: 已核实 needs a link/DOI and a quote; 有把握 may not appear in 文稿")
+                    help="章程判负红线: 已核实 needs a link/DOI and a quote; 有把握 may not appear in 文稿. "
+                         "Implied when the 备赛文档's \\meta{赛制} names a format with evidence_strict: true")
     ap.add_argument("files", nargs="*", help="速查 / 文稿 files to check against the list")
     args = ap.parse_args()
 
     canon_tex = _tex.read(args.canon)
+    if not args.strict:
+        m = re.search(r"\\meta\{赛制\}\s*\{", canon_tex)
+        if m:
+            a, _ = _tex.args(canon_tex, m.end() - 1, 1)
+            fmt = F.find(_tex.plain(a[0]) if a else "")
+            if fmt and fmt.get("evidence_strict"):
+                args.strict = True
+                print("(赛制 %s 有虚假论据判负条款，自动启用 --strict)" % fmt["id"])
     rows = _tex.sources(canon_tex)
     fails, warns = 0, 0
     if not rows:
