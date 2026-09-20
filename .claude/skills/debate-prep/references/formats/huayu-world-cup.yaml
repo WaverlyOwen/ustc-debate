@@ -1,0 +1,68 @@
+# 依据：组委会《华语辩论世界杯赛事章程》（2019 年河北大学辩论队转载全文）的 14 个环节，2026-03 桂林电子科大通知
+# 自称「采用华语辩论世界杯赛制（黄金联赛赛制）」且条文逐字一致；2024 赛区赛计时器实录的环节顺序相同。
+# 2024–2026 总决赛官方章程未公开检索到，时长有无调整见 unconfirmed。
+id: huayu-world-cup
+name: 华语辩论世界杯
+aliases: [华辩世界杯, 世界杯, 华语辩论世界杯总决赛, CDWC, 黄金联赛赛制, 华辩]
+teams: 4v4
+level_default: 高水平
+first_opening: 正方
+first_closing: 反方
+evidence_strict: false
+positions: [一辩, 二辩, 三辩, 四辩]
+
+stages:
+  - {n: 1,  name: 正方一辩开篇陈词,     type: 立论,   side: 正方, speaker: 正一, seconds: 210, timing: 单方,   block: A}
+  - {n: 2,  name: 反方二辩质询正方一辩, type: 质询,   side: 反方, asker: 反二, target: 正一, seconds: 120, timing: 双边计时, block: A, questions: [3, 3, 6, 10]}
+  - {n: 3,  name: 反方一辩开篇陈词,     type: 立论,   side: 反方, speaker: 反一, seconds: 210, timing: 单方,   block: A}
+  - {n: 4,  name: 正方二辩质询反方一辩, type: 质询,   side: 正方, asker: 正二, target: 反一, seconds: 120, timing: 双边计时, block: A, questions: [3, 3, 6, 10]}
+  - {n: 5,  name: 反方二辩质询小结,     type: 小结,   side: 反方, speaker: 反二, seconds: 90,  timing: 单方,   block: B, short: 质询小结}
+  - {n: 6,  name: 正方二辩质询小结,     type: 小结,   side: 正方, speaker: 正二, seconds: 90,  timing: 单方,   block: B, short: 质询小结, reserve_seconds: 20}
+  - {n: 7,  name: 正反方四辩对辩,       type: 对辩,   side: 双方, speaker: [正四, 反四], seconds: 90, timing: 单边计时, block: B}
+  - {n: 8,  name: 正方三辩盘问反方,     type: 盘问,   side: 正方, asker: 正三, target: [反一, 反二, 反四], seconds: 90, timing: 单边计时, block: C, questions: [2, 3, 5, 8]}
+  - {n: 9,  name: 反方三辩盘问正方,     type: 盘问,   side: 反方, asker: 反三, target: [正一, 正二, 正四], seconds: 90, timing: 单边计时, block: C, questions: [2, 3, 5, 8]}
+  - {n: 10, name: 正方三辩盘问小结,     type: 小结,   side: 正方, speaker: 正三, seconds: 90,  timing: 单方,   block: C, short: 盘问小结}
+  - {n: 11, name: 反方三辩盘问小结,     type: 小结,   side: 反方, speaker: 反三, seconds: 90,  timing: 单方,   block: C, short: 盘问小结, reserve_seconds: 20}
+  - {n: 12, name: 自由辩论,             type: 自由辩, side: 双方, speaker: 全员, seconds: 240, timing: 各自计时, block: D}
+  - {n: 13, name: 反方四辩总结陈词,     type: 结辩,   side: 反方, speaker: 反四, seconds: 210, timing: 单方,   block: E, style: 封路式, short: 总结陈词}
+  - {n: 14, name: 正方四辩总结陈词,     type: 结辩,   side: 正方, speaker: 正四, seconds: 210, timing: 单方,   block: E, reserve_seconds: 35, short: 总结陈词}
+  - {n: 15, name: 评委评议与述票（每位评委不超过 5 分钟）, type: 评委打分, seconds: 300}
+
+meta_overrides:
+  14: 正文 NNN 字 / 210 秒，留 30–40 秒临场回应
+
+blocks:
+  A: 立论把定义、判准、两到三个论点讲满；被质询时不被冲掉定义；我方二辩质询拿到对方至少一个关键承认
+  B: 二辩小结把质询成果钉成评委听得懂的一句话；四辩对辩不丢判准、把交锋拉回我方战场，每次发言一个点
+  C: 三辩盘问跨辩位追问验出对方口径不一；盘问小结把成果接回论点；被盘问时一、二、四辩口径一致
+  D: 自由辩主战场推进到位，对方必答问题都正面回应过，不被牵着走
+  E: 结辩回到判准与一句话立论，处理掉对方全场最强的一个点，价值层收束
+
+scoring: |
+  章程不设环节间打分停顿，评委在全场结束后一次评议并述票，每位评委述票不超过 5 分钟。赛区赛与小组赛按公开转述为每场 3 位评委，
+  各持印象票、环节票、决胜票，不得平分；总决赛 5 位评委（2024 决赛 4:1、2026 决赛 5:0 按 5 人各 1 票公布，2023 决赛 9:6 则符合 5 人 × 3 票）。
+  总决赛评判维度：逻辑架构、价值输出、临场应变、文化共情。纯发言 38 分钟，一场连评议约 70–75 分钟。
+
+notes: |
+  一辩与四辩各 210 秒，比 180 秒的校内赛制多一段机制或一个论点，不要靠放慢语速凑时。
+  二辩质询 120 秒双边共计时：答方只能作答不能反问；问方可打断，但答方每次回答有 5 秒保护期。质询后紧跟本方二辩的质询小结，反二先、正二后。
+  对辩由四辩进行，各 90 秒单边、交替发言、正方先、不得打断。三辩盘问只计盘问方 90 秒，可指定对方除三辩外任意辩手作答，同样 5 秒保护后可打断。
+  三辩不上质询、不上对辩；一辩除立论外只作答；四辩在对辩与结辩两处出场。结辩原名总结陈词，反四先封路，正四留 30–40 秒真回应。
+
+sources:
+  - {url: "https://www.sohu.com/a/315830592_99944923", accessed: "2026-09-19", note: 河北大学辩论队 2019-05-22 转载的《华语辩论世界杯赛事章程》全文，14 个环节逐条时长与规则}
+  - {url: "https://www.guet.edu.cn/gra/2026/0303/c6072a149014/page.htm", accessed: "2026-09-19", note: 桂林电子科技大学 2026-03-03 通知，明确采用华语辩论世界杯赛制（黄金联赛赛制），环节条文与 2019 章程逐字一致；三评委三票制为校方转述}
+  - {url: "https://debatetimer.cn/record/6760152b3fd6846b0be83edd", accessed: "2026-09-19", note: 2024 西区 B 组计时器实录，环节顺序与章程一致}
+  - {url: "https://www.chinanews.com.cn/sh/2026/07-13/10658637.shtml", accessed: "2026-09-19", note: 中新网：2026 总决赛北京首钢园，24 校 39 场，评判维度}
+  - {url: "https://www.sohu.com/a/1052213745_121106842", accessed: "2026-09-19", note: 2026 总决赛人大 5:0 胜澳门大学，决赛评委 5 人}
+  - {url: "https://www.bianlun.net/?id=113", accessed: "2026-09-19", note: 华语辩论网 2026-08-05：每位评委述票不超过 5 分钟已写在章程里}
+  - {url: "https://www.chinanews.com.cn/gn/2024/07-13/10250950.shtml", accessed: "2026-09-19", note: 2024 总决赛北大 4:1 胜牛津，5 位评委}
+
+unconfirmed:
+  - 14 个环节的时长取自 2019 章程，以 2026 桂电通知与 2024 赛区实录旁证；2024–2026 总决赛官方章程未公开，赛前向组委会或赛区确认时长有无调整
+  - 2024 赛区赛两份计时器实录的主持词报「一辩 3 分钟、二辩小结 2 分钟、三辩盘问 1 分 30 秒」，与章程不同，可能是赛区自改；确认所在赛区版本
+  - 票制：赛区赛「3 位评委 × 印象票 / 环节票 / 决胜票」来自校方转述；总决赛每人 1 票还是 3 票两种口径并存
+  - 述票不超过 5 分钟来自评论文章转述，非章程原文
+  - 章程未见虚假论据或 AI 生成数据的判负条款，evidence_strict 按 false 填；但高水平赛事评委会当场追问出处，论据仍按已核实准备
+  - 有转述称设观众提问环节（各一问，不影响结果），未定位到原文，未列入 stages
+  - 质询与盘问的链数、问题数按时长推断；正二小结、反三小结、正四结辩的临场位秒数按「后发言者留临场位」的常见做法推断

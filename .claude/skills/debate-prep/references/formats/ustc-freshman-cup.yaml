@@ -1,0 +1,65 @@
+id: ustc-freshman-cup
+name: 中国科学技术大学新生辩论赛
+aliases: [新生赛, 新生杯, 新生辩论赛, 中科大新生赛, 中科大新生辩论赛, 科大新生赛, USTC 新生赛]
+teams: 4v4
+level_default: 新生
+speech_rate: [250, 280]
+first_opening: 正方
+first_closing: 反方
+evidence_strict: false
+positions: [一辩, 二辩, 三辩, 四辩]
+
+stages:
+  - {n: 1,  name: 正方一辩开篇立论,        type: 立论,   side: 正方, speaker: 正一, seconds: 180, timing: 单方,   block: A}
+  - {n: 2,  name: 反方四辩质询正方一辩,    type: 质询,   side: 反方, asker: 反四, target: 正一, seconds: 120, timing: 双边计时, block: A, questions: [3, 3, 6, 10]}
+  - {n: 3,  name: 反方一辩开篇立论,        type: 立论,   side: 反方, speaker: 反一, seconds: 180, timing: 单方,   block: A}
+  - {n: 4,  name: 正方四辩质询反方一辩,    type: 质询,   side: 正方, asker: 正四, target: 反一, seconds: 120, timing: 双边计时, block: A, questions: [3, 3, 6, 10]}
+  - {n: 5,  name: 评委打分,                type: 评委打分, seconds: 30}
+  - {n: 6,  name: 反方二辩驳论,            type: 驳论,   side: 反方, speaker: 反二, seconds: 120, timing: 单方,   block: B}
+  - {n: 7,  name: 正方二辩驳论,            type: 驳论,   side: 正方, speaker: 正二, seconds: 120, timing: 单方,   block: B, reserve_seconds: 24}
+  - {n: 8,  name: 正反方二辩对辩,          type: 对辩,   side: 双方, speaker: [正二, 反二], seconds: 90, timing: 单边计时, block: B}
+  - {n: 9,  name: 评委打分,                type: 评委打分, seconds: 30}
+  - {n: 10, name: 正方三辩盘问反方二辩、四辩, type: 盘问, side: 正方, asker: 正三, target: [反二, 反四], seconds: 90, timing: 单边计时, block: C, questions: [2, 2, 5, 8]}
+  - {n: 11, name: 反方三辩盘问正方二辩、四辩, type: 盘问, side: 反方, asker: 反三, target: [正二, 正四], seconds: 90, timing: 单边计时, block: C, questions: [2, 2, 5, 8]}
+  - {n: 12, name: 正方三辩盘问小结,        type: 小结,   side: 正方, speaker: 正三, seconds: 90,  timing: 单方,   block: C}
+  - {n: 13, name: 反方三辩盘问小结,        type: 小结,   side: 反方, speaker: 反三, seconds: 90,  timing: 单方,   block: C, reserve_seconds: 18}
+  - {n: 14, name: 评委打分,                type: 评委打分, seconds: 30}
+  - {n: 15, name: 自由辩论,                type: 自由辩, side: 双方, speaker: 全员, seconds: 240, timing: 各自计时, block: D}
+  - {n: 16, name: 评委打分,                type: 评委打分, seconds: 30}
+  - {n: 17, name: 反方四辩结辩,            type: 结辩,   side: 反方, speaker: 反四, seconds: 210, timing: 单方,   block: E, style: 封路式}
+  - {n: 18, name: 正方四辩结辩,            type: 结辩,   side: 正方, speaker: 正四, seconds: 210, timing: 单方,   block: E, reserve_seconds: 35}
+
+# 字数区间可按环节覆盖（口播字）。不写就按 seconds × speech_rate 推；留临场位的按 (seconds - reserve) 推
+bands:
+  7:  {body: [400, 460]}      # 正二驳论：正文按 400–460，临场位约 100 字
+  13: {body: [300, 340]}      # 反三小结：正文按 300–340，临场位约 80 字
+  18: {body: [730, 815]}      # 正四结辩：正文按 175 秒写，留 30–40 秒真回应
+
+# 文稿标题里括号内容的固定写法（不写就按规则生成）
+meta_overrides:
+  7:  正文 NNN 字 + 临场位 NNN 字 / 120 秒
+  13: 正文 NNN 字 + 临场位 NNN 字 / 90 秒
+  17: 正文 NNN 字 / 210 秒，封路式
+  18: 正文 NNN 字 / 210 秒，留 30–40 秒临场回应
+
+blocks:
+  A: 我方立论清楚、判准站得住；质询拿到对方至少一个关键承认或暴露一个矛盾
+  B: 把对方立论的核心问题讲给评委听；对辩中不丢我方判准，把交锋拉回我方战场
+  C: 盘问链完成，小结把盘问成果与我方论点接上；被盘问时不出现两人口径不一
+  D: 主战场推进到位；对方必答问题我方都正面回应过；没有被对方牵着走
+  E: 回到判准与一句话立论，处理掉对方全场最强的一个点，价值层收束
+
+scoring: |
+  评委在五处打分（A 立论质询、B 驳论对辩、C 盘问小结、D 自由辩、E 结辩），实际上把比赛切成五个回合，备赛时为每一块设一个明确目标。
+
+notes: |
+  正方一辩没有铺垫时间，开头 20 秒就要把定义和判准讲清楚。反方一辩紧接在反四质询之后，开头用一句话钉住质询成果。
+  二辩驳论反方先、正方后，正二稿预留临场位回应反二。三辩盘问对象是对方二辩和四辩，用「先问二辩再问四辩」检验口径。
+  反四先结辩，写封路式；正四最后一发，留 30–40 秒真回应。盘问是否只计盘问方时间以当天公布为准。
+
+sources:
+  - url: 赛事组委会流程（队内材料）
+    accessed: "2026-09-09"
+
+unconfirmed:
+  - 被盘问方回答是否计入盘问方 90 秒，赛前向组委会确认

@@ -1,4 +1,6 @@
-% 正赛文稿模板：每方一份。speech 的标题按赛制文件「各持方文稿标题」原样使用（新生赛十个，2025 校赛十一个）；
+% 正赛文稿模板：每方一份。下面的十节是中科大新生赛的稿件清单，只是示例；写之前跑
+%   python3 scripts/format_info.py <赛制> --headings 正方   （反方同理）
+% 用它输出的标题原样替换，多的节删掉、少的节按 references/stage-playbooks.md 同类型的写法补。
 % 括号里的字数用 scripts/check_speeches.py 数出来再填。质询、盘问、对辩、自由辩是 stage，不计字数。
 % 稿件正文里：重音用 \stress{…}（每篇最多两处），舞台提示用 \aside{…}，临场位用 \reserve{…}，都不计字数。
 \documentclass[script,pro]{debate}   % 正方 pro，反方 con
@@ -109,7 +111,7 @@
 \ifthen{<…>}{<…>}
 \end{contingency}
 
-% 仅 2025 校赛：第 11 节奇袭预案。新生赛文稿把整节删掉（标题里的「奇袭」会让 check_speeches.py 判成校赛）。
+% 有奇袭环节的赛制（如 2025 校赛）才有第 11 节；其他赛制整节删掉。
 % \begin{stage}{11. 正方奇袭预案}{质询 150 秒双边 / 申论 120 秒，二选一}
 % \textbf{发动判断}：<什么条件下发动、在哪个环节之后、由谁喊、暗号是什么>
 % \begin{chain}{奇袭质询链一：<通用链，打定义或判准>}{<目标>}
