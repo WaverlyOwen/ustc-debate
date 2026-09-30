@@ -34,14 +34,16 @@
       '</filter>';
   }
 
-  // A seal pressed onto paper: its edges a little rough, its ink missing in a few worn spots.
-  const SEAL = '<filter id="dt-ink-seal" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">' +
+  // A seal pressed onto paper: its edges a little rough, its ink missing in a few worn spots. The light one is for a
+  // smaller stage, where the small seal's strokes are only a pixel or two wide and the full wear would eat them.
+  const seal = (id, rough, wear) => '<filter id="' + id + '" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">' +
     '<feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="5" result="grain"/>' +
-    '<feDisplacementMap in="SourceGraphic" in2="grain" scale="2.4" xChannelSelector="R" yChannelSelector="G" result="rough"/>' +
+    '<feDisplacementMap in="SourceGraphic" in2="grain" scale="' + rough + '" xChannelSelector="R" yChannelSelector="G" result="rough"/>' +
     '<feTurbulence type="fractalNoise" baseFrequency=".09" numOctaves="3" seed="8" result="wear"/>' +
-    '<feColorMatrix in="wear" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  9 0 0 0 -2.6" result="kept"/>' +
+    '<feColorMatrix in="wear" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  9 0 0 0 ' + wear + '" result="kept"/>' +
     '<feComposite in="rough" in2="kept" operator="in"/>' +
     '</filter>';
+  const SEAL = seal('dt-ink-seal', 2.4, -2.6) + seal('dt-ink-seal-light', 1.1, -1.6);
 
   // A drop of ink soaking into the paper: a fibrous rim. It also roughens the title card's dabs and the break's circle.
   const DROP = '<filter id="dt-ink-drop" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">' +

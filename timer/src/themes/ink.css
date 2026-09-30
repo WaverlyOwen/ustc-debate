@@ -92,8 +92,10 @@
 }
 
 /* The digits' two layers change colour where the stroke's solid body ends, not at the tip of its dry hairs: across
-   the hairs the paper shows between them, so the digits stay ink there. Each layer carries a thin halo of the
-   other ground's colour, so a stray hair that still crosses it (paper in the body, ink beyond) keeps its edges. */
+   the hairs the paper shows between them, so the digits stay ink there. Each layer carries a halo of the other
+   ground's colour, so a hair that still crosses it (paper in the body, ink beyond) keeps its edges. The ink layer's
+   halo is the wider one: over the dry tip it lies on loose cinnabar or indigo hairs (ink on cinnabar is only 2.4:1),
+   and the band of paper round each stroke is what keeps the digit whole there. */
 .dt-stage[data-theme="ink"][data-kind="single"] .dt-clock {
   --cut: calc((1 - var(--used)) * 100cqw - var(--stroke-dry) - 50cqw + 50%);
 }
@@ -102,12 +104,16 @@
   --cut: calc(var(--used) * 100cqw + var(--stroke-dry) - 50cqw + 50%);
 }
 .dt-stage[data-theme="ink"] .dt-digits-on { filter: drop-shadow(0 0 .012em var(--digits-on-halo, rgb(27 29 33 / .6))); }
-.dt-stage[data-theme="ink"] .dt-digits:not(.dt-digits-on) { filter: drop-shadow(0 0 .014em var(--paper-ink)); }
+.dt-stage[data-theme="ink"] .dt-digits:not(.dt-digits-on) {
+  filter: drop-shadow(0 0 .012em var(--paper-ink)) drop-shadow(0 0 .02em var(--paper-ink)) drop-shadow(0 0 .02em var(--paper-ink));
+}
 /* In warn the colon turns gold leaf on the stroke. */
 .dt-stage[data-theme="ink"] .dt-clock[data-phase="warn"] .dt-digits-on .dt-colon,
 .dt-stage[data-theme="ink"] .dt-clock[data-phase="count"] .dt-digits-on .dt-colon { color: var(--accent-on-field); }
-/* Overtime: the stroke is gone and the digits keep full ink; the seal below says it. */
-.dt-stage[data-theme="ink"] .dt-clock[data-phase="over"] .dt-digits { color: var(--digits-off-field); }
+/* Overtime: the stroke is gone and the digits turn the ochre gold of the accent (4.5:1 on the paper), as overtime turns
+   gold in the other themes, with 超时 stamped beside them: from the back of a lit hall a black +0:07 would read as a
+   calm clock. Not the seal's red, which would read as 正方's cinnabar while 反方 runs over. */
+.dt-stage[data-theme="ink"] .dt-clock[data-phase="over"] .dt-digits { color: var(--accent); }
 /* 「暂停」 goes under the stroke, onto the paper, in ink. */
 .dt-stage[data-theme="ink"][data-kind="single"] .dt-clock .dt-state { top: calc(50% + 25cqh); margin-top: 0; color: var(--ink); opacity: .8; }
 
@@ -145,12 +151,13 @@
   position: absolute;
   left: 0;
   top: .2cqh;
-  width: 4.6cqh;
-  padding: .5cqh 0;
+  /* The box is as wide as its one column of type plus equal padding either side, so the column sits in its middle
+     (a vertical-rl column fills from the right, and text-align centres only along it). */
+  padding: .5cqh .55cqh;
   border: .36cqh solid var(--seal);
   border-radius: .6cqh;
   font-family: var(--font-title);
-  font-size: 2.7cqh;
+  font-size: 3.2cqh;
   font-weight: 700;
   line-height: 1.02;
   text-align: center;
@@ -172,13 +179,13 @@
 .dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::after {
   content: "超时";
   position: absolute;
-  left: calc(50% + 37cqh);
-  top: calc(var(--clock-y) - 21cqh);
-  padding: .5cqh 1.3cqh .7cqh;
-  border: .5cqh solid var(--seal);
-  border-radius: .9cqh;
+  left: calc(50% + 35cqh);
+  top: calc(var(--clock-y) - 25cqh);
+  padding: .6cqh 1.6cqh .8cqh;
+  border: .6cqh solid var(--seal);
+  border-radius: 1cqh;
   font-family: var(--font-title);
-  font-size: 4.6cqh;
+  font-size: 6.4cqh;
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: .12em;
@@ -278,6 +285,11 @@
   -webkit-mask-image: conic-gradient(from 200deg, transparent 0 14deg, #000 60deg 300deg, rgb(0 0 0 / .35) 336deg, transparent 346deg);
   mask-image: conic-gradient(from 200deg, transparent 0 14deg, #000 60deg 300deg, rgb(0 0 0 / .35) 336deg, transparent 346deg);
   filter: url(#dt-ink-drop);
+}
+
+/* On a smaller projector (1366×768) the small seal wears lightly, so its two characters stay legible. */
+@container (max-width: 1600px) {
+  .dt-stage[data-theme="ink"] .dt-head::before { filter: url(#dt-ink-seal-light); }
 }
 
 /* The seal, the drop and the dabs have pixel-sized filters: on a thumbnail they would smear, so they go flat. */

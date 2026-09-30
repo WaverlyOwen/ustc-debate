@@ -2868,8 +2868,10 @@ body {
 }
 
 /* The digits' two layers change colour where the stroke's solid body ends, not at the tip of its dry hairs: across
-   the hairs the paper shows between them, so the digits stay ink there. Each layer carries a thin halo of the
-   other ground's colour, so a stray hair that still crosses it (paper in the body, ink beyond) keeps its edges. */
+   the hairs the paper shows between them, so the digits stay ink there. Each layer carries a halo of the other
+   ground's colour, so a hair that still crosses it (paper in the body, ink beyond) keeps its edges. The ink layer's
+   halo is the wider one: over the dry tip it lies on loose cinnabar or indigo hairs (ink on cinnabar is only 2.4:1),
+   and the band of paper round each stroke is what keeps the digit whole there. */
 .dt-stage[data-theme="ink"][data-kind="single"] .dt-clock {
   --cut: calc((1 - var(--used)) * 100cqw - var(--stroke-dry) - 50cqw + 50%);
 }
@@ -2878,12 +2880,16 @@ body {
   --cut: calc(var(--used) * 100cqw + var(--stroke-dry) - 50cqw + 50%);
 }
 .dt-stage[data-theme="ink"] .dt-digits-on { filter: drop-shadow(0 0 .012em var(--digits-on-halo, rgb(27 29 33 / .6))); }
-.dt-stage[data-theme="ink"] .dt-digits:not(.dt-digits-on) { filter: drop-shadow(0 0 .014em var(--paper-ink)); }
+.dt-stage[data-theme="ink"] .dt-digits:not(.dt-digits-on) {
+  filter: drop-shadow(0 0 .012em var(--paper-ink)) drop-shadow(0 0 .02em var(--paper-ink)) drop-shadow(0 0 .02em var(--paper-ink));
+}
 /* In warn the colon turns gold leaf on the stroke. */
 .dt-stage[data-theme="ink"] .dt-clock[data-phase="warn"] .dt-digits-on .dt-colon,
 .dt-stage[data-theme="ink"] .dt-clock[data-phase="count"] .dt-digits-on .dt-colon { color: var(--accent-on-field); }
-/* Overtime: the stroke is gone and the digits keep full ink; the seal below says it. */
-.dt-stage[data-theme="ink"] .dt-clock[data-phase="over"] .dt-digits { color: var(--digits-off-field); }
+/* Overtime: the stroke is gone and the digits turn the ochre gold of the accent (4.5:1 on the paper), as overtime turns
+   gold in the other themes, with 超时 stamped beside them: from the back of a lit hall a black +0:07 would read as a
+   calm clock. Not the seal's red, which would read as 正方's cinnabar while 反方 runs over. */
+.dt-stage[data-theme="ink"] .dt-clock[data-phase="over"] .dt-digits { color: var(--accent); }
 /* 「暂停」 goes under the stroke, onto the paper, in ink. */
 .dt-stage[data-theme="ink"][data-kind="single"] .dt-clock .dt-state { top: calc(50% + 25cqh); margin-top: 0; color: var(--ink); opacity: .8; }
 
@@ -2921,12 +2927,13 @@ body {
   position: absolute;
   left: 0;
   top: .2cqh;
-  width: 4.6cqh;
-  padding: .5cqh 0;
+  /* The box is as wide as its one column of type plus equal padding either side, so the column sits in its middle
+     (a vertical-rl column fills from the right, and text-align centres only along it). */
+  padding: .5cqh .55cqh;
   border: .36cqh solid var(--seal);
   border-radius: .6cqh;
   font-family: var(--font-title);
-  font-size: 2.7cqh;
+  font-size: 3.2cqh;
   font-weight: 700;
   line-height: 1.02;
   text-align: center;
@@ -2948,13 +2955,13 @@ body {
 .dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::after {
   content: "超时";
   position: absolute;
-  left: calc(50% + 37cqh);
-  top: calc(var(--clock-y) - 21cqh);
-  padding: .5cqh 1.3cqh .7cqh;
-  border: .5cqh solid var(--seal);
-  border-radius: .9cqh;
+  left: calc(50% + 35cqh);
+  top: calc(var(--clock-y) - 25cqh);
+  padding: .6cqh 1.6cqh .8cqh;
+  border: .6cqh solid var(--seal);
+  border-radius: 1cqh;
   font-family: var(--font-title);
-  font-size: 4.6cqh;
+  font-size: 6.4cqh;
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: .12em;
@@ -3054,6 +3061,11 @@ body {
   -webkit-mask-image: conic-gradient(from 200deg, transparent 0 14deg, #000 60deg 300deg, rgb(0 0 0 / .35) 336deg, transparent 346deg);
   mask-image: conic-gradient(from 200deg, transparent 0 14deg, #000 60deg 300deg, rgb(0 0 0 / .35) 336deg, transparent 346deg);
   filter: url(#dt-ink-drop);
+}
+
+/* On a smaller projector (1366×768) the small seal wears lightly, so its two characters stay legible. */
+@container (max-width: 1600px) {
+  .dt-stage[data-theme="ink"] .dt-head::before { filter: url(#dt-ink-seal-light); }
 }
 
 /* The seal, the drop and the dabs have pixel-sized filters: on a thumbnail they would smear, so they go flat. */
@@ -6138,14 +6150,16 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
       '</filter>';
   }
 
-  // A seal pressed onto paper: its edges a little rough, its ink missing in a few worn spots.
-  const SEAL = '<filter id="dt-ink-seal" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">' +
+  // A seal pressed onto paper: its edges a little rough, its ink missing in a few worn spots. The light one is for a
+  // smaller stage, where the small seal's strokes are only a pixel or two wide and the full wear would eat them.
+  const seal = (id, rough, wear) => '<filter id="' + id + '" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">' +
     '<feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="5" result="grain"/>' +
-    '<feDisplacementMap in="SourceGraphic" in2="grain" scale="2.4" xChannelSelector="R" yChannelSelector="G" result="rough"/>' +
+    '<feDisplacementMap in="SourceGraphic" in2="grain" scale="' + rough + '" xChannelSelector="R" yChannelSelector="G" result="rough"/>' +
     '<feTurbulence type="fractalNoise" baseFrequency=".09" numOctaves="3" seed="8" result="wear"/>' +
-    '<feColorMatrix in="wear" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  9 0 0 0 -2.6" result="kept"/>' +
+    '<feColorMatrix in="wear" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  9 0 0 0 ' + wear + '" result="kept"/>' +
     '<feComposite in="rough" in2="kept" operator="in"/>' +
     '</filter>';
+  const SEAL = seal('dt-ink-seal', 2.4, -2.6) + seal('dt-ink-seal-light', 1.1, -1.6);
 
   // A drop of ink soaking into the paper: a fibrous rim. It also roughens the title card's dabs and the break's circle.
   const DROP = '<filter id="dt-ink-drop" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">' +

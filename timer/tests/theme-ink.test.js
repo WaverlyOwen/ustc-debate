@@ -183,6 +183,23 @@
     });
   });
 
+  // Past the body's end the ink layer lies on the dry tip's loose cinnabar or indigo hairs (ink on cinnabar is about
+  // 2.4:1). Its paper halo is built up (three drop-shadows, the widest .02em) so each stroke of the digit keeps a band
+  // of paper round it there.
+  DT.test('theme ink: over the dry tip the ink digits keep a band of paper round each stroke', () => {
+    const { stage, root } = mountInk(singleAt(OPENING, 60), 1920, 1080);
+    const off = root.querySelector('.dt-clock[data-clock="main"] .dt-digits:not(.dt-digits-on)');
+    const f = getComputedStyle(off).filter;
+    const shadows = f.match(/drop-shadow\([^()]*(\([^()]*\))?[^()]*\)/g) || [];
+    const paper = srgb(resolve(root, '--paper-ink'));
+    const fontPx = px(getComputedStyle(off).fontSize);
+    assert.ok(shadows.length >= 3, 'a built-up halo: ' + f);
+    shadows.forEach(sh => assert.ok(sh.indexOf(paper.replace('rgb', 'rgb')) >= 0 || sh.indexOf(resolve(root, '--paper-ink')) >= 0, 'paper-coloured: ' + sh));
+    const widest = Math.max.apply(null, shadows.map(sh => { const m = sh.match(/([\d.]+)px\)?\s*$/) || sh.match(/0px 0px ([\d.]+)px/); return m ? Number(m[1]) : 0; }));
+    assert.ok(widest >= 0.019 * fontPx, 'the widest reaches .02em: ' + widest + 'px of ' + fontPx + 'px');
+    stage.destroy();
+  });
+
   DT.test('theme ink: the brush filter follows the stage size, so a thumbnail keeps its proportions', () => {
     const big = mountInk(singleAt(OPENING, 60), 1920, 1080);
     const bigFilter = getComputedStyle(big.root.querySelector('.dt-field')).filter;
@@ -192,6 +209,23 @@
     small.stage.destroy();
     assert.ok(bigFilter !== smallFilter, bigFilter + ' vs ' + smallFilter);
     assert.ok(/#dt-ink-brush/.test(smallFilter), smallFilter);
+  });
+
+  // Spec §2.1: the stage type is marked with a small 朱文 seal, in the app's own words for the types. Its one column of
+  // type sits in the middle of the box (equal padding either side; a vertical-rl column would otherwise hug the right
+  // edge), large enough to read at 1366×768, where the seal also wears more lightly.
+  DT.test('theme ink: the seal\'s two characters sit centred in the box, large enough to read', () => {
+    [[1920, 1080, /dt-ink-seal"?\)/], [1366, 768, /dt-ink-seal-light/]].forEach(([w, h, filter]) => {
+      const { stage, root } = mountInk(singleAt(OPENING, 60), w, h);
+      const seal = pseudo(root.querySelector('.dt-head'), '::before');
+      assert.equal(seal.paddingLeft, seal.paddingRight, w + ': even either side');
+      assert.ok(px(seal.fontSize) >= 0.03 * h, w + ': ' + seal.fontSize);
+      const inner = px(seal.width) - (seal.boxSizing === 'border-box'
+        ? px(seal.paddingLeft) + px(seal.paddingRight) + px(seal.borderLeftWidth) + px(seal.borderRightWidth) : 0);
+      assert.near(inner, px(seal.fontSize) * px(seal.lineHeight) / px(seal.fontSize), 1.5, w + ': the box is the column wide: ' + seal.width);
+      assert.ok(filter.test(seal.filter), w + ': ' + seal.filter);
+      stage.destroy();
+    });
   });
 
   // Spec §2.1: the stage type is marked with a small 朱文 seal, in the app's own words for the types.
@@ -254,8 +288,10 @@
     stage.destroy();
   });
 
-  // Overtime: the digits keep full ink and a seal stamps 超时 beside them.
-  DT.test('theme ink: overtime keeps the digits in ink and stamps a 超时 seal', () => {
+  // Overtime (main spec §5.3): the digits change colour, as in every theme: ink's ochre gold, not its black (a black
+  // +0:07 reads as a calm clock from the back of a lit hall) and not the seal's red (正方's cinnabar while 反方 runs
+  // over); and a large seal stamps 超时 beside them.
+  DT.test('theme ink: overtime turns the digits ochre gold and stamps a 超时 seal', () => {
     const calm = mountInk(singleAt(OPENING, 60));
     const none = pseudo(calm.root.querySelector('.dt-deco-over'), '::after');
     assert.ok(none.content === 'none' || none.display === 'none', 'no stamp before time is up');
@@ -263,10 +299,16 @@
     const { stage, root } = mountInk(singleAt(OPENING, 187));
     assert.equal(root.dataset.phase, 'over');
     const digits = getComputedStyle(root.querySelector('.dt-clock[data-clock="main"] .dt-digits')).color;
-    assert.equal(digits, resolve(root, '--ink'));
+    assert.equal(digits, resolve(root, '--accent'));
+    assert.ok(digits !== resolve(root, '--ink'), 'not the calm ink');
+    assert.ok(contrast(digits, resolve(root, '--ground')) >= 3, 'reads on the paper: ' + contrast(digits, resolve(root, '--ground')).toFixed(2));
     const stamp = pseudo(root.querySelector('.dt-deco-over'), '::after');
     assert.equal(stamp.content, '"超时"');
     assert.ok(stamp.display !== 'none');
+    assert.ok(px(stamp.fontSize) >= 0.06 * root.getBoundingClientRect().height, 'a large stamp: ' + stamp.fontSize);
+    const s = root.querySelector('.dt-deco-over').getBoundingClientRect();
+    const d = root.querySelector('.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect();
+    assert.ok(s.width > 0 && d.width > 0);
     stage.destroy();
   });
 
