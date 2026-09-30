@@ -7,7 +7,7 @@
   --con-deep: #C7D6EA;
   --ground: #E7E9EC;
   --ink: #15171B;
-  --ink-dim: rgb(21 23 27 / .58);
+  --ink-dim: rgb(21 23 27 / .68);
   --accent: #B7791F;
   --on-side: #F7F4EE;
   --digits-on-field: #F7F4EE;
@@ -17,6 +17,8 @@
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
   --backdrop: none;
   --band: 34cqh;
+  --text-field: var(--ground);   /* the band stays below the head, so all text above it sits on the ground */
+  --text-deep: var(--ground);
 }
 
 .dt-stage[data-theme="daylight"] { background: var(--ground); }
@@ -43,7 +45,7 @@
 }
 
 /* Dual: each half keeps the light ground, with its band draining from the top inside the track. */
-.dt-stage[data-theme="daylight"] .dt-half { background: var(--ground); }
+.dt-stage[data-theme="daylight"] .dt-half { --half-ground: var(--ground); }
 .dt-stage[data-theme="daylight"] .dt-half::before {
   content: "";
   position: absolute;

@@ -22,9 +22,10 @@
 .dt-stage[data-side="pro"] { --side-color: var(--pro); --side-deep: var(--pro-deep); }
 .dt-stage[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
 
-/* ---- layers, bottom to top: backdrop, canvas, deco, field / halves, warn line, content, rings, toast ---- */
+/* ---- layers, bottom to top (spec §1.5): backdrop, canvas, deco, field / halves, deco-over, warn line, content,
+   rings, toast ---- */
 
-.dt-backdrop, .dt-canvas, .dt-deco, .dt-field, .dt-warnline, .dt-halves, .dt-rings {
+.dt-backdrop, .dt-canvas, .dt-deco, .dt-field, .dt-halves, .dt-deco-over, .dt-warnline, .dt-rings {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -32,12 +33,13 @@
 .dt-backdrop { z-index: 0; background: var(--backdrop); }
 /* A theme painter's canvas (only when the theme has one); it comes before the deco, so the deco paints over it. */
 .dt-canvas { z-index: 1; width: 100%; height: 100%; }
-.dt-deco { z-index: 1; }
+.dt-deco { z-index: 1; }                /* decoration under the field (daylight's band track) */
 .dt-field, .dt-halves { z-index: 2; }
-.dt-warnline { z-index: 3; }
-.dt-top, .dt-head, .dt-clock, .dt-card, .dt-bottom { position: relative; z-index: 4; }
-.dt-rings { z-index: 5; overflow: hidden; }
-.dt-toast { z-index: 6; }
+.dt-deco-over { z-index: 3; }           /* decoration over the field and the halves: seals, marks, grain */
+.dt-warnline { z-index: 4; }
+.dt-top, .dt-head, .dt-clock, .dt-card, .dt-bottom { position: relative; z-index: 5; }
+.dt-rings { z-index: 6; overflow: hidden; }
+.dt-toast { z-index: 7; }
 
 /* The colour field: time is taken back toward the speaking side's own seat. */
 .dt-field {
@@ -111,10 +113,10 @@
   margin: 1.3cqh 0 0;
   overflow: hidden;
   font-size: 2.8cqh;
-  letter-spacing: .06em;
+  letter-spacing: .12em;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--ink-dim);
+  color: var(--speaker-ink);
 }
 .dt-speaker:empty { display: none; }
 .dt-stage[data-mode="title"] .dt-head { display: none; }
@@ -222,7 +224,7 @@
   position: relative;
   min-width: 0;
   overflow: hidden;
-  background: var(--side-deep);
+  background: var(--half-ground, var(--side-deep));   /* a painter theme sets it transparent to show its canvas */
   transition: filter 300ms ease;
 }
 .dt-half[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }

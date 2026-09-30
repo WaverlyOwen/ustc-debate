@@ -18,8 +18,8 @@
 }
 .dt-stage[data-theme="chroma"][data-side="none"] { --side-color: var(--plate); }
 /* The deep colours are the plate's, so the key green is laid on the stage and the halves by hand. */
-.dt-stage[data-theme="chroma"],
-.dt-stage[data-theme="chroma"] .dt-half { background: var(--ground); }
+.dt-stage[data-theme="chroma"] { background: var(--ground); }
+.dt-stage[data-theme="chroma"] .dt-half { --half-ground: var(--ground); }
 
 .dt-stage[data-theme="chroma"] .dt-field,
 .dt-stage[data-theme="chroma"] .dt-warnline,

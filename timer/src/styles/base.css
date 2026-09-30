@@ -52,6 +52,9 @@ body {
   --on-side: var(--ink);        /* text drawn on a side colour (team names, 「暂停」) */
   --digits-on-field: var(--ink);    /* the digits where they sit on the speaking side's field */
   --digits-off-field: var(--ink);   /* the digits where the field has been taken back (spec §1.5) */
+  --speaker-ink: var(--ink);        /* the speaker line: set apart by size and spacing, not transparency */
+  --text-field: var(--side-color);  /* the two grounds the top bar, stage name and speaker can sit on: a theme */
+  --text-deep: var(--side-deep);    /* whose field never reaches them points these at what does (spec §1.5) */
   --used: 0;
   --tension: 0;
   --warn-at: 0;

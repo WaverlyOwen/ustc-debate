@@ -62,8 +62,10 @@ DT.themes = {
 投影在讲堂里，最后一排也要看清。无论背景多花：
 
 - 数字与它可能落在的每一种背景之间的对比度 ≥ 3:1（大字标准），标题与发言人 ≥ 4.5:1。纹理的不透明度要低到不破坏这一点
-- 为了能自动检查，变量契约新增两个变量（`base.css` 默认都等于 `--ink`）：`--digits-on-field`（数字落在本方色场上时的颜色）与 `--digits-off-field`（落在色场收回后露出的底上时的颜色）。主题必须如实设置，`stage.css` 与主题的数字规则也必须用它们。`tests/themes.test.js` 对每个主题、正反两方检查：`--digits-on-field` 对 `--side-color` ≥ 3:1，`--digits-off-field` 对 `--side-deep` ≥ 3:1，标题色对 `--side-color` 与 `--side-deep` ≥ 4.5:1（色值取计算样式里的纯色；纹理与半透明的影响由截图评审把关）
-- 数字、标题、底栏文字永远在装饰层之上（z 轴顺序：backdrop → canvas → field → deco → 文字）
+- 为了能自动检查，变量契约新增两个变量（`base.css` 默认都等于 `--ink`）：`--digits-on-field`（数字落在本方色场上时的颜色）与 `--digits-off-field`（落在色场收回后露出的底上时的颜色）。主题必须如实设置，`stage.css` 与主题的数字规则也必须用它们。`tests/themes.test.js` 对每个主题、正反两方、两种席位检查：`--digits-on-field` 对 `--side-color` ≥ 3:1，`--digits-off-field` 对 `--side-deep` ≥ 3:1，标题、发言人与顶栏的文字色对 `--text-field` 与 `--text-deep` **两者**都 ≥ 4.5:1（文字自带不透明底板时改对底板检查；半透明的文字色先叠到背景上再算；纹理的影响由截图评审把关）
+- 文字所在的两种底：`--text-field`、`--text-deep`（`base.css` 默认分别等于 `--side-color`、`--side-deep`）。色场到不了顶栏和标题的主题（如「昼」的横带）把它们指向真正的底色；测试会核对这一点：`--text-field` 不等于 `--side-color` 时色场的范围不得碰到标题区与顶栏，`--text-deep` 不等于 `--side-deep` 时它必须等于舞台的背景色
+- 发言人一行用自己的变量 `--speaker-ink`（默认 `--ink`），和标题的层次靠字号与字距拉开，不靠透明度
+- 数字、标题、底栏文字永远在装饰层之上。z 轴顺序：backdrop → canvas → `.dt-deco`（色场之下的装饰，如「昼」的横带轨道）→ field / 双方的两半 → `.dt-deco-over`（色场之上的装饰：印章、记号、颗粒）→ 提示铃线 → 文字。双方环节每一半的底色取 `--half-ground`（默认 `--side-deep`），有画师的主题可以设为 `transparent`，让 canvas 在双方环节里也看得见
 - 正方与反方一眼可分（不能只靠细微的色相差）
 - 当前发言方、剩余时间、提示铃点、超时这四种信息在每个主题里都必须看得出来
 - 1366×768 与 1920×1080 下都不溢出、不重叠

@@ -28,7 +28,7 @@
     '<header class="dt-top"><span class="dt-match"></span><span class="dt-format"></span></header>' +
     '<section class="dt-head"><h1 class="dt-title"></h1><p class="dt-speaker"></p></section>' +
     '<div class="dt-clock" data-clock="main">' + CLOCK + '</div>' +
-    '<div class="dt-halves">' + HALF('pro') + HALF('con') + '</div>' +
+    '<div class="dt-halves">' + HALF('pro') + HALF('con') + '</div><div class="dt-deco-over"></div>' +
     '<section class="dt-card"><div class="dt-motions"><p class="dt-motion" data-side="pro"></p>' +
     '<p class="dt-motion" data-side="con"></p></div>' +
     '<div class="dt-teams"><span data-side="pro"></span><span data-side="con"></span></div>' +

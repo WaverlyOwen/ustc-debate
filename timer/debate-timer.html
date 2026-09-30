@@ -61,6 +61,9 @@ body {
   --on-side: var(--ink);        /* text drawn on a side colour (team names, 「暂停」) */
   --digits-on-field: var(--ink);    /* the digits where they sit on the speaking side's field */
   --digits-off-field: var(--ink);   /* the digits where the field has been taken back (spec §1.5) */
+  --speaker-ink: var(--ink);        /* the speaker line: set apart by size and spacing, not transparency */
+  --text-field: var(--side-color);  /* the two grounds the top bar, stage name and speaker can sit on: a theme */
+  --text-deep: var(--side-deep);    /* whose field never reaches them points these at what does (spec §1.5) */
   --used: 0;
   --tension: 0;
   --warn-at: 0;
@@ -96,9 +99,10 @@ body {
 .dt-stage[data-side="pro"] { --side-color: var(--pro); --side-deep: var(--pro-deep); }
 .dt-stage[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
 
-/* ---- layers, bottom to top: backdrop, canvas, deco, field / halves, warn line, content, rings, toast ---- */
+/* ---- layers, bottom to top (spec §1.5): backdrop, canvas, deco, field / halves, deco-over, warn line, content,
+   rings, toast ---- */
 
-.dt-backdrop, .dt-canvas, .dt-deco, .dt-field, .dt-warnline, .dt-halves, .dt-rings {
+.dt-backdrop, .dt-canvas, .dt-deco, .dt-field, .dt-halves, .dt-deco-over, .dt-warnline, .dt-rings {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -106,12 +110,13 @@ body {
 .dt-backdrop { z-index: 0; background: var(--backdrop); }
 /* A theme painter's canvas (only when the theme has one); it comes before the deco, so the deco paints over it. */
 .dt-canvas { z-index: 1; width: 100%; height: 100%; }
-.dt-deco { z-index: 1; }
+.dt-deco { z-index: 1; }                /* decoration under the field (daylight's band track) */
 .dt-field, .dt-halves { z-index: 2; }
-.dt-warnline { z-index: 3; }
-.dt-top, .dt-head, .dt-clock, .dt-card, .dt-bottom { position: relative; z-index: 4; }
-.dt-rings { z-index: 5; overflow: hidden; }
-.dt-toast { z-index: 6; }
+.dt-deco-over { z-index: 3; }           /* decoration over the field and the halves: seals, marks, grain */
+.dt-warnline { z-index: 4; }
+.dt-top, .dt-head, .dt-clock, .dt-card, .dt-bottom { position: relative; z-index: 5; }
+.dt-rings { z-index: 6; overflow: hidden; }
+.dt-toast { z-index: 7; }
 
 /* The colour field: time is taken back toward the speaking side's own seat. */
 .dt-field {
@@ -185,10 +190,10 @@ body {
   margin: 1.3cqh 0 0;
   overflow: hidden;
   font-size: 2.8cqh;
-  letter-spacing: .06em;
+  letter-spacing: .12em;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--ink-dim);
+  color: var(--speaker-ink);
 }
 .dt-speaker:empty { display: none; }
 .dt-stage[data-mode="title"] .dt-head { display: none; }
@@ -296,7 +301,7 @@ body {
   position: relative;
   min-width: 0;
   overflow: hidden;
-  background: var(--side-deep);
+  background: var(--half-ground, var(--side-deep));   /* a painter theme sets it transparent to show its canvas */
   transition: filter 300ms ease;
 }
 .dt-half[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
@@ -1829,8 +1834,8 @@ body {
 }
 .dt-stage[data-theme="chroma"][data-side="none"] { --side-color: var(--plate); }
 /* The deep colours are the plate's, so the key green is laid on the stage and the halves by hand. */
-.dt-stage[data-theme="chroma"],
-.dt-stage[data-theme="chroma"] .dt-half { background: var(--ground); }
+.dt-stage[data-theme="chroma"] { background: var(--ground); }
+.dt-stage[data-theme="chroma"] .dt-half { --half-ground: var(--ground); }
 
 .dt-stage[data-theme="chroma"] .dt-field,
 .dt-stage[data-theme="chroma"] .dt-warnline,
@@ -1913,7 +1918,7 @@ body {
   --con-deep: #C7D6EA;
   --ground: #E7E9EC;
   --ink: #15171B;
-  --ink-dim: rgb(21 23 27 / .58);
+  --ink-dim: rgb(21 23 27 / .68);
   --accent: #B7791F;
   --on-side: #F7F4EE;
   --digits-on-field: #F7F4EE;
@@ -1923,6 +1928,8 @@ body {
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
   --backdrop: none;
   --band: 34cqh;
+  --text-field: var(--ground);   /* the band stays below the head, so all text above it sits on the ground */
+  --text-deep: var(--ground);
 }
 
 .dt-stage[data-theme="daylight"] { background: var(--ground); }
@@ -1949,7 +1956,7 @@ body {
 }
 
 /* Dual: each half keeps the light ground, with its band draining from the top inside the track. */
-.dt-stage[data-theme="daylight"] .dt-half { background: var(--ground); }
+.dt-stage[data-theme="daylight"] .dt-half { --half-ground: var(--ground); }
 .dt-stage[data-theme="daylight"] .dt-half::before {
   content: "";
   position: absolute;
@@ -2004,6 +2011,9 @@ body {
 }
 
 .dt-stage[data-theme="hall"] .dt-digits { text-shadow: 0 .015em .06em rgb(0 0 0 / .2); }
+
+/* On a stage the top bar sits on the field: cream reaches only 5.2:1 on 朱, so it is barely dimmed there. */
+.dt-stage[data-theme="hall"][data-mode="stage"] .dt-top { color: rgb(244 239 228 / .92); }
 
 </style>
 </head>
@@ -3834,7 +3844,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     '<header class="dt-top"><span class="dt-match"></span><span class="dt-format"></span></header>' +
     '<section class="dt-head"><h1 class="dt-title"></h1><p class="dt-speaker"></p></section>' +
     '<div class="dt-clock" data-clock="main">' + CLOCK + '</div>' +
-    '<div class="dt-halves">' + HALF('pro') + HALF('con') + '</div>' +
+    '<div class="dt-halves">' + HALF('pro') + HALF('con') + '</div><div class="dt-deco-over"></div>' +
     '<section class="dt-card"><div class="dt-motions"><p class="dt-motion" data-side="pro"></p>' +
     '<p class="dt-motion" data-side="con"></p></div>' +
     '<div class="dt-teams"><span data-side="pro"></span><span data-side="con"></span></div>' +

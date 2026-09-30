@@ -27,3 +27,6 @@
 }
 
 .dt-stage[data-theme="hall"] .dt-digits { text-shadow: 0 .015em .06em rgb(0 0 0 / .2); }
+
+/* On a stage the top bar sits on the field: cream reaches only 5.2:1 on 朱, so it is barely dimmed there. */
+.dt-stage[data-theme="hall"][data-mode="stage"] .dt-top { color: rgb(244 239 228 / .92); }
