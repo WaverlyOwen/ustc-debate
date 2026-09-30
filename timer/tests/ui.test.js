@@ -487,4 +487,145 @@
     assert.equal(row(1).querySelector('.dt-row-dot').textContent, '● ');
     t.done();
   });
+
+  DT.test('ui: a preset boots straight to its title card', () => {
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], { title: '决赛', proMotion: '甲方辩题', conMotion: '乙方辩题', proTeam: '一队', conTeam: '二队', proSeat: 'right' }, 'hall', T0);
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const c = DT.app.boot({ root: box.firstChild, storage: memStorage(), bells: fakeBells(), preset });
+    assert.equal(c.session().cursor, -1);
+    assert.equal(c.session().match.proMotion, '甲方辩题');
+    assert.ok(box.textContent.indexOf('甲方辩题') >= 0);
+    c.destroy(); DT.store.setNamespace(null);
+  });
+
+  DT.test('ui: a plain session never leaks into a preset file', () => {
+    const storage = memStorage();
+    const t = boot({ storage });
+    press('Space'); press('Space');          // a plain match is running
+    t.done();
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], { title: '决赛', proMotion: '甲', conMotion: '乙', proTeam: '', conTeam: '', proSeat: 'left' }, 'hall', T0);
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const c = DT.app.boot({ root: box.firstChild, storage, bells: fakeBells(), preset });
+    assert.equal(c.session().cursor, -1);
+    assert.equal(c.session().match.title, '决赛');
+    c.destroy(); DT.store.setNamespace(null);
+  });
+
+  DT.test('ui: a broken preset falls back to the plain timer', () => {
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const c = DT.app.boot({ root: box.firstChild, storage: memStorage(), bells: fakeBells(), preset: null });
+    assert.ok(box.querySelector('.dt-setup'));
+    c.destroy();
+  });
+
+  // ---- match files (preset), beyond the brief ----
+
+  const PRESET_MATCH = { title: '决赛', proMotion: '甲方辩题', conMotion: '乙方辩题', proTeam: '一队', conTeam: '二队', proSeat: 'left' };
+  function bootPreset(storage, preset) {
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const c = DT.app.boot({ root: box.firstChild, storage, bells: fakeBells(), preset, location: { search: '', hash: '' } });
+    return { c, box, done() { c.destroy(); DT.clock.reset(); } };
+  }
+
+  DT.test('ui: a match file resumes its own unfinished match, in its own storage keys', () => {
+    let now = T0; DT.clock.set(() => now);
+    const storage = memStorage();
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'ink', T0);
+    let t = bootPreset(storage, preset);
+    assert.equal(t.c.session().theme, 'ink');
+    t.c.act('goto', 3);
+    t.done();
+    assert.equal(storage.getItem('dt.session.v1'), null, 'the plain timer\'s key is left alone');
+    assert.equal(JSON.parse(storage.getItem('dt.m.' + preset.id + '.session.v1')).cursor, 3);
+    t = bootPreset(storage, preset);
+    assert.equal(t.c.route(), 'timer');
+    assert.equal(t.c.session().cursor, 3);
+    t.done();
+    assert.equal(DT.store.loadSession(), null, 'destroy leaves the plain keys in use again');
+  });
+
+  DT.test('ui: in a match file the end card restarts the same match on a fresh title card', () => {
+    DT.clock.set(() => T0);
+    const storage = memStorage();
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
+    const t = bootPreset(storage, preset);
+    try {
+      const first = t.c.session().id;
+      t.c.act('goto', t.c.session().timeline.length);
+      const btn = t.box.querySelector('.dt-dock button[data-act="new"]');
+      assert.equal(btn.hidden, false);
+      assert.equal(btn.textContent, '重新开始这一场');
+      btn.click();
+      assert.equal(t.c.route(), 'timer');
+      assert.ok(t.c.session().id !== first, 'a new match');
+      assert.equal(t.c.session().cursor, -1);
+      assert.equal(t.c.session().match.proMotion, '甲方辩题');
+      assert.equal(t.box.querySelector('.dt-dock button[data-act="new"]').textContent, '重新开始这一场');
+      assert.equal(JSON.parse(storage.getItem('dt.m.' + preset.id + '.session.v1')).id, t.c.session().id);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: Shift+E and Esc on the title card open the setup page; later E still opens the editor', () => {
+    let t = boot();
+    press('KeyE', { shiftKey: true });
+    assert.equal(t.c.route(), 'setup');
+    t.done();
+    t = boot();
+    press('Escape');
+    assert.equal(t.c.route(), 'setup');
+    t.done();
+    t = boot();
+    press('KeyH'); press('Escape');
+    assert.equal(t.c.route(), 'timer', 'Esc closes an open overlay first');
+    press('Space');
+    press('KeyE', { shiftKey: true });
+    assert.equal(t.c.route(), 'timer');
+    assert.ok(document.querySelector('.dt-editor'), 'past the title card Shift+E is E');
+    t.done();
+  });
+
+  DT.test('ui: a match file offers the plain setup page without its own format in the list', () => {
+    const preset = DT.preset.make(Object.assign({}, DT.BUILTIN_FORMATS[0], { id: 'only-in-the-file', builtin: false }), PRESET_MATCH, 'hall', T0);
+    const t = bootPreset(memStorage(), preset);
+    try {
+      press('KeyE', { shiftKey: true });
+      assert.equal(t.c.route(), 'setup');
+      assert.equal(t.box.querySelector('[data-format-id="only-in-the-file"]'), null);
+      assert.equal(t.box.querySelectorAll('[data-format-id]').length, DT.BUILTIN_FORMATS.length);
+      assert.ok(t.box.textContent.indexOf('上一场还没打完：决赛') >= 0, 'the match of the file waits to be resumed');
+      t.box.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.session().match.proMotion, '甲方辩题');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: 导出这一场 saves a page that opens on the chosen match, and says so', () => {
+    const built = '<html lang="zh-CN"><head><title>辩论计时器</title><style>b{}</style></head><body data-dt-autoboot>' +
+      '<div id="app"></div><script id="dt-main">window.__x = 1;</script></body></html>';
+    const saved = [], realSave = DT.store.saveFile;
+    DT.preset.captureSource(new DOMParser().parseFromString(built, 'text/html'));
+    DT.store.saveFile = (name, text, mime) => saved.push({ name, text, mime });
+    const t = bootPreset(memStorage(), null);
+    try {
+      t.box.querySelector('[data-format-id="ustc-freshman-cup"]').click();
+      t.box.querySelector('input[name="title"]').value = '复赛';
+      t.box.querySelector('input[name="proTeam"]').value = '物理学院';
+      t.box.querySelector('[data-theme-id="daylight"]').click();
+      const b = t.box.querySelector('button[data-action="export"]');
+      assert.equal(b.disabled, false);
+      b.click();
+      assert.equal(saved.length, 1);
+      assert.equal(saved[0].name, '复赛.html');
+      assert.equal(saved[0].mime, 'text/html');
+      const p = DT.preset.read(new DOMParser().parseFromString(saved[0].text, 'text/html'));
+      assert.equal(p.format.id, 'ustc-freshman-cup');
+      assert.equal(p.match.proTeam, '物理学院');
+      assert.equal(p.theme, 'daylight');
+      assert.ok(t.box.textContent.indexOf('已导出。把这个文件拷到比赛用的电脑上，双击就能直接开始这一场') >= 0);
+      assert.equal(t.c.route(), 'setup', 'exporting does not start the match');
+    } finally {
+      t.done();
+      DT.store.saveFile = realSave;
+      DT.preset.captureSource(document);
+    }
+  });
 })();

@@ -13,6 +13,13 @@
   const LAST_MATCH = ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'];   // prefilled next time (§5.9)
   // Used when build.py has not injected DT.THEMES (the test page loads the sources directly).
   const FALLBACK_THEMES = [{ id: 'hall', name: '堂' }, { id: 'daylight', name: '昼' }, { id: 'chroma', name: '绿幕' }];
+  const EXPORTED = '已导出。把这个文件拷到比赛用的电脑上，双击就能直接开始这一场';
+  const RESTART_LABEL = '重新开始这一场';   // 新的一场 on the end card of a match file (new spec §4.1)
+  // What ?exportProbe=1 exports, for the end-to-end test (new spec §4.4).
+  const PROBE = {
+    format: 'ustc-freshman-cup', theme: 'hall',
+    match: { title: '探针场', proMotion: '探针辩题正方', conMotion: '探针辩题反方', proTeam: '探针队甲', conTeam: '探针队乙', proSeat: 'left' },
+  };
 
   // Keys in the help overlay (spec §5.8).
   const HELP = [
@@ -32,11 +39,12 @@
     [['S'], '环节列表'],
     [['Shift+S'], '本场记录'],
     [['E'], '编辑赛制（这一场照常进行）'],
+    [['Shift+E'], '开场卡上：回到开赛页'],
     [['O'], '打开投影窗口（这个窗口变成操作台）'],
     [['F'], '全屏'],
     [['M'], '静音'],
     [['H', '?'], '帮助'],
-    [['Esc'], '关闭覆盖层'],
+    [['Esc'], '关闭覆盖层；开场卡上没有覆盖层时：回到开赛页'],
   ];
 
   const ICON = {
@@ -247,7 +255,7 @@
       case 'KeyF': return { act: ['fullscreen'] };
       case 'KeyX': return { overlay: 'insert' };
       case 'KeyS': return { overlay: shift ? 'record' : 'stages' };
-      case 'KeyE': return { editor: true };
+      case 'KeyE': return shift ? { setup: true, editor: true } : { editor: true };
       case 'KeyO': return { projector: true };
       case 'KeyH': case 'Slash': return { overlay: 'help' };
       case 'Escape': return { close: true };
@@ -295,8 +303,9 @@
 
   // The timer page for one match. env: {bells, settings, still (a screenshot: no sound hint), pinDock,
   // console (open as the console beside a projector), emit(name, arg) to the app's listeners, onNewMatch() for
-  // 新的一场 on the end card, onEdit(formatId) for E, onProjector() for O (false when no window could open),
-  // blocked() true while the editor covers the timer and its keys}.
+  // 新的一场 on the end card and newLabel to call it something else, onEdit(formatId) for E, onSetup() for
+  // Shift+E or Esc on the title card, onProjector() for O (false when no window could open), blocked() true
+  // while the editor covers the timer and its keys}.
   function mountTimer(root, first, env) {
     const bells = env.bells, settings = env.settings, still = !!env.still, emit = env.emit;
     let session = first;
@@ -305,6 +314,9 @@
     attr(dock, 'role', 'group');   // not a toolbar: the arrow keys belong to the timer
     attr(dock, 'aria-label', '计时控制');
     dock.innerHTML = DOCK;
+    // The end card's button, where a match file restarts its own match instead.
+    const relabel = box => { if (env.newLabel) text(box.querySelector('button[data-act="new"] span'), env.newLabel); };
+    relabel(dock);
     const status = el('div', 'dt-status');
     status.innerHTML = STATUS;
     root.appendChild(dock);
@@ -451,9 +463,12 @@
       const cmd = command(code, !!k.shiftKey);
       if (!cmd) return false;
       if (k.repeat && !cmd.hold) return true;   // swallowed, so a held space neither repeats nor scrolls
+      // On the title card, with nothing open over it, Esc and Shift+E go back to the setup page (new spec §4.1).
+      const toSetup = session.cursor < 0 && !!env.onSetup;
       if (cmd.close) {
-        if (!overlay) return false;
-        closeOverlay();
+        if (overlay) closeOverlay();
+        else if (toSetup) env.onSetup();
+        else return false;
         return true;
       }
       if (cmd.twice) {
@@ -468,6 +483,11 @@
         return true;
       }
       armed = null;
+      if (cmd.setup && toSetup) {
+        closeOverlay();
+        env.onSetup();
+        return true;
+      }
       if (cmd.editor) {
         closeOverlay();
         env.onEdit(session.format.id);
@@ -733,6 +753,7 @@
       const box = el('div', 'dt-console');
       attr(box, 'data-theme', 'hall');   // the timekeeper's desk keeps the default palette, whatever the room shows
       box.innerHTML = CONSOLE;
+      relabel(box);
       const preview = box.querySelector('.dt-preview');
       preview.classList.add('dt-stage-host');
       preview.appendChild(stage.el);
@@ -910,7 +931,7 @@
     }
 
     const end = DT.sync.createProjectorEnd({
-      target: env.window, opener: env.window.opener || null, storage: env.storage,
+      target: env.window, opener: env.window.opener || null, storage: env.storage, sessionKey: env.sessionKey,
       onState(m) { session = m.session; draw(DT.clock.now()); },
       onEvents: pulse,
       onToast: message => stage.toast(message),
@@ -936,13 +957,14 @@
     };
   }
 
-  // The projector route's controller: it only shows, so the timer methods do nothing.
+  // The projector route's controller: it only shows, so the timer methods do nothing. Opened from a match
+  // file, it follows that file's saved session (boot has set the namespace).
   function bootProjector(root, o, host) {
     let storage = o.storage || null;
     if (!storage) { try { storage = host.localStorage || null; } catch (e) { storage = null; } }
     root.classList.add('dt-app');
     if (host === window) document.title = '投影 - 辩论计时器';
-    const handle = mountProjector(root, { window: host, storage });
+    const handle = mountProjector(root, { window: host, storage, sessionKey: DT.store.sessionKey() });
     return {
       route: () => 'projector', session: handle.session, view: handle.view,
       key: () => false, act: () => false, openOverlay: () => false, closeOverlay() {},
@@ -950,6 +972,7 @@
       destroy() {
         handle.destroy();
         root.classList.remove('dt-app');
+        DT.store.setNamespace(null);
       },
     };
   }
@@ -957,13 +980,16 @@
   // Opens the page on its route and moves between the setup page and the timer. The returned controller
   // speaks for the timer while it is on screen; on the setup page its timer methods do nothing.
   // o.window stands for this browser window (tests pass a stand-in); o.pollMs is how often a closed
-  // projector window is noticed.
+  // projector window is noticed; o.preset stands for the page's #dt-preset block (null: none).
   function boot(opts) {
     const o = opts || {};
     const root = o.root;
     const host = o.window || window;
     if (o.clock) DT.clock.set(() => o.clock.now());
     const route = o.route ? { name: o.route } : routeOf(o.location || window.location);
+    // A match file (new spec §4.3) keeps its session and last match under its own keys. Demos have none.
+    const preset = route.name === 'demo' ? null : 'preset' in o ? o.preset : DT.preset.read();
+    DT.store.setNamespace(preset ? preset.id : null);
     if (route.name === 'projector') return bootProjector(root, o, host);
     const bells = o.bells || DT.bells;
     let demo = null;
@@ -1091,16 +1117,27 @@
       const x = extra || {};
       const env = {
         bells, settings, still: route.name === 'demo' && route.frozen, pinDock: !!x.pinDock, emit,
-        console: !!projector || !!x.console, onNewMatch: newMatch, onEdit: formatId => openEditor(formatId),
-        onProjector: openProjector, blocked: () => !!editor,
+        console: !!projector || !!x.console, onNewMatch: newMatch, newLabel: preset ? RESTART_LABEL : null,
+        onEdit: formatId => openEditor(formatId), onSetup: () => showSetup(), onProjector: openProjector,
+        blocked: () => !!editor,
       };
       screen = { name: 'timer', handle: mountTimer(root, session, env) };
       pushState();
     }
 
+    // A fresh match from the file's preset, on its title card. The preset's format stays out of the library.
+    function presetSession(now) {
+      const session = DT.engine.createSession(preset.format, preset.match, now, { theme: preset.theme });
+      DT.store.saveSession(session);
+      return session;
+    }
+
+    // The match is over, so there is nothing to resume: a match file starts its own match again, the plain
+    // timer goes back to the setup page.
     function newMatch() {
-      DT.store.clearSession();   // the match is over: nothing to resume
-      showSetup();
+      DT.store.clearSession();
+      if (preset) showTimer(presetSession(DT.clock.now()));
+      else showSetup();
     }
 
     // `typed`: what was on the page before the editor, with the format last looked at in the editor chosen.
@@ -1112,6 +1149,12 @@
         lastMatch: typed || DT.store.loadLastMatch(),
         resumable: saved ? resumeInfo(saved) : null,
         themes: themeList(),
+        canExport: !!DT.preset.sourceParts(),
+        onExport(format, match, theme) {
+          const p = DT.preset.make(format, match, theme, DT.clock.now());
+          DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(DT.preset.sourceParts(), p), 'text/html');
+          handle.toast(EXPORTED);
+        },
         onStart(format, match, theme) {
           const last = { formatId: format.id };
           LAST_MATCH.forEach(k => { last[k] = match[k]; });
@@ -1151,6 +1194,9 @@
         openEditor(demo.session.format.id);
         stageEditorDemo(root, demo.editor);
       }
+    } else if (preset) {
+      const now = DT.clock.now();
+      showTimer(resumable(DT.store.loadSession(), now) || presetSession(now));
     } else if (route.name === 'timer') {
       const now = DT.clock.now();
       showTimer(resumable(DT.store.loadSession(), now) || newSession(o, now));
@@ -1179,12 +1225,27 @@
         if (screen) screen.handle.destroy();
         root.classList.remove('dt-app');
         Object.keys(listeners).forEach(k => { listeners[k] = []; });
+        DT.store.setNamespace(null);
       },
     };
   }
 
+  // ?exportProbe=1: no app, just the page a fixed match would export, as the text of the pre #export-probe,
+  // for tests/test_export.py to open in its turn.
+  function exportProbe() {
+    const format = DT.BUILTIN_FORMATS.find(f => f.id === PROBE.format);
+    const parts = DT.preset.sourceParts();
+    const pre = el('pre');
+    pre.id = 'export-probe';
+    pre.textContent = parts ? DT.preset.buildHtml(parts, DT.preset.make(format, PROBE.match, PROBE.theme, DT.clock.now())) : '';
+    document.body.appendChild(pre);
+  }
+
   function autoboot() {
-    if (document.body.hasAttribute('data-dt-autoboot')) boot({ root: document.getElementById('app') });
+    DT.preset.captureSource();   // first, before anything changes the page: an export copies it as loaded
+    if (!document.body.hasAttribute('data-dt-autoboot')) return;
+    if (new URLSearchParams(window.location.search).get('exportProbe') === '1') exportProbe();
+    else boot({ root: document.getElementById('app') });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autoboot);
   else autoboot();

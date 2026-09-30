@@ -2,9 +2,10 @@
 (function (DT) {
   'use strict';
 
-  const KEYS = {
+  const PLAIN_KEYS = {
     formats: 'dt.formats.v1', session: 'dt.session.v1', settings: 'dt.settings.v1', lastMatch: 'dt.lastMatch.v1',
   };
+  let KEYS = PLAIN_KEYS;
   const END_BELLS = ['double', 'triple', 'long', 'none', 'chime'];
   const HISTORY_LIMIT = 20;
   const VARIANT_NAME_MAX = 38;   // an inserted stage is named 正方 / 反方 + this, and stage names stop at 40
@@ -261,6 +262,30 @@
     return list.concat([add]);
   }
 
+  // ---- namespaces: a match file keeps its session and last match apart (new spec §4.3) ----
+  // Every file:// page shares one localStorage in Edge, so without this a plain timer's unfinished match
+  // would turn up in a match file. The format library and the settings stay shared.
+  function setNamespace(ns) {
+    KEYS = typeof ns === 'string' && ns ? Object.assign({}, PLAIN_KEYS, {
+      session: 'dt.m.' + ns + '.session.v1', lastMatch: 'dt.m.' + ns + '.lastMatch.v1',
+    }) : PLAIN_KEYS;
+  }
+  function sessionKey() { return KEYS.session; }
+
+  // ---- files ----
+  // A download through a temporary link: the editor's format export and the match export share it.
+  function saveFile(name, text, mime = 'application/json') {
+    const url = URL.createObjectURL(new Blob([text], { type: mime }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.hidden = true;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   // ---- session, settings, last match ----
   function loadSession() { const s = readJSON(KEYS.session); return isObj(s) ? s : null; }
   function saveSession(s) {
@@ -281,5 +306,6 @@
     useStorage, validateFormat, parseDuration, formatDuration, loadFormats, saveFormats, isPristine, restoreBuiltin,
     newFormat, duplicateFormat, newStage, uid, exportFormats, exportFileName, parseImport, addImported,
     loadSession, saveSession, clearSession, loadSettings, saveSettings, loadLastMatch, saveLastMatch,
+    setNamespace, sessionKey, saveFile,
   };
 })(window.DT = window.DT || {});

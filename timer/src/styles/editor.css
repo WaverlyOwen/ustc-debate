@@ -355,6 +355,34 @@
 .dt-setup .dt-button[data-primary] { border-color: var(--ink); background: var(--ink); color: var(--ground); font-weight: 600; }
 .dt-setup .dt-button[data-primary]:hover { background: color-mix(in oklab, var(--ink) 86%, var(--ground)); }
 .dt-setup-start { padding: .7em 2.4em; font-size: 1.06em; letter-spacing: .3em; }
+/* 导出这一场: a plain button like 编辑赛制, beside the one solid one; greyed in the dev shell, which has no
+   single file to copy. */
+.dt-setup [data-action="export"] { padding: .7em 1.4em; }
+.dt-setup .dt-button:disabled { opacity: .45; cursor: default; }
+.dt-setup .dt-button:disabled:hover { background: none; }
+
+/* The notice drops in from the top edge like the stage's toast, and folds away again. */
+.dt-setup > .dt-setup-notice {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 2;
+  width: max-content;
+  max-width: min(92vw, 44em);
+  margin: 0;
+  padding: .8em 1.8em;
+  border-bottom: 2px solid var(--accent);
+  border-radius: 0 0 .7em .7em;
+  background: var(--panel);
+  box-shadow: 0 .6em 1.6em rgb(0 0 0 / .28);
+  color: var(--ink);
+  letter-spacing: .06em;
+  translate: -50% -110%;
+  transition: translate 200ms cubic-bezier(.2, .8, .2, 1);   /* the stage toast's --ease-out */
+}
+.dt-setup > .dt-setup-notice[data-shown] { translate: -50% 0; }
+.dt-setup > .dt-setup-notice:empty { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) { .dt-setup > .dt-setup-notice { transition: none; } }
 
 @media (max-width: 760px) {
   .dt-setup-body { grid-template-columns: minmax(0, 1fr); }

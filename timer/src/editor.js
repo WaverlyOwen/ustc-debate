@@ -111,24 +111,12 @@
     });
   }
 
-  function saveFile(name, text) {
-    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-    const a = el('a');
-    a.href = url;
-    a.download = name;
-    a.hidden = true;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
   function mount(root, opts) {
     const o = opts || {};
     let list = Array.isArray(o.formats) ? o.formats.slice() : [];
     const themes = Array.isArray(o.themes) && o.themes.length ? o.themes : [{ id: 'hall', name: '堂' }];
     const pick = o.pickFiles || pickFiles;
-    const save = o.saveFile || saveFile;
+    const save = o.saveFile || DT.store.saveFile;
 
     let currentId = null;
     let draft = null;            // the chosen format as edited; list keeps the last version that validated

@@ -1531,6 +1531,34 @@ body {
 .dt-setup .dt-button[data-primary] { border-color: var(--ink); background: var(--ink); color: var(--ground); font-weight: 600; }
 .dt-setup .dt-button[data-primary]:hover { background: color-mix(in oklab, var(--ink) 86%, var(--ground)); }
 .dt-setup-start { padding: .7em 2.4em; font-size: 1.06em; letter-spacing: .3em; }
+/* 导出这一场: a plain button like 编辑赛制, beside the one solid one; greyed in the dev shell, which has no
+   single file to copy. */
+.dt-setup [data-action="export"] { padding: .7em 1.4em; }
+.dt-setup .dt-button:disabled { opacity: .45; cursor: default; }
+.dt-setup .dt-button:disabled:hover { background: none; }
+
+/* The notice drops in from the top edge like the stage's toast, and folds away again. */
+.dt-setup > .dt-setup-notice {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 2;
+  width: max-content;
+  max-width: min(92vw, 44em);
+  margin: 0;
+  padding: .8em 1.8em;
+  border-bottom: 2px solid var(--accent);
+  border-radius: 0 0 .7em .7em;
+  background: var(--panel);
+  box-shadow: 0 .6em 1.6em rgb(0 0 0 / .28);
+  color: var(--ink);
+  letter-spacing: .06em;
+  translate: -50% -110%;
+  transition: translate 200ms cubic-bezier(.2, .8, .2, 1);   /* the stage toast's --ease-out */
+}
+.dt-setup > .dt-setup-notice[data-shown] { translate: -50% 0; }
+.dt-setup > .dt-setup-notice:empty { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) { .dt-setup > .dt-setup-notice { transition: none; } }
 
 @media (max-width: 760px) {
   .dt-setup-body { grid-template-columns: minmax(0, 1fr); }
@@ -5331,9 +5359,10 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
 (function (DT) {
   'use strict';
 
-  const KEYS = {
+  const PLAIN_KEYS = {
     formats: 'dt.formats.v1', session: 'dt.session.v1', settings: 'dt.settings.v1', lastMatch: 'dt.lastMatch.v1',
   };
+  let KEYS = PLAIN_KEYS;
   const END_BELLS = ['double', 'triple', 'long', 'none', 'chime'];
   const HISTORY_LIMIT = 20;
   const VARIANT_NAME_MAX = 38;   // an inserted stage is named 正方 / 反方 + this, and stage names stop at 40
@@ -5590,6 +5619,30 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
     return list.concat([add]);
   }
 
+  // ---- namespaces: a match file keeps its session and last match apart (new spec §4.3) ----
+  // Every file:// page shares one localStorage in Edge, so without this a plain timer's unfinished match
+  // would turn up in a match file. The format library and the settings stay shared.
+  function setNamespace(ns) {
+    KEYS = typeof ns === 'string' && ns ? Object.assign({}, PLAIN_KEYS, {
+      session: 'dt.m.' + ns + '.session.v1', lastMatch: 'dt.m.' + ns + '.lastMatch.v1',
+    }) : PLAIN_KEYS;
+  }
+  function sessionKey() { return KEYS.session; }
+
+  // ---- files ----
+  // A download through a temporary link: the editor's format export and the match export share it.
+  function saveFile(name, text, mime = 'application/json') {
+    const url = URL.createObjectURL(new Blob([text], { type: mime }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.hidden = true;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   // ---- session, settings, last match ----
   function loadSession() { const s = readJSON(KEYS.session); return isObj(s) ? s : null; }
   function saveSession(s) {
@@ -5610,7 +5663,111 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
     useStorage, validateFormat, parseDuration, formatDuration, loadFormats, saveFormats, isPristine, restoreBuiltin,
     newFormat, duplicateFormat, newStage, uid, exportFormats, exportFileName, parseImport, addImported,
     loadSession, saveSession, clearSession, loadSettings, saveSettings, loadLastMatch, saveLastMatch,
+    setNamespace, sessionKey, saveFile,
   };
+})(window.DT = window.DT || {});
+
+/* === preset.js === */
+/* preset.js: 导出这一场 (new spec §4): a match file is this page's own source plus a preset block that names
+   the format, the match and the theme, so a double click opens straight on that match's title card. */
+(function (DT) {
+  'use strict';
+  const KIND = 'debate-timer-match';
+  const MAIN_ID = 'dt-main';       // build.py tags the main script so; the preset block goes just before it
+  const PRESET_ID = 'dt-preset';
+  const SCHEMA = 1;
+  const APP_TITLE = '辩论计时器';
+  const MOTION_CHARS = 16;   // a file named after the motion takes this much of it
+  const MATCH_TEXT = ['title', 'proMotion', 'conMotion', 'proTeam', 'conTeam'];
+
+  const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  const clone = v => JSON.parse(JSON.stringify(v));
+
+  // ---- the page's own source, read before the app changes anything ----
+  let source = null;
+
+  // The built page has one <style> and one main script (id dt-main); the dev shell links its files, so it has
+  // no source to copy and cannot export. An old preset block is not part of the source: a new one replaces it.
+  function captureSource(doc = document) {
+    const main = doc.getElementById(MAIN_ID);
+    const style = doc.querySelector('head > style');
+    source = main && style ? {
+      lang: doc.documentElement.getAttribute('lang') || 'zh-CN',
+      title: doc.title,
+      style: style.textContent,
+      main: main.textContent,
+    } : null;
+  }
+
+  function sourceParts() { return source ? Object.assign({}, source) : null; }
+
+  // ---- the preset ----
+
+  function make(format, match, theme, now) {
+    const m = isObj(match) ? match : {};
+    const out = {};
+    MATCH_TEXT.forEach(k => { out[k] = typeof m[k] === 'string' ? m[k] : ''; });
+    out.proSeat = m.proSeat === 'right' ? 'right' : 'left';
+    return {
+      kind: KIND, schema: SCHEMA, id: DT.store.uid('m'), createdAt: now,
+      format: clone(format), match: out, theme: String(theme || 'hall'),
+    };
+  }
+
+  // What names the match: its title, else the pro motion's first characters, else the format.
+  function label(preset) {
+    const m = preset.match || {};
+    const title = String(m.title || '').trim();
+    if (title) return title;
+    const motion = String(m.proMotion || '').trim();
+    if (motion) return Array.from(motion).slice(0, MOTION_CHARS).join('');
+    return String((preset.format && preset.format.name) || APP_TITLE).trim();
+  }
+
+  // Windows forbids these in a file name, and drops trailing dots and spaces.
+  function fileName(preset) {
+    const base = label(preset).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/[. ]+$/, '');
+    return (base || APP_TITLE) + '.html';
+  }
+
+  const escapeText = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // The whole page, with the preset before the main script. Every < in the JSON is written <, so no
+  // text a timekeeper pastes into a motion can close the block (or open a comment) early.
+  function buildHtml(parts, preset) {
+    const json = JSON.stringify(preset).replace(/</g, '\\u003c');
+    return '<!doctype html>\n' +
+      '<html lang="' + escapeText(parts.lang).replace(/"/g, '&quot;') + '"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<title>' + escapeText(label(preset) + '：' + APP_TITLE) + '</title>\n' +
+      '<style>' + parts.style + '</style></head>\n' +
+      '<body data-dt-autoboot><div id="app"></div>\n' +
+      '<script type="application/json" id="' + PRESET_ID + '">' + json + '<\/script>\n' +
+      '<script id="' + MAIN_ID + '">' + parts.main + '<\/script></body></html>\n';
+  }
+
+  // The page's preset, or null. A block that cannot be used is reported and ignored, so the page falls back
+  // to the plain timer instead of a blank screen.
+  function read(doc = document) {
+    const block = doc.getElementById(PRESET_ID);
+    if (!block) return null;
+    let p = null;
+    try { p = JSON.parse(block.textContent); } catch (e) { p = null; }
+    const why = !isObj(p) ? '不是有效的 JSON'
+      : p.kind !== KIND ? '类型不对'
+      : !(typeof p.schema === 'number' && p.schema <= SCHEMA) ? '来自更新版本的计时器'
+      : !(typeof p.id === 'string' && p.id) ? '缺少编号'
+      : !isObj(p.match) ? '缺少这一场的信息'
+      : DT.store.validateFormat(p.format).length ? '赛制不对：' + DT.store.validateFormat(p.format)[0]
+      : null;
+    if (why) {
+      console.warn('这个文件里的比赛预设用不了（' + why + '），按普通计时器打开');
+      return null;
+    }
+    return p;
+  }
+
+  DT.preset = { captureSource, sourceParts, buildHtml, make, read, fileName };
 })(window.DT = window.DT || {});
 
 /* === bells.js === */
@@ -6578,6 +6735,8 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
   const ENTER = ['Enter', 'NumpadEnter'];
   // What every theme thumbnail shows (spec §3.1): this stage of this format, running with this much used.
   const SAMPLE = { format: 'ustc-freshman-cup', stage: '正方一辩开篇立论', used: 0.4 };
+  const NOTICE_MS = 6000;   // how long a notice stays up
+  const NO_EXPORT = '在构建好的 debate-timer.html 里才能导出';
   let mounts = 0;   // keeps option ids unique if the page is mounted again
 
   // Static markup only; format names and match text go in through textContent and value.
@@ -6617,7 +6776,8 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
     '<p class="dt-setup-hint dt-setup-theme-desc"></p></fieldset>' +
     '<footer class="dt-setup-foot">' +
     '<button type="button" class="dt-button dt-setup-start" data-action="start" data-primary>开始这一场</button>' +
-    '</footer></section></div>';
+    '</footer></section></div>' +
+    '<p class="dt-setup-notice" role="status" aria-live="polite"></p>';
 
   function el(tag, cls, content) {
     const e = document.createElement(tag);
@@ -6856,14 +7016,41 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
     });
     paintSeat();
 
-    function start() {
-      if (current < 0 || !o.onStart) return;
+    function matchNow() {
       const match = {};
       TEXT_FIELDS.forEach(k => { match[k] = field(k).value.trim(); });
       match.proSeat = page.querySelector('input[name="proSeat"]:checked').value;
-      o.onStart(options[current].format, match, chosen.dataset.themeId);
+      return match;
+    }
+    function start() {
+      if (current < 0 || !o.onStart) return;
+      o.onStart(options[current].format, matchNow(), chosen.dataset.themeId);
     }
     $('button[data-action="start"]').addEventListener('click', start);
+
+    // 导出这一场: a quiet button beside 开始这一场. Only the built single file has its own source to copy.
+    if (o.onExport) {
+      const exp = button('导出这一场', 'export');
+      if (!o.canExport) {
+        exp.disabled = true;
+        exp.title = NO_EXPORT;
+      }
+      exp.addEventListener('click', () => {
+        if (current >= 0 && o.canExport) o.onExport(options[current].format, matchNow(), chosen.dataset.themeId);
+      });
+      const startBtn = $('button[data-action="start"]');
+      startBtn.parentNode.insertBefore(exp, startBtn);
+    }
+
+    // A line at the top of the page for what just happened (the export's where-to-now).
+    const notice = $('.dt-setup-notice');
+    let noticeTimer = null;
+    function toast(message) {
+      clearTimeout(noticeTimer);
+      notice.textContent = message;
+      notice.setAttribute('data-shown', '');
+      noticeTimer = setTimeout(() => notice.removeAttribute('data-shown'), NOTICE_MS);
+    }
 
     // Enter steps through the text boxes and starts the match from the last one.
     // An Enter that ends an input-method composition only commits the text.
@@ -6892,7 +7079,9 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
 
     return {
       el: page,
+      toast,
       destroy() {
+        clearTimeout(noticeTimer);
         thumbs.forEach(t => t.destroy());
         page.remove();
       },
@@ -7016,24 +7205,12 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
     });
   }
 
-  function saveFile(name, text) {
-    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-    const a = el('a');
-    a.href = url;
-    a.download = name;
-    a.hidden = true;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
   function mount(root, opts) {
     const o = opts || {};
     let list = Array.isArray(o.formats) ? o.formats.slice() : [];
     const themes = Array.isArray(o.themes) && o.themes.length ? o.themes : [{ id: 'hall', name: '堂' }];
     const pick = o.pickFiles || pickFiles;
-    const save = o.saveFile || saveFile;
+    const save = o.saveFile || DT.store.saveFile;
 
     let currentId = null;
     let draft = null;            // the chosen format as edited; list keeps the last version that validated
@@ -8005,11 +8182,13 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
   }
 
   // The projector's end. opts: {target (this window), opener (the console), storage (read for the saved
-  // session at start, or null), onState({session, settings}), onKey(code, event) for every key pressed here,
-  // onEvents(list), onToast(message)}. Keys other than F go to the console; F stays for full screen here.
+  // session at start, or null), sessionKey (where the console saves it; a match file has its own),
+  // onState({session, settings}), onKey(code, event) for every key pressed here, onEvents(list),
+  // onToast(message)}. Keys other than F go to the console; F stays for full screen here.
   function createProjectorEnd(opts) {
     const o = opts || {};
     const target = o.target || window;
+    const sessionKey = o.sessionKey || SESSION_KEY;
     let stopped = false;
 
     function state(session, settings) {
@@ -8039,7 +8218,7 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
 
     // Written by the console on every change: this keeps the picture going while the console reloads.
     function onStorage(ev) {
-      if (!ev || ev.key !== SESSION_KEY || !ev.newValue) return;
+      if (!ev || ev.key !== sessionKey || !ev.newValue) return;
       state(parse(ev.newValue), null);
     }
 
@@ -8048,7 +8227,7 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
     target.addEventListener('storage', onStorage);
     if (o.storage) {
       let saved = null;
-      try { saved = o.storage.getItem(SESSION_KEY); } catch (e) { saved = null; }
+      try { saved = o.storage.getItem(sessionKey); } catch (e) { saved = null; }
       if (saved) state(parse(saved), null);
     }
 
@@ -8205,6 +8384,13 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
   const LAST_MATCH = ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'];   // prefilled next time (§5.9)
   // Used when build.py has not injected DT.THEMES (the test page loads the sources directly).
   const FALLBACK_THEMES = [{ id: 'hall', name: '堂' }, { id: 'daylight', name: '昼' }, { id: 'chroma', name: '绿幕' }];
+  const EXPORTED = '已导出。把这个文件拷到比赛用的电脑上，双击就能直接开始这一场';
+  const RESTART_LABEL = '重新开始这一场';   // 新的一场 on the end card of a match file (new spec §4.1)
+  // What ?exportProbe=1 exports, for the end-to-end test (new spec §4.4).
+  const PROBE = {
+    format: 'ustc-freshman-cup', theme: 'hall',
+    match: { title: '探针场', proMotion: '探针辩题正方', conMotion: '探针辩题反方', proTeam: '探针队甲', conTeam: '探针队乙', proSeat: 'left' },
+  };
 
   // Keys in the help overlay (spec §5.8).
   const HELP = [
@@ -8224,11 +8410,12 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
     [['S'], '环节列表'],
     [['Shift+S'], '本场记录'],
     [['E'], '编辑赛制（这一场照常进行）'],
+    [['Shift+E'], '开场卡上：回到开赛页'],
     [['O'], '打开投影窗口（这个窗口变成操作台）'],
     [['F'], '全屏'],
     [['M'], '静音'],
     [['H', '?'], '帮助'],
-    [['Esc'], '关闭覆盖层'],
+    [['Esc'], '关闭覆盖层；开场卡上没有覆盖层时：回到开赛页'],
   ];
 
   const ICON = {
@@ -8439,7 +8626,7 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
       case 'KeyF': return { act: ['fullscreen'] };
       case 'KeyX': return { overlay: 'insert' };
       case 'KeyS': return { overlay: shift ? 'record' : 'stages' };
-      case 'KeyE': return { editor: true };
+      case 'KeyE': return shift ? { setup: true, editor: true } : { editor: true };
       case 'KeyO': return { projector: true };
       case 'KeyH': case 'Slash': return { overlay: 'help' };
       case 'Escape': return { close: true };
@@ -8487,8 +8674,9 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
 
   // The timer page for one match. env: {bells, settings, still (a screenshot: no sound hint), pinDock,
   // console (open as the console beside a projector), emit(name, arg) to the app's listeners, onNewMatch() for
-  // 新的一场 on the end card, onEdit(formatId) for E, onProjector() for O (false when no window could open),
-  // blocked() true while the editor covers the timer and its keys}.
+  // 新的一场 on the end card and newLabel to call it something else, onEdit(formatId) for E, onSetup() for
+  // Shift+E or Esc on the title card, onProjector() for O (false when no window could open), blocked() true
+  // while the editor covers the timer and its keys}.
   function mountTimer(root, first, env) {
     const bells = env.bells, settings = env.settings, still = !!env.still, emit = env.emit;
     let session = first;
@@ -8497,6 +8685,9 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
     attr(dock, 'role', 'group');   // not a toolbar: the arrow keys belong to the timer
     attr(dock, 'aria-label', '计时控制');
     dock.innerHTML = DOCK;
+    // The end card's button, where a match file restarts its own match instead.
+    const relabel = box => { if (env.newLabel) text(box.querySelector('button[data-act="new"] span'), env.newLabel); };
+    relabel(dock);
     const status = el('div', 'dt-status');
     status.innerHTML = STATUS;
     root.appendChild(dock);
@@ -8643,9 +8834,12 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
       const cmd = command(code, !!k.shiftKey);
       if (!cmd) return false;
       if (k.repeat && !cmd.hold) return true;   // swallowed, so a held space neither repeats nor scrolls
+      // On the title card, with nothing open over it, Esc and Shift+E go back to the setup page (new spec §4.1).
+      const toSetup = session.cursor < 0 && !!env.onSetup;
       if (cmd.close) {
-        if (!overlay) return false;
-        closeOverlay();
+        if (overlay) closeOverlay();
+        else if (toSetup) env.onSetup();
+        else return false;
         return true;
       }
       if (cmd.twice) {
@@ -8660,6 +8854,11 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
         return true;
       }
       armed = null;
+      if (cmd.setup && toSetup) {
+        closeOverlay();
+        env.onSetup();
+        return true;
+      }
       if (cmd.editor) {
         closeOverlay();
         env.onEdit(session.format.id);
@@ -8925,6 +9124,7 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
       const box = el('div', 'dt-console');
       attr(box, 'data-theme', 'hall');   // the timekeeper's desk keeps the default palette, whatever the room shows
       box.innerHTML = CONSOLE;
+      relabel(box);
       const preview = box.querySelector('.dt-preview');
       preview.classList.add('dt-stage-host');
       preview.appendChild(stage.el);
@@ -9102,7 +9302,7 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
     }
 
     const end = DT.sync.createProjectorEnd({
-      target: env.window, opener: env.window.opener || null, storage: env.storage,
+      target: env.window, opener: env.window.opener || null, storage: env.storage, sessionKey: env.sessionKey,
       onState(m) { session = m.session; draw(DT.clock.now()); },
       onEvents: pulse,
       onToast: message => stage.toast(message),
@@ -9128,13 +9328,14 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
     };
   }
 
-  // The projector route's controller: it only shows, so the timer methods do nothing.
+  // The projector route's controller: it only shows, so the timer methods do nothing. Opened from a match
+  // file, it follows that file's saved session (boot has set the namespace).
   function bootProjector(root, o, host) {
     let storage = o.storage || null;
     if (!storage) { try { storage = host.localStorage || null; } catch (e) { storage = null; } }
     root.classList.add('dt-app');
     if (host === window) document.title = '投影 - 辩论计时器';
-    const handle = mountProjector(root, { window: host, storage });
+    const handle = mountProjector(root, { window: host, storage, sessionKey: DT.store.sessionKey() });
     return {
       route: () => 'projector', session: handle.session, view: handle.view,
       key: () => false, act: () => false, openOverlay: () => false, closeOverlay() {},
@@ -9142,6 +9343,7 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
       destroy() {
         handle.destroy();
         root.classList.remove('dt-app');
+        DT.store.setNamespace(null);
       },
     };
   }
@@ -9149,13 +9351,16 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
   // Opens the page on its route and moves between the setup page and the timer. The returned controller
   // speaks for the timer while it is on screen; on the setup page its timer methods do nothing.
   // o.window stands for this browser window (tests pass a stand-in); o.pollMs is how often a closed
-  // projector window is noticed.
+  // projector window is noticed; o.preset stands for the page's #dt-preset block (null: none).
   function boot(opts) {
     const o = opts || {};
     const root = o.root;
     const host = o.window || window;
     if (o.clock) DT.clock.set(() => o.clock.now());
     const route = o.route ? { name: o.route } : routeOf(o.location || window.location);
+    // A match file (new spec §4.3) keeps its session and last match under its own keys. Demos have none.
+    const preset = route.name === 'demo' ? null : 'preset' in o ? o.preset : DT.preset.read();
+    DT.store.setNamespace(preset ? preset.id : null);
     if (route.name === 'projector') return bootProjector(root, o, host);
     const bells = o.bells || DT.bells;
     let demo = null;
@@ -9283,16 +9488,27 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
       const x = extra || {};
       const env = {
         bells, settings, still: route.name === 'demo' && route.frozen, pinDock: !!x.pinDock, emit,
-        console: !!projector || !!x.console, onNewMatch: newMatch, onEdit: formatId => openEditor(formatId),
-        onProjector: openProjector, blocked: () => !!editor,
+        console: !!projector || !!x.console, onNewMatch: newMatch, newLabel: preset ? RESTART_LABEL : null,
+        onEdit: formatId => openEditor(formatId), onSetup: () => showSetup(), onProjector: openProjector,
+        blocked: () => !!editor,
       };
       screen = { name: 'timer', handle: mountTimer(root, session, env) };
       pushState();
     }
 
+    // A fresh match from the file's preset, on its title card. The preset's format stays out of the library.
+    function presetSession(now) {
+      const session = DT.engine.createSession(preset.format, preset.match, now, { theme: preset.theme });
+      DT.store.saveSession(session);
+      return session;
+    }
+
+    // The match is over, so there is nothing to resume: a match file starts its own match again, the plain
+    // timer goes back to the setup page.
     function newMatch() {
-      DT.store.clearSession();   // the match is over: nothing to resume
-      showSetup();
+      DT.store.clearSession();
+      if (preset) showTimer(presetSession(DT.clock.now()));
+      else showSetup();
     }
 
     // `typed`: what was on the page before the editor, with the format last looked at in the editor chosen.
@@ -9304,6 +9520,12 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
         lastMatch: typed || DT.store.loadLastMatch(),
         resumable: saved ? resumeInfo(saved) : null,
         themes: themeList(),
+        canExport: !!DT.preset.sourceParts(),
+        onExport(format, match, theme) {
+          const p = DT.preset.make(format, match, theme, DT.clock.now());
+          DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(DT.preset.sourceParts(), p), 'text/html');
+          handle.toast(EXPORTED);
+        },
         onStart(format, match, theme) {
           const last = { formatId: format.id };
           LAST_MATCH.forEach(k => { last[k] = match[k]; });
@@ -9343,6 +9565,9 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
         openEditor(demo.session.format.id);
         stageEditorDemo(root, demo.editor);
       }
+    } else if (preset) {
+      const now = DT.clock.now();
+      showTimer(resumable(DT.store.loadSession(), now) || presetSession(now));
     } else if (route.name === 'timer') {
       const now = DT.clock.now();
       showTimer(resumable(DT.store.loadSession(), now) || newSession(o, now));
@@ -9371,12 +9596,27 @@ DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔
         if (screen) screen.handle.destroy();
         root.classList.remove('dt-app');
         Object.keys(listeners).forEach(k => { listeners[k] = []; });
+        DT.store.setNamespace(null);
       },
     };
   }
 
+  // ?exportProbe=1: no app, just the page a fixed match would export, as the text of the pre #export-probe,
+  // for tests/test_export.py to open in its turn.
+  function exportProbe() {
+    const format = DT.BUILTIN_FORMATS.find(f => f.id === PROBE.format);
+    const parts = DT.preset.sourceParts();
+    const pre = el('pre');
+    pre.id = 'export-probe';
+    pre.textContent = parts ? DT.preset.buildHtml(parts, DT.preset.make(format, PROBE.match, PROBE.theme, DT.clock.now())) : '';
+    document.body.appendChild(pre);
+  }
+
   function autoboot() {
-    if (document.body.hasAttribute('data-dt-autoboot')) boot({ root: document.getElementById('app') });
+    DT.preset.captureSource();   // first, before anything changes the page: an export copies it as loaded
+    if (!document.body.hasAttribute('data-dt-autoboot')) return;
+    if (new URLSearchParams(window.location.search).get('exportProbe') === '1') exportProbe();
+    else boot({ root: document.getElementById('app') });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autoboot);
   else autoboot();

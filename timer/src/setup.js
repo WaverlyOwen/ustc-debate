@@ -6,6 +6,8 @@
   const ENTER = ['Enter', 'NumpadEnter'];
   // What every theme thumbnail shows (spec §3.1): this stage of this format, running with this much used.
   const SAMPLE = { format: 'ustc-freshman-cup', stage: '正方一辩开篇立论', used: 0.4 };
+  const NOTICE_MS = 6000;   // how long a notice stays up
+  const NO_EXPORT = '在构建好的 debate-timer.html 里才能导出';
   let mounts = 0;   // keeps option ids unique if the page is mounted again
 
   // Static markup only; format names and match text go in through textContent and value.
@@ -45,7 +47,8 @@
     '<p class="dt-setup-hint dt-setup-theme-desc"></p></fieldset>' +
     '<footer class="dt-setup-foot">' +
     '<button type="button" class="dt-button dt-setup-start" data-action="start" data-primary>开始这一场</button>' +
-    '</footer></section></div>';
+    '</footer></section></div>' +
+    '<p class="dt-setup-notice" role="status" aria-live="polite"></p>';
 
   function el(tag, cls, content) {
     const e = document.createElement(tag);
@@ -284,14 +287,41 @@
     });
     paintSeat();
 
-    function start() {
-      if (current < 0 || !o.onStart) return;
+    function matchNow() {
       const match = {};
       TEXT_FIELDS.forEach(k => { match[k] = field(k).value.trim(); });
       match.proSeat = page.querySelector('input[name="proSeat"]:checked').value;
-      o.onStart(options[current].format, match, chosen.dataset.themeId);
+      return match;
+    }
+    function start() {
+      if (current < 0 || !o.onStart) return;
+      o.onStart(options[current].format, matchNow(), chosen.dataset.themeId);
     }
     $('button[data-action="start"]').addEventListener('click', start);
+
+    // 导出这一场: a quiet button beside 开始这一场. Only the built single file has its own source to copy.
+    if (o.onExport) {
+      const exp = button('导出这一场', 'export');
+      if (!o.canExport) {
+        exp.disabled = true;
+        exp.title = NO_EXPORT;
+      }
+      exp.addEventListener('click', () => {
+        if (current >= 0 && o.canExport) o.onExport(options[current].format, matchNow(), chosen.dataset.themeId);
+      });
+      const startBtn = $('button[data-action="start"]');
+      startBtn.parentNode.insertBefore(exp, startBtn);
+    }
+
+    // A line at the top of the page for what just happened (the export's where-to-now).
+    const notice = $('.dt-setup-notice');
+    let noticeTimer = null;
+    function toast(message) {
+      clearTimeout(noticeTimer);
+      notice.textContent = message;
+      notice.setAttribute('data-shown', '');
+      noticeTimer = setTimeout(() => notice.removeAttribute('data-shown'), NOTICE_MS);
+    }
 
     // Enter steps through the text boxes and starts the match from the last one.
     // An Enter that ends an input-method composition only commits the text.
@@ -320,7 +350,9 @@
 
     return {
       el: page,
+      toast,
       destroy() {
+        clearTimeout(noticeTimer);
         thumbs.forEach(t => t.destroy());
         page.remove();
       },

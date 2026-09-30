@@ -276,6 +276,39 @@
     assert.equal(u.box.firstChild.children.length, 0, 'destroy empties the root');
   });
 
+  DT.test('setup: export hands the chosen format, match and theme to onExport', () => {
+    const got = [];
+    const t = mount({ canExport: true, onExport: (f, m, th) => got.push([f.id, m.proTeam, th]) });
+    t.box.querySelector('button[data-action="export"]').click();
+    assert.equal(got.length, 1);
+    assert.equal(got[0][1], '物理学院');
+    t.h.destroy();
+  });
+  DT.test('setup: export is disabled in the dev shell', () => {
+    const t = mount({ canExport: false, onExport: () => { throw new Error('should not run'); } });
+    const b = t.box.querySelector('button[data-action="export"]');
+    assert.ok(b.disabled);
+    assert.ok(b.title.indexOf('debate-timer.html') >= 0);
+    t.h.destroy();
+  });
+  DT.test('setup: 导出这一场 is a plain button just left of 开始这一场, and the page can show a notice', () => {
+    const t = mount({ canExport: true, onExport() {} });
+    const foot = t.box.querySelector('.dt-setup-foot');
+    const b = foot.querySelector('button[data-action="export"]');
+    assert.equal(b.textContent, '导出这一场');
+    assert.equal(b.nextElementSibling, foot.querySelector('button[data-action="start"]'));
+    assert.ok(!b.hasAttribute('data-primary'));
+    const notice = t.box.querySelector('.dt-setup-notice');
+    assert.equal(notice.getAttribute('role'), 'status');
+    t.h.toast('已导出');
+    assert.equal(notice.textContent, '已导出');
+    assert.ok(notice.hasAttribute('data-shown'));
+    t.h.destroy();
+    const u = mount({ onExport: null });
+    assert.equal(u.box.querySelector('button[data-action="export"]'), null, 'no button without a handler');
+    u.h.destroy();
+  });
+
   // ---- routing (ui.js) ----
 
   function memStorage() {

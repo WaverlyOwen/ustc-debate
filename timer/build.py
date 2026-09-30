@@ -22,7 +22,7 @@ DEFAULT_FORMATS_DIR = HERE.parent / ".claude" / "skills" / "debate-prep" / "refe
 # The one source of truth for script order: src/index.html, the test page and the build follow it.
 # themes/*.js go in right after render.js, which holds the registry they register with.
 ORDER = [
-    "builtin-formats.js", "engine.js", "store.js", "bells.js", "render.js",
+    "builtin-formats.js", "engine.js", "store.js", "preset.js", "bells.js", "render.js",
     "setup.js", "editor.js", "sync.js", "demo.js", "ui.js",
 ]
 STYLES = ["styles/base.css", "styles/stage.css", "styles/console.css", "styles/editor.css"]

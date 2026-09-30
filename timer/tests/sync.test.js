@@ -342,4 +342,23 @@
       assert.equal(root.querySelector('.dt-preview .dt-title').textContent, '反方四辩质询正方一辩');
     } finally { c.destroy(); DT.clock.reset(); }
   });
+  DT.test('sync: a projector opened from a match file follows that file\'s session, not the plain timer\'s', () => {
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const storage = memStorage();
+    const preset = DT.preset.make(freshman(), MATCH, 'hall', T0);
+    storage.setItem('dt.session.v1', JSON.stringify(DT.engine.goto(DT.engine.createSession(freshman(), MATCH, T0), 4, T0)));
+    storage.setItem('dt.m.' + preset.id + '.session.v1', JSON.stringify(DT.engine.goto(DT.engine.createSession(freshman(), MATCH, T0), 1, T0)));
+    DT.clock.set(() => T0);
+    const me = fakeWin();
+    const c = DT.app.boot({ root: box.firstChild, route: 'projector', window: me, storage, bells: fakeBells(), preset });
+    try {
+      assert.equal(c.session().cursor, 1);
+      me.emit('storage', { key: 'dt.session.v1', newValue: storage.getItem('dt.session.v1') });
+      assert.equal(c.session().cursor, 1, 'a write by a plain timer in another tab is not this match');
+      const later = DT.engine.goto(DT.engine.createSession(freshman(), MATCH, T0), 2, T0);
+      me.emit('storage', { key: 'dt.m.' + preset.id + '.session.v1', newValue: JSON.stringify(later) });
+      assert.equal(c.session().cursor, 2);
+    } finally { c.destroy(); DT.clock.reset(); }
+    assert.equal(DT.store.sessionKey(), 'dt.session.v1', 'destroy leaves the plain keys in use again');
+  });
 })();

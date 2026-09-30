@@ -97,11 +97,13 @@
   }
 
   // The projector's end. opts: {target (this window), opener (the console), storage (read for the saved
-  // session at start, or null), onState({session, settings}), onKey(code, event) for every key pressed here,
-  // onEvents(list), onToast(message)}. Keys other than F go to the console; F stays for full screen here.
+  // session at start, or null), sessionKey (where the console saves it; a match file has its own),
+  // onState({session, settings}), onKey(code, event) for every key pressed here, onEvents(list),
+  // onToast(message)}. Keys other than F go to the console; F stays for full screen here.
   function createProjectorEnd(opts) {
     const o = opts || {};
     const target = o.target || window;
+    const sessionKey = o.sessionKey || SESSION_KEY;
     let stopped = false;
 
     function state(session, settings) {
@@ -131,7 +133,7 @@
 
     // Written by the console on every change: this keeps the picture going while the console reloads.
     function onStorage(ev) {
-      if (!ev || ev.key !== SESSION_KEY || !ev.newValue) return;
+      if (!ev || ev.key !== sessionKey || !ev.newValue) return;
       state(parse(ev.newValue), null);
     }
 
@@ -140,7 +142,7 @@
     target.addEventListener('storage', onStorage);
     if (o.storage) {
       let saved = null;
-      try { saved = o.storage.getItem(SESSION_KEY); } catch (e) { saved = null; }
+      try { saved = o.storage.getItem(sessionKey); } catch (e) { saved = null; }
       if (saved) state(parse(saved), null);
     }
 
