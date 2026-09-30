@@ -73,10 +73,26 @@
     const r = el.getBoundingClientRect();
     const m = /^inset\((.*)\)$/.exec(getComputedStyle(el).clipPath);
     assert.ok(m, 'an inset clip: ' + getComputedStyle(el).clipPath);
-    const parts = m[1].trim().split(/\s+(?![^(]*\))/);
+    // Split at the top-level spaces only: a value may be a min() or calc() with spaces inside.
+    const parts = [];
+    let depth = 0, cur = '';
+    for (const c of m[1].trim()) {
+      if (c === '(') depth++;
+      else if (c === ')') depth--;
+      if (/\s/.test(c) && depth === 0) { if (cur) parts.push(cur); cur = ''; } else cur += c;
+    }
+    if (cur) parts.push(cur);
     // inset(top right bottom left), shortened the usual CSS way.
     const right = parts[1] || parts[0], left = parts[3] || right;
-    const x = s => /%$/.test(s) ? parseFloat(s) / 100 * r.width : parseFloat(s);
+    // Each horizontal inset resolved in the element's own box, which its percentages refer to.
+    const x = s => {
+      const probe = document.createElement('i');
+      probe.style.cssText = 'position:absolute;left:0;top:0;height:1px;width:' + s;
+      el.appendChild(probe);
+      const w = probe.getBoundingClientRect().width;
+      probe.remove();
+      return w;
+    };
     return { left: r.left + x(left), right: r.right - x(right) };
   }
 
@@ -195,6 +211,52 @@
       const h = root.querySelector('.dt-deco').getBoundingClientRect(), f = root.querySelector('.dt-field').getBoundingClientRect();
       assert.near(px(haze.top), f.top - h.top, 1, where + ': where the hatching was');
       stage.destroy();
+    });
+  });
+
+  // The eraser misses the last stroke or two at the seat: a stub of the speaking side's hatching stays there as the
+  // time runs out and through overtime, clear of the digits, so the room still sees whose floor it is (spec §1.5).
+  // The eraser stops at the stub before the time is up, so nothing jumps back in when overtime begins.
+  DT.test('theme chalk: in overtime a stub of the speaker\'s hatching stays at the seat, clear of the digits', () => {
+    SEATINGS.forEach(([name, seat, from]) => {
+      const probe = mountBoard(singleAt(name, 60, seat));
+      const secs = 60 / parseFloat(probe.root.style.getPropertyValue('--used'));   // the stage's length
+      probe.stage.destroy();
+      [[secs * 0.985, 'running'], [secs + 7, 'over']].forEach(([t, phase]) => {
+        const { stage, root } = mountBoard(singleAt(name, t, seat), 1920, 1080);
+        const where = name + ' / ' + seat + ' / ' + phase;
+        if (phase === 'over') assert.equal(root.dataset.phase, 'over', where);
+        const box = root.getBoundingClientRect(), W = box.width;
+        const field = root.querySelector('.dt-field');
+        assert.ok(getComputedStyle(field).display !== 'none' && shown(pseudo(field, '::before')), where + ': the hatching');
+        const vis = visibleX(field);
+        const seatEdge = from === 'left' ? box.left : box.right;
+        const inner = from === 'left' ? vis.right : vis.left;
+        assert.near(from === 'left' ? vis.left : vis.right, seatEdge, 1, where + ': at the seat');
+        assert.near(Math.abs(inner - seatEdge), 0.06 * W, 2, where + ': a stub of 6cqw');
+        const d = root.querySelector('.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect();
+        assert.ok(from === 'left' ? inner + 0.02 * W < d.left : inner - 0.02 * W > d.right,
+          where + ': clear of the digits: ' + inner + ' vs ' + d.left + '–' + d.right);
+        // The eraser's dust lies along the stub's edge, not off the screen.
+        const dust = pseudo(root.querySelector('.dt-deco-over'), '::before');
+        assert.near(box.left + px(dust.left) + px(dust.width) / 2, inner, 0.02 * W, where + ': eraser dust at the stub');
+        stage.destroy();
+      });
+    });
+  });
+
+  DT.test('theme chalk: in overtime the haze of the speaker\'s chalk is heavier than while the time runs', () => {
+    [[OPENING, 'pro'], [REBUTTAL, 'con']].forEach(([name, side]) => {
+      const alpha = secs => {
+        const { stage, root } = mountBoard(singleAt(name, secs, 'left'));
+        const c = pseudo(root.querySelector('.dt-deco'), '::before').backgroundColor;
+        const phase = root.dataset.phase;
+        stage.destroy();
+        return [rgba(c)[3], phase];
+      };
+      const [running] = alpha(60), [over, phase] = alpha(240);
+      assert.equal(phase, 'over', name);
+      assert.ok(over >= 0.25 && over > running * 1.8, name + ' / ' + side + ': ' + running + ' → ' + over);
     });
   });
 

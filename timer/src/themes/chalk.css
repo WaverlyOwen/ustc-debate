@@ -48,6 +48,7 @@
   --hatch-bottom: 88cqh;
   --hatch-line: .6cqh;           /* one stroke of chalk, and the distance between strokes */
   --hatch-pitch: 1.8cqh;
+  --chalk-stub: 6cqw;            /* the last strokes at the seat that the eraser misses (see below) */
 }
 
 .dt-stage[data-theme="chalk"] {
@@ -97,20 +98,23 @@
   mask: var(--ends);
 }
 /* [data-mode] ranks these with stage.css's per-seat clip-path rules, which they replace: the same wipe toward the
-   seat, but open above and below, where the lines end unevenly as a hand hatches. */
+   seat, but open above and below, where the lines end unevenly as a hand hatches. The eraser never gets the last
+   strokes at the seat: a stub of --chalk-stub stays there as the time runs out and through overtime, clear of the
+   digits, so the room still sees whose floor it is (spec §1.5). The wipe stops at it, so nothing jumps back in
+   when overtime begins. */
 .dt-stage[data-theme="chalk"][data-mode] .dt-field {
   top: var(--hatch-top);
   bottom: auto;
   height: calc(var(--hatch-bottom) - var(--hatch-top));
-  clip-path: inset(-3cqh calc(var(--used) * 100%) -3cqh 0);
+  clip-path: inset(-3cqh min(var(--used) * 100%, 100% - var(--chalk-stub)) -3cqh 0);
 }
 .dt-stage[data-theme="chalk"][data-mode][data-pro-seat="right"][data-side="pro"] .dt-field,
 .dt-stage[data-theme="chalk"][data-mode][data-pro-seat="left"][data-side="con"] .dt-field {
-  clip-path: inset(-3cqh 0 -3cqh calc(var(--used) * 100%));
+  clip-path: inset(-3cqh 0 -3cqh min(var(--used) * 100%, 100% - var(--chalk-stub)));
 }
 
 /* The board never comes quite clean: over the hatched part, a haze of the speaking side's chalk in the eraser's
-   streaks. It shows where the lines have been wiped, and through overtime says whose floor it is (spec §1.5). */
+   streaks. It shows where the lines have been wiped, and with the stub says through overtime whose floor it is. */
 .dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"] .dt-deco::before {
   content: "";
   position: absolute;
@@ -124,6 +128,10 @@
   mask: var(--wiped), var(--fade-y);
   mask-composite: intersect;
 }
+/* In overtime all of the band but the stub is wiped, and the haze is heavier: the eraser has been over all of it. */
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco::before {
+  background-color: color-mix(in srgb, var(--side-chalk) 30%, transparent);
+}
 
 /* The eraser's dust along the edge of the wipe, softening where the lines were cut off. */
 .dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"] .dt-deco-over::before {
@@ -132,7 +140,7 @@
   position: absolute;
   top: calc(var(--hatch-top) - 2cqh);
   height: calc(var(--hatch-bottom) - var(--hatch-top) + 4cqh);
-  left: calc((1 - var(--used)) * 100% - var(--smear) / 2);
+  left: calc(max((1 - var(--used)) * 100%, var(--chalk-stub)) - var(--smear) / 2);
   width: var(--smear);
   background-color: color-mix(in srgb, var(--side-chalk) 34%, transparent);
   -webkit-mask: var(--wiped), linear-gradient(to right, transparent, #000 45% 55%, transparent), var(--fade-y);
@@ -142,7 +150,7 @@
 }
 .dt-stage[data-theme="chalk"][data-pro-seat="right"][data-side="pro"] .dt-deco-over::before,
 .dt-stage[data-theme="chalk"][data-pro-seat="left"][data-side="con"] .dt-deco-over::before {
-  left: calc(var(--used) * 100% - var(--smear) / 2);
+  left: calc(min(var(--used) * 100%, 100% - var(--chalk-stub)) - var(--smear) / 2);
 }
 
 /* ---- digits: chalk white, a grain of chalk at their edges, the body solid ---- */
