@@ -79,7 +79,7 @@
     'setup': { setup: true, at: 0, steps: [] },
     'setup-resume': Object.assign({ setup: true }, DUAL),   // the free debate left half way
     'editor': Object.assign({ editor: { expand: 1 } }, SINGLE),
-    'editor-error': Object.assign({ editor: { typo: [0, '3分半'] } }, SINGLE),
+    'editor-error': Object.assign({ editor: { typo: [0, '三分半'] } }, SINGLE),
     // The opening speech done in 2:57, the cross-examination running with 1:12 left (spec §5.7's sketch).
     'console': { console: true, at: 228, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle'], [177, 'toggle'],
       [180, 'goto', '反方四辩质询正方一辩'], [180, 'toggle']] },

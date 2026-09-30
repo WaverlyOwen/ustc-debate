@@ -135,6 +135,7 @@
     let bad = {};                // data-key -> {text, msg, where()}: boxes whose text cannot be read yet
     let expanded = new Set();    // stage ids whose details are open
     let dialog = null, closing = false, destroyed = false, savedTimer = null;
+    let dragging = null;         // the end() of a drag under way, so destroy can call it off
 
     const panel = el('div', 'dt-editor');
     panel.innerHTML = TEMPLATE;
@@ -226,13 +227,17 @@
 
     function paintErrors(errs) {
       const slots = {};
-      const add = (slot, msg) => { (slots[slot] = slots[slot] || []).push(msg); };
-      Object.keys(bad).forEach(k => add(bad[k].where(), bad[k].msg));
+      const durations = {};   // slot -> whether every message in it is about a duration box
+      const add = (slot, msg, secs) => {
+        (slots[slot] = slots[slot] || []).push(msg);
+        durations[slot] = (durations[slot] !== false) && secs;
+      };
+      Object.keys(bad).forEach(k => add(bad[k].where(), bad[k].msg, /:secs$/.test(k)));
       const marks = Object.keys(bad);
       const dups = {};
       errs.forEach(e => {
         const [slot, msg] = slotOf(e, dups);
-        add(slot, msg);
+        add(slot, msg, msg.indexOf('时长') === 0);
         const row = /^stage:(\d+)$/.exec(slot);
         const s = row && draft.stages[+row[1]];
         if (s && msg.indexOf('名称') === 0) marks.push('s:' + s.id + ':name');
@@ -244,6 +249,9 @@
         const slot = m.dataset.slot;
         shown[slot] = true;
         m.textContent = (slots[slot] || []).join('；');
+        // A stage row's message sits under the duration box when that is all it is about (editor.css).
+        if (durations[slot] && /^stage:/.test(slot)) m.setAttribute('data-about', 'secs');
+        else m.removeAttribute('data-about');
       });
       // Anything without a place of its own (a row that is not drawn, say) is listed at the top.
       const loose = Object.keys(slots).filter(k => !shown[k] && k !== 'general').map(k => slots[k].join('；'));
@@ -298,7 +306,7 @@
           const meta = el('span', 'dt-ed-format-meta', summary(f));
           if (f.builtin && !DT.store.isPristine(f)) meta.appendChild(el('em', null, '已改'));
           b.appendChild(meta);
-          b.addEventListener('click', () => { if (f.id !== currentId) select(f.id); });
+          b.addEventListener('click', () => { if (f.id !== currentId) settle(SWITCH, () => select(f.id)); });
           box.appendChild(b);
         });
         if (!group.length) box.appendChild(el('p', 'dt-ed-empty', '还没有。点「新建」从头写，或选一个内置赛制「复制」后再改。'));
@@ -726,7 +734,7 @@
     // ---- reordering ----
 
     function moveTo(from, to) {
-      if (to < 0 || to >= draft.stages.length || to === from) return;
+      if (destroyed || to < 0 || to >= draft.stages.length || to === from) return;
       draft = moveStage(draft, from, to);
       renderForm();
       commit();
@@ -769,10 +777,12 @@
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', end);
         window.removeEventListener('pointercancel', end);
+        dragging = null;
         li.removeAttribute('data-dragging');
         drop.hidden = true;
         if (ev.type === 'pointerup') moveTo(from, gap > from ? gap - 1 : gap);
       }
+      dragging = end;
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', end);
       window.addEventListener('pointercancel', end);
@@ -842,17 +852,31 @@
       });
     }
 
+    // Leaving the chosen format (another one chosen, one made or imported, the editor closed) drops what cannot
+    // be saved yet, so first ask, as closing does. `go` runs when nothing is wrong or the timekeeper lets it go.
+    const SWITCH = ['不保存，换过去', '换过去之后，这个赛制还是上次保存时的样子。'];
+    const CLOSE = ['不保存，关闭', '关闭后，赛制还是上次保存时的样子。'];
+    function settle(words, go) {
+      if (destroyed || dialog) return;
+      flush();
+      const wrong = draft ? DT.store.validateFormat(draft).length + Object.keys(bad).length : 0;
+      if (!wrong) { go(false); return; }
+      ask('还有 ' + wrong + ' 处没改好，这些改动还没有保存', [
+        { label: '接着改', value: 'stay', focus: true }, { label: words[0], value: 'drop', kind: 'danger' },
+      ], words[1]).then(answer => { if (answer === 'drop' && !destroyed) go(true); });
+    }
+
     const ACTIONS = {
-      new() {
+      new: () => settle(SWITCH, () => {
         add(DT.store.newFormat());
         const name = byKey('f:name');
         if (name) { name.focus(); name.select(); }
-      },
-      duplicate() {
+      }),
+      duplicate: () => settle(SWITCH, () => {
         const d = DT.store.duplicateFormat(saved());
         d.name = fit(d.name);
         add(d);
-      },
+      }),
       restore() {
         publish(DT.store.restoreBuiltin(list, currentId));
         select(currentId);
@@ -877,7 +901,8 @@
           else { currentId = null; draft = null; renderList(); renderForm(); paintTools(); }
         });
       },
-      import: importFiles,
+      // Dropped edits go at once, so a cancelled file picker leaves the saved format on screen.
+      import: () => settle(SWITCH, dropped => { if (dropped) select(currentId); importFiles(); }),
     };
 
     async function importFiles() {
@@ -928,13 +953,8 @@
     }
 
     function close() {
-      if (closing || destroyed || dialog) return;
-      flush();
-      const wrong = draft ? DT.store.validateFormat(draft).length + Object.keys(bad).length : 0;
-      if (!wrong) { leave(); return; }
-      ask('还有 ' + wrong + ' 处没改好，这些改动还没有保存', [
-        { label: '接着改', value: 'stay', focus: true }, { label: '不保存，关闭', value: 'drop', kind: 'danger' },
-      ], '关闭后，赛制还是上次保存时的样子。').then(answer => { if (answer === 'drop') leave(); });
+      if (closing) return;
+      settle(CLOSE, leave);
     }
 
     function leave() {
@@ -960,6 +980,7 @@
     function destroy() {
       if (destroyed) return;
       if (dialog) dialog.close(null);
+      if (dragging) dragging({ type: 'cancel' });
       destroyed = true;
       clearTimeout(savedTimer);
       window.removeEventListener('keydown', onKey);

@@ -54,6 +54,7 @@
     else if ((m = /^(\d+)'(\d{1,2})$/.exec(t))) { if (+m[2] < 60) secs = +m[1] * 60 + +m[2]; }
     else if ((m = /^(\d+)\s*(s|秒)?$/i.exec(t))) secs = +m[1];
     else if ((m = /^(\d+)\s*分(钟)?(\s*(\d+)\s*秒)?$/.exec(t))) secs = +m[1] * 60 + (m[4] ? +m[4] : 0);
+    else if ((m = /^(\d+)\s*分(钟)?\s*半$/.exec(t))) secs = +m[1] * 60 + 30;   // 3分半: three and a half minutes
     return secs !== null && secs >= 1 && secs <= 3600 ? secs : null;
   }
   function formatDuration(secs) {

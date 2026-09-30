@@ -499,6 +499,9 @@
 .dt-ed-stage[data-tone="dual"]::before { background: linear-gradient(var(--pro) 50%, var(--con) 50%); }
 .dt-ed-stage .dt-input { padding: .36em .6em; }
 .dt-ed-stage > .dt-ed-msg { margin: .3em 0 .15em calc(3.2em + 1.1em); }
+/* A message only about the duration sits under that box: right-aligned, clear of the two icon columns
+   (2em each plus a .55em gap, in the row's em; the message's own em is .88 of it). */
+.dt-ed-stage > .dt-ed-msg[data-about="secs"] { margin-left: 0; margin-right: calc((2em + .55em) * 2 / .88); text-align: right; }
 
 .dt-ed-handle {
   height: 2em;
@@ -634,6 +637,8 @@
   .dt-ed-cols { display: none; }
   .dt-ed-line { grid-template-columns: 1.5em 1.7em minmax(0, 1fr) 2em 2em; }
   .dt-ed-line > :nth-child(n+4):nth-child(-n+6) { grid-column: 3; }
+  /* The duration box has moved under the name here, so its message goes back to the name's column. */
+  .dt-ed-stage > .dt-ed-msg[data-about="secs"] { margin: .3em 0 .15em calc(3.2em + 1.1em); text-align: left; }
 }
 
 @media (prefers-reduced-motion: reduce) {

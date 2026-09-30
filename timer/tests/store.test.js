@@ -38,7 +38,7 @@
 
   DT.test('store: parseDuration accepts the written forms and rejects the rest', () => {
     const ok = { '3:00': 180, '180': 180, '180秒': 180, '180s': 180, '3分': 180, '3分钟': 180, '3分30秒': 210,
-                 "1'30": 90, ' 2:05 ': 125, '1：30': 90, '60:00': 3600, '1': 1 };
+                 "1'30": 90, ' 2:05 ': 125, '1：30': 90, '60:00': 3600, '1': 1, '3分半': 210, '3分钟半': 210 };
     Object.keys(ok).forEach(k => assert.equal(S.parseDuration(k), ok[k], k));
     ['0', '', 'abc', '1:75', '61:00', '-5', '1.5', '3:', ':30', null, undefined].forEach(k => assert.equal(S.parseDuration(k), null, String(k)));
     assert.equal(S.formatDuration(180), '3:00');

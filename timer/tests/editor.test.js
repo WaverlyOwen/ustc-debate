@@ -416,6 +416,74 @@
     t.h.destroy();
   });
 
+  DT.test('editor: choosing another format with a mistyped box asks first; 接着改 keeps the text', async () => {
+    const t = mount({ formats: withMine() });
+    typeInto(row(t, 0).querySelector('input[name="secs"]'), '三分半', 'change');
+    $(t, '[data-format-id="u-weekend"]').click();
+    const dialog = () => $(t, '[role="alertdialog"]');
+    assert.ok(dialog() && dialog().textContent.indexOf('还有 1 处没改好') >= 0);
+    dialog().querySelector('button[data-answer="stay"]').click();
+    await later(0);
+    assert.equal($(t, 'input[name="format-name"]').value, '中国科学技术大学新生辩论赛');
+    assert.equal(row(t, 0).querySelector('input[name="secs"]').value, '三分半');
+    assert.ok(row(t, 0).textContent.indexOf('时长写成 3:00 或 180') >= 0);
+    $(t, '[data-format-id="u-weekend"]').click();
+    dialog().querySelector('button[data-answer="drop"]').click();
+    await later(0);
+    assert.equal($(t, 'input[name="format-name"]').value, '周末模辩');
+    assert.equal(t.state.changes, 0);
+    t.h.destroy();
+  });
+
+  DT.test('editor: 新建, 复制 and 导入 ask too, counting the box still being typed in', async () => {
+    const t = mount();
+    const count = t.state.list.length;
+    const input = row(t, 0).querySelector('input[name="secs"]');
+    input.focus();
+    input.value = '三分半';   // no change event yet
+    const answer = async a => { $(t, '[role="alertdialog"] button[data-answer="' + a + '"]').click(); await later(0); };
+    $(t, 'button[data-action="new"]').click();
+    assert.ok($(t, '[role="alertdialog"]'), '新建');
+    await answer('stay');
+    $(t, 'button[data-action="duplicate"]').click();
+    assert.ok($(t, '[role="alertdialog"]'), '复制');
+    await answer('stay');
+    assert.equal(t.state.list.length, count);
+    t.state.files = [JSON.stringify({ name: '周末模辩', stages: [{ name: '立论', type: 'single', side: 'pro', secs: 60 }] })];
+    $(t, 'button[data-action="import"]').click();
+    assert.ok($(t, '[role="alertdialog"]'), '导入');
+    await answer('drop');
+    await later(30);
+    assert.equal(t.state.list.length, count + 1);
+    assert.equal($(t, 'input[name="format-name"]').value, '周末模辩');
+    assert.equal(current(t.state).stages[0].secs, 180, 'the mistyped box was not saved');
+    t.h.destroy();
+  });
+
+  DT.test('editor: a drag still under way when the editor goes away saves nothing', () => {
+    const t = mount();
+    const handle = row(t, 0).querySelector('.dt-ed-handle');
+    const target = row(t, 2).getBoundingClientRect();
+    handle.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 7, button: 0, clientY: 5, bubbles: true }));
+    window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 7, clientY: target.bottom - 2, bubbles: true }));
+    t.h.destroy();
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, clientY: target.bottom - 2, bubbles: true }));
+    assert.equal(t.state.changes, 0);
+  });
+
+  DT.test('editor: a row says when its message is about the duration, so it sits under that box', () => {
+    const t = mount();
+    const msg = () => row(t, 0).querySelector('.dt-ed-msg');
+    typeInto(row(t, 0).querySelector('input[name="secs"]'), '三分半', 'change');
+    assert.equal(msg().getAttribute('data-about'), 'secs');
+    typeInto(row(t, 0).querySelector('input[name="name"]'), '');
+    assert.equal(msg().hasAttribute('data-about'), false, 'a name message too: it stays under the name');
+    typeInto(row(t, 0).querySelector('input[name="secs"]'), '2:00', 'change');
+    assert.equal(msg().textContent, '名称不能为空');
+    assert.equal(msg().hasAttribute('data-about'), false);
+    t.h.destroy();
+  });
+
   // ---- the editor in the app (ui.js) ----
 
   function memStorage() {

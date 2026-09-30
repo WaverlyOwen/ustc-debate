@@ -1602,6 +1602,9 @@ body {
 .dt-ed-stage[data-tone="dual"]::before { background: linear-gradient(var(--pro) 50%, var(--con) 50%); }
 .dt-ed-stage .dt-input { padding: .36em .6em; }
 .dt-ed-stage > .dt-ed-msg { margin: .3em 0 .15em calc(3.2em + 1.1em); }
+/* A message only about the duration sits under that box: right-aligned, clear of the two icon columns
+   (2em each plus a .55em gap, in the row's em; the message's own em is .88 of it). */
+.dt-ed-stage > .dt-ed-msg[data-about="secs"] { margin-left: 0; margin-right: calc((2em + .55em) * 2 / .88); text-align: right; }
 
 .dt-ed-handle {
   height: 2em;
@@ -1737,6 +1740,8 @@ body {
   .dt-ed-cols { display: none; }
   .dt-ed-line { grid-template-columns: 1.5em 1.7em minmax(0, 1fr) 2em 2em; }
   .dt-ed-line > :nth-child(n+4):nth-child(-n+6) { grid-column: 3; }
+  /* The duration box has moved under the name here, so its message goes back to the name's column. */
+  .dt-ed-stage > .dt-ed-msg[data-about="secs"] { margin: .3em 0 .15em calc(3.2em + 1.1em); text-align: left; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3311,6 +3316,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     else if ((m = /^(\d+)'(\d{1,2})$/.exec(t))) { if (+m[2] < 60) secs = +m[1] * 60 + +m[2]; }
     else if ((m = /^(\d+)\s*(s|秒)?$/i.exec(t))) secs = +m[1];
     else if ((m = /^(\d+)\s*分(钟)?(\s*(\d+)\s*秒)?$/.exec(t))) secs = +m[1] * 60 + (m[4] ? +m[4] : 0);
+    else if ((m = /^(\d+)\s*分(钟)?\s*半$/.exec(t))) secs = +m[1] * 60 + 30;   // 3分半: three and a half minutes
     return secs !== null && secs >= 1 && secs <= 3600 ? secs : null;
   }
   function formatDuration(secs) {
@@ -4456,6 +4462,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     let bad = {};                // data-key -> {text, msg, where()}: boxes whose text cannot be read yet
     let expanded = new Set();    // stage ids whose details are open
     let dialog = null, closing = false, destroyed = false, savedTimer = null;
+    let dragging = null;         // the end() of a drag under way, so destroy can call it off
 
     const panel = el('div', 'dt-editor');
     panel.innerHTML = TEMPLATE;
@@ -4547,13 +4554,17 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
 
     function paintErrors(errs) {
       const slots = {};
-      const add = (slot, msg) => { (slots[slot] = slots[slot] || []).push(msg); };
-      Object.keys(bad).forEach(k => add(bad[k].where(), bad[k].msg));
+      const durations = {};   // slot -> whether every message in it is about a duration box
+      const add = (slot, msg, secs) => {
+        (slots[slot] = slots[slot] || []).push(msg);
+        durations[slot] = (durations[slot] !== false) && secs;
+      };
+      Object.keys(bad).forEach(k => add(bad[k].where(), bad[k].msg, /:secs$/.test(k)));
       const marks = Object.keys(bad);
       const dups = {};
       errs.forEach(e => {
         const [slot, msg] = slotOf(e, dups);
-        add(slot, msg);
+        add(slot, msg, msg.indexOf('时长') === 0);
         const row = /^stage:(\d+)$/.exec(slot);
         const s = row && draft.stages[+row[1]];
         if (s && msg.indexOf('名称') === 0) marks.push('s:' + s.id + ':name');
@@ -4565,6 +4576,9 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         const slot = m.dataset.slot;
         shown[slot] = true;
         m.textContent = (slots[slot] || []).join('；');
+        // A stage row's message sits under the duration box when that is all it is about (editor.css).
+        if (durations[slot] && /^stage:/.test(slot)) m.setAttribute('data-about', 'secs');
+        else m.removeAttribute('data-about');
       });
       // Anything without a place of its own (a row that is not drawn, say) is listed at the top.
       const loose = Object.keys(slots).filter(k => !shown[k] && k !== 'general').map(k => slots[k].join('；'));
@@ -4619,7 +4633,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
           const meta = el('span', 'dt-ed-format-meta', summary(f));
           if (f.builtin && !DT.store.isPristine(f)) meta.appendChild(el('em', null, '已改'));
           b.appendChild(meta);
-          b.addEventListener('click', () => { if (f.id !== currentId) select(f.id); });
+          b.addEventListener('click', () => { if (f.id !== currentId) settle(SWITCH, () => select(f.id)); });
           box.appendChild(b);
         });
         if (!group.length) box.appendChild(el('p', 'dt-ed-empty', '还没有。点「新建」从头写，或选一个内置赛制「复制」后再改。'));
@@ -5047,7 +5061,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     // ---- reordering ----
 
     function moveTo(from, to) {
-      if (to < 0 || to >= draft.stages.length || to === from) return;
+      if (destroyed || to < 0 || to >= draft.stages.length || to === from) return;
       draft = moveStage(draft, from, to);
       renderForm();
       commit();
@@ -5090,10 +5104,12 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', end);
         window.removeEventListener('pointercancel', end);
+        dragging = null;
         li.removeAttribute('data-dragging');
         drop.hidden = true;
         if (ev.type === 'pointerup') moveTo(from, gap > from ? gap - 1 : gap);
       }
+      dragging = end;
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', end);
       window.addEventListener('pointercancel', end);
@@ -5163,17 +5179,31 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       });
     }
 
+    // Leaving the chosen format (another one chosen, one made or imported, the editor closed) drops what cannot
+    // be saved yet, so first ask, as closing does. `go` runs when nothing is wrong or the timekeeper lets it go.
+    const SWITCH = ['不保存，换过去', '换过去之后，这个赛制还是上次保存时的样子。'];
+    const CLOSE = ['不保存，关闭', '关闭后，赛制还是上次保存时的样子。'];
+    function settle(words, go) {
+      if (destroyed || dialog) return;
+      flush();
+      const wrong = draft ? DT.store.validateFormat(draft).length + Object.keys(bad).length : 0;
+      if (!wrong) { go(false); return; }
+      ask('还有 ' + wrong + ' 处没改好，这些改动还没有保存', [
+        { label: '接着改', value: 'stay', focus: true }, { label: words[0], value: 'drop', kind: 'danger' },
+      ], words[1]).then(answer => { if (answer === 'drop' && !destroyed) go(true); });
+    }
+
     const ACTIONS = {
-      new() {
+      new: () => settle(SWITCH, () => {
         add(DT.store.newFormat());
         const name = byKey('f:name');
         if (name) { name.focus(); name.select(); }
-      },
-      duplicate() {
+      }),
+      duplicate: () => settle(SWITCH, () => {
         const d = DT.store.duplicateFormat(saved());
         d.name = fit(d.name);
         add(d);
-      },
+      }),
       restore() {
         publish(DT.store.restoreBuiltin(list, currentId));
         select(currentId);
@@ -5198,7 +5228,8 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
           else { currentId = null; draft = null; renderList(); renderForm(); paintTools(); }
         });
       },
-      import: importFiles,
+      // Dropped edits go at once, so a cancelled file picker leaves the saved format on screen.
+      import: () => settle(SWITCH, dropped => { if (dropped) select(currentId); importFiles(); }),
     };
 
     async function importFiles() {
@@ -5249,13 +5280,8 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     }
 
     function close() {
-      if (closing || destroyed || dialog) return;
-      flush();
-      const wrong = draft ? DT.store.validateFormat(draft).length + Object.keys(bad).length : 0;
-      if (!wrong) { leave(); return; }
-      ask('还有 ' + wrong + ' 处没改好，这些改动还没有保存', [
-        { label: '接着改', value: 'stay', focus: true }, { label: '不保存，关闭', value: 'drop', kind: 'danger' },
-      ], '关闭后，赛制还是上次保存时的样子。').then(answer => { if (answer === 'drop') leave(); });
+      if (closing) return;
+      settle(CLOSE, leave);
     }
 
     function leave() {
@@ -5281,6 +5307,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     function destroy() {
       if (destroyed) return;
       if (dialog) dialog.close(null);
+      if (dragging) dragging({ type: 'cancel' });
       destroyed = true;
       clearTimeout(savedTimer);
       window.removeEventListener('keydown', onKey);
@@ -5543,7 +5570,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     'setup': { setup: true, at: 0, steps: [] },
     'setup-resume': Object.assign({ setup: true }, DUAL),   // the free debate left half way
     'editor': Object.assign({ editor: { expand: 1 } }, SINGLE),
-    'editor-error': Object.assign({ editor: { typo: [0, '3分半'] } }, SINGLE),
+    'editor-error': Object.assign({ editor: { typo: [0, '三分半'] } }, SINGLE),
     // The opening speech done in 2:57, the cross-examination running with 1:12 left (spec §5.7's sketch).
     'console': { console: true, at: 228, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle'], [177, 'toggle'],
       [180, 'goto', '反方四辩质询正方一辩'], [180, 'toggle']] },
