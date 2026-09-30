@@ -33,6 +33,12 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import kit  # noqa: E402  (shared with check_speeches / check_voice)
+except ImportError:  # md2pdf stays usable on its own
+    kit = None
+
 BASE_CSS = """
 :root {
   --ink: #1C1A17; --ink-2: #4A4740; --ink-3: #8A8378;
@@ -256,6 +262,32 @@ SCRIPT_CSS = """
 .fieldcard { border: 1px solid var(--rule); border-left: 3px solid var(--accent); padding: 8pt 12pt 6pt; margin: 8pt 0 10pt; break-inside: avoid; }
 .fieldcard > .fh { font-size: 10.5pt; font-weight: 700; color: var(--accent); margin: 0 0 5pt; }
 .fieldcard .fields { margin: 0; }
+/* ---- kits: fixed parts, choice groups of conditional modules, live slots ---- */
+.kbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4pt 5pt; margin: 2pt 0 12pt; font-size: 8.5pt; color: var(--ink-2); }
+.kbar .step { border: 1px solid var(--rule); padding: 2.5pt 7pt; border-radius: 2px; background: #fff; white-space: nowrap; }
+.kbar .step.pick { border-color: var(--accent); color: var(--accent); }
+.kbar .step.live { border-style: dashed; color: var(--ink-3); }
+.kbar .arr { color: var(--ink-3); }
+.kpart { margin: 0 0 12pt; }
+.kpart > .kh { font-size: 8.5pt; letter-spacing: .14em; color: var(--ink-3); font-weight: 700; margin: 0 0 5pt; display: flex; gap: 8pt; align-items: baseline; }
+.kpart > .kh .pick { color: var(--accent); letter-spacing: .06em; }
+.kpart .ktext > p { font-size: 12pt; line-height: 1.95; margin: 0 0 10pt; }
+.kpart .ktext > p strong { font-weight: 600; -webkit-text-emphasis: filled sesame var(--accent); text-emphasis: filled sesame var(--accent);
+                           -webkit-text-emphasis-position: under right; text-emphasis-position: under right; }
+.kpart.choice { border: 1px solid var(--rule); border-top: 2px solid var(--accent); padding: 8pt 12pt 2pt; background: #FDFCFA; }
+.kmod { padding: 7pt 0 2pt; border-top: 1px solid var(--rule-soft); break-inside: avoid; }
+.kmod:first-of-type { border-top: 0; padding-top: 2pt; }
+.kmod > .kcond { display: flex; align-items: baseline; gap: 8pt; font-size: 10pt; font-weight: 700; color: var(--accent); margin: 0 0 4pt; }
+.kmod > .kcond .klen { margin-left: auto; font-size: 8pt; font-weight: 500; color: var(--ink-3); letter-spacing: .04em; white-space: nowrap; }
+.kmod.fallback > .kcond { color: var(--ink-2); }
+.kmod.fallback > .kcond::before { content: "兜底"; font-size: 7.5pt; letter-spacing: .12em; border: 1px solid var(--rule); padding: 1pt 5pt; border-radius: 2px; color: var(--ink-3); font-weight: 600; }
+.kmod .ktext > p { font-size: 11pt; line-height: 1.85; margin: 0 0 7pt; }
+.kpart.live { border: 1.2px dashed var(--rule); padding: 8pt 12pt; }
+.kpart.live .ruled { height: 46pt; background: repeating-linear-gradient(to bottom, transparent 0, transparent 22pt, var(--rule-soft) 22pt, var(--rule-soft) 23pt); }
+/* ---- in-match record card ---- */
+.flowcard { break-before: page; page-break-before: always; }
+.flowcard .tablewrap td { height: 26pt; vertical-align: middle; }
+.flowcard .tablewrap td:nth-child(3) { font-size: 9.5pt; line-height: 1.9; }
 .contingency { margin: 12pt 0 4pt; padding: 8pt 12pt; border: 1px dashed var(--rule); background: #FCFBF9; font-size: 9.5pt;
                color: var(--ink-2); line-height: 1.55; break-inside: avoid; }
 .contingency .label { font-weight: 700; letter-spacing: .14em; font-size: 8.5pt; color: var(--ink-3); margin: 0 0 4pt; }
@@ -836,7 +868,83 @@ def wrap_battlegrounds(body):
     return "".join(out)
 
 
-def decorate(body, kind, side):
+def render_kit(rest, lengths):
+    """Restructure one kit section's HTML: assembly bar, fixed parts as speech,
+    choice groups as boxed conditional modules (with computed length), live slots
+    as ruled blanks. `lengths` is [(kind, [module lengths] or fixed length)] from
+    kit.parse on the Markdown, in the same order as the ### parts."""
+    bar = ""
+    bm = re.search(r"<p>\s*组装[：:]\s*(.*?)</p>", rest, re.S)
+    if bm:
+        steps = [x.strip() for x in re.split(r"→|->", re.sub(r"<[^>]+>", "", bm.group(1))) if x.strip()]
+        chips = []
+        for st in steps:
+            cls = "pick" if re.search(r"任选", st) else ("live" if "临场" in st else "")
+            chips.append('<span class="step %s">%s</span>' % (cls, html.escape(st)))
+        bar = '<div class="kbar">%s</div>' % '<span class="arr">→</span>'.join(chips)
+        rest = rest[:bm.start()] + rest[bm.end():]
+    chunks = re.split(r"(?=<h3[^>]*>)", rest)
+    out = [chunks[0]]
+    idx = 0
+    for ch in chunks[1:]:
+        hm = re.match(r"<h3[^>]*>(.*?)</h3>", ch, re.S)
+        name = re.sub(r"<[^>]+>", "", hm.group(1)).strip()
+        inner = ch[hm.end():]
+        info = lengths[idx] if idx < len(lengths) else None
+        idx += 1
+        mk = re.search(r"任选\s*(\d+)", name)
+        if mk:
+            label = re.sub(r"\s*[·・]\s*任选\s*\d+\s*$", "", name)
+            mods = re.split(r"(?=<h4[^>]*>)", inner)
+            lead, mhtml = mods[0], []
+            for mi, m in enumerate(mods[1:]):
+                h4 = re.match(r"<h4[^>]*>(.*?)</h4>", m, re.S)
+                cond = h4.group(1).strip()
+                txt = m[h4.end():]
+                n = info[1][mi] if info and info[0] == "choice" and mi < len(info[1]) else None
+                fb = cond.startswith("兜底")
+                cond_disp = re.sub(r"^兜底[：:]\s*", "", cond) if fb else cond
+                mhtml.append('<div class="kmod%s"><div class="kcond"><span>%s</span>%s</div><div class="ktext">%s</div></div>'
+                             % (" fallback" if fb else "", cond_disp,
+                                ('<span class="klen">约 %d 字</span>' % n) if n is not None else "", txt))
+            out.append('<div class="kpart choice"><div class="kh"><span>%s</span><span class="pick">任选 %s</span></div>%s%s</div>'
+                       % (html.escape(label), mk.group(1), lead, "".join(mhtml)))
+        elif "临场" in name:
+            n = re.search(r"约\s*(\d+)\s*字", name)
+            out.append('<div class="kpart live"><div class="kh"><span>临场 · 不写稿%s</span></div>%s<div class="ruled"></div></div>'
+                       % ((" · 约 %s 字" % n.group(1)) if n else "", inner))
+        else:
+            label = re.sub(r"[（(]\s*固定\s*[）)]", "", name).strip()
+            n = info[1] if info and info[0] == "fixed" else None
+            out.append('<div class="kpart fixed"><div class="kh"><span>%s</span>%s</div><div class="ktext">%s</div></div>'
+                       % (html.escape(label), ('<span>约 %d 字</span>' % n) if n is not None else "", inner))
+    return bar + "".join(out)
+
+
+def kit_lengths(md_text):
+    """{section heading: [(kind, lengths)]} for every kit section, from the Markdown."""
+    table = {}
+    if kit is None:
+        return table
+    for sec in re.split(r"\n(?=## )", md_text):
+        if not sec.lstrip().startswith("## "):
+            continue
+        heading, parts = kit.parse(sec.lstrip())
+        if not kit.is_kit(parts):
+            continue
+        row = []
+        for pt in parts:
+            if pt.kind == "choice":
+                row.append(("choice", [kit.spoken_len(t) for _, t in pt.modules]))
+            elif pt.kind == "fixed":
+                row.append(("fixed", kit.spoken_len(pt.text)))
+            else:
+                row.append(("live", pt.live))
+        table[re.sub(r"\s+", "", heading)] = row
+    return table
+
+
+def decorate(body, kind, side, kits=None):
     """Build the document structure the CSS styles from the converter's flat output.
 
     The Markdown stays the source of truth. This adds: a title block from the
@@ -888,6 +996,11 @@ def decorate(body, kind, side):
     body = transform_tables(body)
     body = wrap_warnbox(body)
     body = wrap_battlegrounds(body)
+    fm = re.search(r"<h2[^>]*>[^<]*场上记录卡[^<]*</h2>", body)
+    if fm:
+        nxt = re.search(r"<h2", body[fm.end():])
+        end = fm.end() + (nxt.start() if nxt else len(body) - fm.end())
+        body = body[:fm.start()] + '<section class="flowcard">' + body[fm.start():end] + "</section>" + body[end:]
 
     # summary panel with the thesis pair and stat tiles
     sm = re.search(r"<h2>[^<]*结论速览[^<]*</h2>", body)
@@ -916,13 +1029,17 @@ def decorate(body, kind, side):
             else:
                 h2 = hm.group(0)
             rest = sec[hm.end():]
-            is_speech = "稿" in htext and "预案" not in htext
+            is_speech = ("稿" in htext or "套件" in htext) and "预案" not in htext
             if is_speech:
                 cm = re.search(r"(<p><strong>如果[^<]*</strong>[^<]*</p>\s*)?(<ul>(?:(?!<ul>).)*?</ul>|<dl class=\"fields\">.*?</dl>)\s*(?:<hr>)?\s*$", rest, re.S)
                 if cm and "如果" in cm.group(0):
                     inner = re.sub(r"^<ul>\s*<li>\s*如果……就……[：:]?\s*(<ul>.*</ul>)\s*</li>\s*</ul>$", r"\1", cm.group(2).strip(), flags=re.S)
                     rest = (rest[:cm.start()] + '<aside class="contingency"><div class="label">临场预案 · 如果……就……</div>'
                             + inner + "</aside>" + rest[cm.end():])
+            if kits and "套件" in htext and re.search(r"<h3", rest):
+                cut = rest.find('<aside class="contingency">')
+                head_part, tail = (rest, "") if cut < 0 else (rest[:cut], rest[cut:])
+                rest = render_kit(head_part, kits.get(re.sub(r"\s+", "", htext), [])) + tail
             rebuilt.append('<section class="stage%s">%s%s</section>' % (" speech" if is_speech else "", h2, rest))
         body = "".join(rebuilt)
 
@@ -932,8 +1049,8 @@ def decorate(body, kind, side):
     return head + body + "</td></tr></tbody></table>"
 
 
-def wrap_html(body, title, kind="prep", side="both"):
-    body = decorate(body, kind, side)
+def wrap_html(body, title, kind="prep", side="both", kits=None):
+    body = decorate(body, kind, side, kits)
     css = BASE_CSS + KIND_CSS[kind]
     return ('<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">'
             "<title>%s</title><style>%s</style></head>"
@@ -1092,7 +1209,7 @@ def main():
         if args.compact:
             kind = "quick"
         with open(html_path, "w", encoding="utf-8") as fh:
-            fh.write(wrap_html(body, title, kind, side))
+            fh.write(wrap_html(body, title, kind, side, kit_lengths(text) if kind == "script" else None))
 
         ok = False
         used = None

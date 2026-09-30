@@ -8,18 +8,28 @@ Counting rule (the single canonical one, mirrored from the format file):
   counted    汉字, 阿拉伯数字 (one char each), English words (two chars each)
   not counted  punctuation, whitespace, Markdown marks
   not counted  stage directions and asides: 〔…〕【…】(…) （…）
-  not counted  the 临场位 reserve, and the "如果……就……" bullet list at the end
-                of a speech section (those are notes, not spoken text)
+  not counted  the "如果……就……" note list at the end of a speech section
 
-Estimating by eye gives a different answer every time, which is how a script
-that says "约 740 字" ends up being 771 on stage. Run this instead.
+Two kinds of speech section (see kit.py):
+  定稿   a plain script; its body is counted as is
+  套件   fixed parts + conditional modules chosen on the day + live slots.
+         The shortest and the longest assembly are both computed, and BOTH
+         must fit the band, so any choice the speaker makes live fits the time.
 
-Exit code 1 if any speech falls outside its band.
+The number written in the heading must equal the computed one. A heading that
+says 约 740 字 over a body of 771 is exactly the drift this script exists to
+stop, so a mismatch fails.
+
+Exit code 1 if any speech is outside its band or its heading disagrees.
 """
 import argparse
 import json
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import kit  # noqa: E402
 
 # duration -> (low, high) in spoken characters; see the format file's 时长与字数换算
 BANDS = {
@@ -31,6 +41,7 @@ BANDS = {
         "小结·留临场位": (90, 300, 340),
         "结辩·反四": (210, 875, 980),
         "结辩·正四": (175, 730, 815),
+        "结辩": (210, 875, 980),
     },
     # 2025 校赛: 盘问小结 runs 120 s here, not 90; 奇袭申论 is a 120 s speech.
     "ustc-school-cup-2025": {
@@ -42,62 +53,49 @@ BANDS = {
         "奇袭申论": (120, 500, 560),
         "结辩·反四": (210, 875, 980),
         "结辩·正四": (175, 730, 815),
+        "结辩": (210, 875, 980),
     },
 }
 
-STAGE = re.compile(r"〔[^〕]*〕|【[^】]*】|（[^）]*）|\([^)]*\)")
-CJK = re.compile(r"[一-鿿㐀-䶿]")
-DIGIT = re.compile(r"\d")
-LATIN = re.compile(r"[A-Za-z]+")
+spoken_len = kit.spoken_len
 
 
-def spoken_len(text):
-    """Spoken-character count under the canonical rule."""
-    t = STAGE.sub(" ", text)
-    t = re.sub(r"`[^`]*`", " ", t)
-    t = re.sub(r"[*_#>|~-]", " ", t)
-    return len(CJK.findall(t)) + len(DIGIT.findall(t)) + 2 * len(LATIN.findall(t))
-
-
-def classify(heading):
+def classify(heading, is_kit=False):
     """Map a section heading to a band key, or None if it is not a full speech.
 
-    A speech that reserves a 临场位 (the second-speaking side answering the
-    first) has a shorter 正文 band, because the reserve is spoken live.
+    A plain script that reserves a 临场位 has a shorter 正文 band, since the
+    reserve is spoken live. A kit never does: its live slots are declared parts
+    and are counted, so it is checked against the full band.
     """
     h = heading
-    reserve = "临场位" in h or "临场回应" in h
+    if not ("稿" in h or "套件" in h):
+        return None
+    reserve = (not is_kit) and ("临场位" in h or "临场回应" in h)
     if "奇袭" in h and "申论" in h:
         return "奇袭申论"
-    if "立论" in h and "稿" in h:
+    if "立论" in h:
         return "立论"
-    if "驳论" in h and "稿" in h:
+    if "驳论" in h:
         return "驳论·留临场位" if reserve else "驳论"
-    if "小结" in h and "稿" in h:
+    if "小结" in h:
         return "小结·留临场位" if reserve else "小结"
-    if "结辩" in h and "稿" in h:
+    if "结辩" in h:
+        if is_kit:
+            return "结辩"
         first = h.split("结辩")[0]
         return "结辩·反四" if ("反" in first[-3:] or "封路" in h) else "结辩·正四"
     return None
 
 
-def body_of(section):
-    """Strip the heading, the trailing 如果……就…… note list and any 临场位 block."""
-    lines = section.split("\n")[1:]
-    out = []
-    for ln in lines:
-        s = ln.strip()
-        if re.match(r"^\**如果[^*]*就", s) or s.startswith("**如果"):
-            break
-        if "临场位" in s and (s.startswith("-") or s.startswith("*") or s.startswith(">")):
-            continue
-        out.append(ln)
-    # Drop the trailing block of 预案 notes. Blank lines must be popped too,
-    # otherwise a section that ends on one shields the notes above it and the
-    # count comes out too high — which on stage means finishing early.
-    while out and (not out[-1].strip() or out[-1].strip().startswith(("-", "*", ">"))):
-        out.pop()
-    return "\n".join(out)
+def declared(heading):
+    """Numbers the heading claims: (lo, hi) for a kit, (n, n) for a script, or None."""
+    m = re.search(r"组装后\s*(\d+)\s*[–—-]\s*(\d+)\s*字", heading)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    m = re.search(r"正文\s*(\d+)\s*字", heading)
+    if m:
+        return int(m.group(1)), int(m.group(1))
+    return None
 
 
 def main():
@@ -135,32 +133,56 @@ def main():
         sections = re.split(r"\n(?=## )", text)
         rows = []
         for sec in sections:
-            heading = sec.split("\n")[0].lstrip("# ").strip()
-            key = classify(heading)
+            if not sec.startswith("## ") and not sec.lstrip().startswith("## "):
+                continue
+            heading, parts = kit.parse(sec.lstrip())
+            is_kit = kit.is_kit(parts)
+            key = classify(heading, is_kit)
             if not key:
                 continue
-            n = spoken_len(body_of(sec))
             secs, lo, hi = bands[key]
-            ok = lo <= n <= hi
-            if not ok:
+            try:
+                amin, amax = kit.assembly_range(parts)
+                err = None
+            except ValueError as e:
+                amin = amax = 0
+                err = str(e)
+            ok = err is None and lo <= amin and amax <= hi
+            dec = declared(heading)
+            mismatch = dec is not None and dec != (amin, amax)
+            if not ok or mismatch:
                 bad += 1
-            rows.append({"heading": heading, "kind": key, "seconds": secs,
-                         "count": n, "low": lo, "high": hi, "ok": ok})
+            rows.append({"heading": heading, "kind": key, "kit": is_kit, "seconds": secs,
+                         "min": amin, "max": amax, "low": lo, "high": hi, "ok": ok,
+                         "declared": dec, "mismatch": mismatch, "error": err})
         report.append({"file": path, "speeches": rows})
         if not args.json:
             print("== %s" % path)
             if not rows:
                 print("   (no full speeches found — check the headings against the format file)")
             for r in rows:
-                mark = "OK  " if r["ok"] else "OUT "
-                delta = "" if r["ok"] else ("  (%+d)" % (r["count"] - (r["high"] if r["count"] > r["high"] else r["low"])))
-                print("   %s%-46s %4d 字  目标 %d–%d / %d 秒%s"
-                      % (mark, r["heading"][:46], r["count"], r["low"], r["high"], r["seconds"], delta))
+                mark = "OK  " if (r["ok"] and not r["mismatch"]) else ("OUT " if not r["ok"] else "标题 ")
+                n = ("%d–%d" % (r["min"], r["max"])) if r["kit"] else ("%d" % r["min"])
+                extra = ""
+                if r["error"]:
+                    extra = "  " + r["error"]
+                elif not r["ok"]:
+                    if r["min"] < r["low"]:
+                        extra = "  （最短组装少 %d 字）" % (r["low"] - r["min"])
+                    if r["max"] > r["high"]:
+                        extra += "  （最长组装多 %d 字）" % (r["max"] - r["high"])
+                if r["mismatch"]:
+                    extra += "  标题写的是 %s，实际 %s" % (
+                        ("%d–%d" % r["declared"]) if r["kit"] else r["declared"][0], n)
+                print("   %s%-44s %9s 字  目标 %d–%d / %d 秒%s%s"
+                      % (mark, r["heading"][:44], n, r["low"], r["high"], r["seconds"],
+                         "  [套件]" if r["kit"] else "", extra))
 
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     elif bad:
-        print("\n%d 篇稿件超出区间。删减顺序：论据 → 修饰语 → 机制中间步骤；价值升华段不删。" % bad)
+        print("\n%d 篇稿件未通过。超区间的删减顺序：论据 → 修饰语 → 机制中间步骤，价值升华不删；"
+              "套件要让最短和最长两种组装都落在区间内；标题数字照脚本输出填，不要手写。" % bad)
     return 1 if bad else 0
 
 

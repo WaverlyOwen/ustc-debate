@@ -2,28 +2,38 @@
 """Flag the mechanical tells that make a debate script sound read rather than spoken.
 
 Usage:
-    python3 check_voice.py prep/<题>/文稿-*.md [--verbose]
+    python3 check_voice.py prep/<题>/文稿-*.md
+    python3 check_voice.py --desk prep/<题>/备赛文档-*.md prep/<题>/速查-*.md
 
-Checks the five tells that can be counted objectively (see
-references/speech-voice.md for the other four, which need a human ear):
+Speech mode (文稿) checks the five tells that can be counted (the other four in
+references/speech-voice.md need a human ear):
 
-  破折号        must be zero — a dash is inaudible, so it marks a pause the
-                audience hears but cannot account for
-  加粗          at most 2 per speech, and never on the closing sentence of
-                several paragraphs in a row: a bolded flourish every paragraph
-                trains the judge to stop hearing them
-  句长落差      no run of 3+ sentences of near-equal length
-  三连排比      at most one per speech
-  书面连接词    none: 综上所述 / 值得注意的是 / 鉴于 / 旨在 / 因而 / 与此同时 …
-  口语黏合剂    at least 3 per speech (a question to the judges, a nudge to the
-                audience, an admission) — the thing that makes a script sound
-                like talking
+  破折号        zero anywhere in the speech: a dash is inaudible
+  加粗          at most 2 in any assembly the speaker could build
+  段末金句      not on the closing line of 3+ paragraphs of one piece
+  句长落差      no run of 3+ near-equal sentences within one piece
+  三连排比      at most one per piece
+  书面连接词    none
+  口语黏合剂    at least 3 in EVERY assembly, i.e. even the one built from the
+                modules with the fewest
 
-Exit code 1 if any speech fails.
+A kit (套件, see kit.py) is checked over every possible assembly, not a sample:
+a live choice of modules must never produce a speech that fails.
+
+Desk mode (--desk) checks only the text a debater will say out loud: the whole
+of a 速查, and in a 备赛文档 the 口径表's 标准表述 and 允许的换说法 columns, the
+first sentence of every 定义 / 判准 card, and lines labelled 口头版, 一句话… or
+…口径. There, dashes must be zero. Analysis prose may keep its dashes.
+
+Exit code 1 if anything fails.
 """
 import argparse
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import kit  # noqa: E402
 
 BOOKISH = ["综上所述", "值得注意的是", "鉴于", "旨在", "因而", "与此同时", "由此可见",
            "不言而喻", "众所周知", "从某种意义上", "换而言之", "诚然如此", "基于此",
@@ -81,81 +91,141 @@ def flat_runs(sents, window=3, tol=4):
     return runs
 
 
-def body_of(section):
-    lines = section.split("\n")[1:]
-    out = []
-    for ln in lines:
-        s = ln.strip()
-        if re.match(r"^\**如果[^*]*就", s) or s.startswith("**如果"):
-            break
-        out.append(ln)
-    while out and (not out[-1].strip() or out[-1].strip().startswith(("-", "*", ">"))):
-        out.pop()
-    return "\n".join(out)
+def n_bold(t):
+    return len(re.findall(r"\*\*([^*\n]{6,})\*\*", t))
 
 
-def check(heading, body, verbose=False):
+def n_glue(t):
+    return sum(t.count(w) for w in COLLOQUIAL)
+
+
+def check_piece(text):
+    """Local tells: they belong to one continuous stretch of speech."""
     problems = []
-    dash = len(re.findall(r"——", body))
-    if dash:
-        problems.append(("破折号", dash, "应为 0；改成句号断句，或换成「也就是说」「比如」"))
-
-    bold = re.findall(r"\*\*([^*\n]{6,})\*\*", body)
-    if len(bold) > 2:
-        problems.append(("加粗句", len(bold), "最多 2 处；加粗是重音提示，不是每段的收尾装饰"))
-
-    paras = [p.strip() for p in body.split("\n") if p.strip() and not p.strip().startswith(("-", "*", ">", "|"))]
+    paras = [p.strip() for p in text.split("\n") if p.strip() and not p.strip().startswith(("-", "*", ">", "|", "#"))]
     closers = sum(1 for p in paras if re.search(r"\*\*[^*]{6,}\*\*\s*$", p))
     if closers >= 3:
         problems.append(("段末金句", closers, "让一部分段落平着收，反差才能突出真正的重点"))
-
-    sents = sentences(body)
+    sents = sentences(text)
     runs = flat_runs(sents)
     if runs >= 3:
         problems.append(("等长句串", runs, "插入 6 字以内的短句或 40 字以上的长句打破节奏"))
-
     tri = parallel_triples(sents)
     if tri > 1:
-        problems.append(("三连排比", tri, "全稿最多 1 次；把其中一项拆成单句或删掉第三项"))
+        problems.append(("三连排比", tri, "每段最多 1 次；把其中一项拆成单句或删掉第三项"))
+    return problems
 
-    found_bookish = [w for w in BOOKISH if w in body]
-    if found_bookish:
-        problems.append(("书面连接词", "、".join(found_bookish), "换成「所以」「说到底」「还有」"))
 
-    glue = sum(body.count(w) for w in COLLOQUIAL)
-    if glue < 3:
-        problems.append(("口语黏合剂", glue, "至少 3 处：问评委一句、招呼听众动脑、坦白一句"))
+def check_section(parts):
+    problems = []
+    whole = kit.all_text(parts)
+    dash = whole.count("——")
+    if dash:
+        problems.append(("破折号", dash, "应为 0；改成句号断句，或换成「也就是说」「比如」"))
+    found = [w for w in BOOKISH if w in whole]
+    if found:
+        problems.append(("书面连接词", "、".join(found), "换成「所以」「说到底」「还有」"))
+    _, bold_max = kit.assembly_range(parts, n_bold, live_counts=False)
+    if bold_max > 2:
+        problems.append(("加粗", bold_max, "任何一种组装最多 2 处；加粗是重音提示，不是每段的收尾装饰"))
+    glue_min, _ = kit.assembly_range(parts, n_glue, live_counts=False)
+    if glue_min < 3:
+        problems.append(("口语黏合剂", glue_min, "最少的那种组装也要有 3 处：问评委一句、招呼听众动脑、坦白一句"))
+    for name, text in kit.pieces(parts):
+        for pr in check_piece(text):
+            problems.append((pr[0], "%s（%s）" % (pr[1], name[:18]), pr[2]))
+    return problems, {"dash": dash, "bold": bold_max, "glue": glue_min}
 
-    return problems, {"dash": dash, "bold": len(bold), "glue": glue, "sents": len(sents)}
+
+SPOKEN_LABEL = re.compile(r"(口头版|一句话[^：:*]{0,6}|[^：:*\s]{0,8}口径|标准表述)\**\s*[：:](.*)$")
+
+
+def desk_spoken(text, whole_file):
+    """Yield (line_no, snippet) for every dash in text that will be said aloud."""
+    lines = text.split("\n")
+    if whole_file:
+        for i, ln in enumerate(lines, 1):
+            if "——" in ln:
+                yield i, ln.strip()
+        return
+    cols, in_kj = [], False
+    for i, ln in enumerate(lines, 1):
+        st = ln.strip()
+        if st.startswith("|"):
+            cells = [c.strip() for c in st.strip("|").split("|")]
+            if cells and cells[0] == "类别" and "标准表述" in cells:
+                cols = [j for j, c in enumerate(cells) if c in ("标准表述", "允许的换说法")]
+                in_kj = True
+                continue
+            if in_kj and not re.match(r"^[\s|:-]+$", st):
+                for j in cols:
+                    if j < len(cells) and "——" in cells[j] and cells[j].strip("—- ") != "":
+                        yield i, cells[j]
+            continue
+        in_kj = False
+        m = SPOKEN_LABEL.search(st)
+        if m:
+            said = m.group(2)
+            q = re.match(r"\s*[\"“「](.*?)[\"”」]", said)          # a quoted line: only the quote is said
+            said = q.group(1) if q else re.split(r"(?<=[。！？])|(?:出处|来源|状态|支撑|边界)[：:]", said, maxsplit=1)[0]
+            if "——" in said:
+                yield i, said.strip()
+                continue
+        m = re.match(r"^\s*[-*]\s*\*\*[^*]*(?:有利|中立)(?:定义|判准)\*\*\s*[：:]\s*(.*)$", ln)
+        if m:
+            first = re.split(r"(?<=[。．])", m.group(1).strip(), maxsplit=1)[0]
+            if "——" in first:
+                yield i, first
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="+")
-    ap.add_argument("--verbose", action="store_true", help="also print stats for speeches that pass")
+    ap.add_argument("--desk", action="store_true", help="check the spoken fields of 备赛文档 / 速查 instead of speeches")
+    ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
     bad = 0
+    if args.desk:
+        for path in args.files:
+            text = open(path, encoding="utf-8").read()
+            hits = list(desk_spoken(text, whole_file="速查" in os.path.basename(path)))
+            if hits:
+                bad += 1
+                print("== %s  %d 处会被念出口的破折号" % (path, len(hits)))
+                for ln, snip in hits:
+                    print("   line %d: %s" % (ln, snip[:70]))
+            else:
+                print("== %s  OK" % path)
+        if bad:
+            print("\n这些句子会被队员说出口。破折号改成句号断句，或换成「也就是说」「比如」。")
+        return 1 if bad else 0
+
     for path in args.files:
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read()
+        text = open(path, encoding="utf-8").read()
         print("== %s" % path)
         for sec in re.split(r"\n(?=## )", text):
-            heading = sec.split("\n")[0].lstrip("# ").strip()
-            if not re.search(r"(立论|驳论|小结|结辩)稿", heading):
+            if not sec.lstrip().startswith("## "):
                 continue
-            problems, stats = check(heading, body_of(sec), args.verbose)
+            heading, parts = kit.parse(sec.lstrip())
+            if not re.search(r"(立论|驳论|小结|结辩|申论)", heading) or not ("稿" in heading or "套件" in heading):
+                continue
+            try:
+                problems, stats = check_section(parts)
+            except ValueError as e:
+                problems, stats = [("套件结构", "", str(e))], {"dash": 0, "bold": 0, "glue": 0}
             if problems:
                 bad += 1
                 print("   FAIL %s" % heading[:44])
                 for name, value, fix in problems:
-                    print("        %-6s %-14s %s" % (name, value, fix))
+                    print("        %-6s %-22s %s" % (name, value, fix))
             else:
-                print("   OK   %-44s 破折号 %d 加粗 %d 口语 %d"
-                      % (heading[:44], stats["dash"], stats["bold"], stats["glue"]))
+                print("   OK   %-44s 破折号 %d 加粗≤%d 口语≥%d%s"
+                      % (heading[:44], stats["dash"], stats["bold"], stats["glue"],
+                         "  [套件]" if kit.is_kit(parts) else ""))
     if bad:
-        print("\n%d 篇稿件有机械痕迹。改法见 references/speech-voice.md，"
-              "剩下的四条（画面、数字口语化、形容词、不工整）要自己出声念一遍。" % bad)
+        print("\n%d 篇有机械痕迹。改法见 references/speech-voice.md；"
+              "画面、数字口语化、形容词、不工整这四条要自己出声念一遍。" % bad)
     return 1 if bad else 0
 
 
