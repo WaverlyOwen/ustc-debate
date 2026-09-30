@@ -1,0 +1,270 @@
+/* @theme id=construct name=构成 desc=构成主义几何海报，巨大的扇形表盘从本方席位一侧转回，适合暗场投影 tone=dark */
+/* 构成: a constructivist poster. The time left is a sector of a giant dial whose centre lies just outside the speaking
+   side's seat edge; the half of the dial that shows is the whole time, so the sector's angle is the time left × 180°
+   and its free edge falls to the floor like a gauge's needle (spec §2.5). A fine grid, the stage's number in the
+   running order set large, the top bar turned against the edges and a thick diagonal band make up the rest of the
+   sheet. Red, blue and a yellow for the warn bell and overtime, on a warm graphite ground. All of it is CSS. */
+[data-theme="construct"] {
+  --pro: #BF2A1D;           /* constructivist red: the cream type still reads 4.9:1 on it */
+  --pro-deep: var(--ground);
+  --con: #2150B8;           /* ultramarine */
+  --con-deep: var(--ground);
+  --ground: #2C2926;        /* warm graphite, a printed black rather than a screen's */
+  --ink: #F1EADB;
+  --ink-dim: rgb(241 234 219 / .72);
+  --accent: #F2B822;        /* the yellow: the warn bell, overtime, the speaker's floor line */
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "DengXian", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-ui: "DengXian", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --backdrop: none;
+  --band: #4A443D;          /* concrete: the diagonal band, until the time is up */
+  --grid-line: rgb(241 234 219 / .07);
+  --tick: rgb(241 234 219 / .5);
+}
+
+/* The dial's angle and radius are registered so the entrance can sweep the sector open and a free debate's dials can
+   grow and shrink with the halves. */
+@property --construct-sweep { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
+@property --construct-r { syntax: "<length>"; inherits: true; initial-value: 0px; }
+
+.dt-stage[data-theme="construct"] {
+  /* The content keeps to the inner ten of twelve grid columns; the outer two carry the turned top bar. */
+  padding-left: calc(100cqw / 12);
+  padding-right: calc(100cqw / 12);
+  --dial-out: 7cqh;         /* how far outside the seat edge the dial's centre lies */
+  --dial-y: 60cqh;
+  --construct-r: 146cqh;    /* its rim arcs past the widest digits, on the far side from the seat */
+  --hub-r: 15cqh;
+  --hub-ring: transparent calc(100% - .5cqh - 1px), var(--ink) calc(100% - .5cqh), var(--ink) calc(100% - 1px), transparent 100%;
+  --construct-sweep: calc((1 - var(--used)) * 180deg);
+  /* The title card's dials, each at its side's seat. */
+  --pro-x: calc(-1 * var(--dial-out));
+  --con-x: calc(100% + var(--dial-out));
+}
+.dt-stage[data-theme="construct"][data-pro-seat="right"] {
+  --pro-x: calc(100% + var(--dial-out));
+  --con-x: calc(-1 * var(--dial-out));
+}
+/* The sector is repainted when the needle moves half a degree (a second of a three-minute stage), not every frame. */
+@supports (width: round(nearest, 1px, 1px)) {
+  .dt-stage[data-theme="construct"] { --construct-sweep: round(nearest, calc((1 - var(--used)) * 180deg), .5deg); }
+}
+
+/* ---- the dial ---- */
+
+/* A disc of the side's colour at the hub, ringed in cream as the dial's pivot, which stays when the time is up so the
+   room still sees whose floor it is; and the sector of time left; all cut to the dial's rim. From the left seat the
+   sector is anchored at the floor and opens counter-clockwise; --dial-from is where its free edge is. */
+.dt-stage[data-theme="construct"] :is(.dt-field, .dt-half-field) {
+  --dial-x: calc(-1 * var(--dial-out));
+  --dial-from: calc(180deg - var(--construct-sweep));
+  background:
+    radial-gradient(circle calc(var(--hub-r) + .5cqh) at var(--dial-x) var(--dial-y), var(--hub-ring)),
+    radial-gradient(circle var(--hub-r) at var(--dial-x) var(--dial-y), var(--side-color) calc(100% - 1px), transparent 100%),
+    conic-gradient(from var(--dial-from) at var(--dial-x) var(--dial-y), var(--side-color) 0 var(--construct-sweep), transparent 0);
+  -webkit-mask: radial-gradient(circle var(--construct-r) at var(--dial-x) var(--dial-y), #000 calc(100% - 1px), transparent 100%);
+  mask: radial-gradient(circle var(--construct-r) at var(--dial-x) var(--dial-y), #000 calc(100% - 1px), transparent 100%);
+}
+/* [data-mode] ranks this with stage.css's per-seat clip-path rules, which it replaces: the sector turns back to the
+   seat instead of being cut back. */
+.dt-stage[data-theme="construct"][data-mode] .dt-field { clip-path: none; }
+/* From the right-hand seat: the mirror, anchored at the floor and opening clockwise. */
+.dt-stage[data-theme="construct"][data-pro-seat="right"][data-side="pro"] .dt-field,
+.dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-field,
+.dt-stage[data-theme="construct"] .dt-half:last-child .dt-half-field {
+  --dial-x: calc(100% + var(--dial-out));
+  --dial-from: 180deg;
+}
+
+/* The dial's scale: a tick every 3° and the rim, along the edge of the whole half-disc, so the empty part still reads
+   as the time used. The field's own mask keeps them inside the rim; they stop short of the text above and below. */
+.dt-stage[data-theme="construct"] :is(.dt-field, .dt-half-field)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle var(--construct-r) at var(--dial-x) var(--dial-y), transparent calc(100% - .35cqh), var(--tick) calc(100% - .35cqh)),
+    repeating-conic-gradient(from -.25deg at var(--dial-x) var(--dial-y), var(--tick) 0 .5deg, transparent 0 3deg);
+  --scale: radial-gradient(circle var(--construct-r) at var(--dial-x) var(--dial-y), transparent calc(100% - 3.2cqh), #000 calc(100% - 3.2cqh));
+  --clear-of-text: linear-gradient(to bottom, transparent 26cqh, #000 32cqh 84cqh, transparent 89cqh);
+  -webkit-mask: var(--scale), var(--clear-of-text);
+  -webkit-mask-composite: source-in;
+  mask: var(--scale), var(--clear-of-text);
+  mask-composite: intersect;
+}
+.dt-stage[data-theme="construct"][data-phase="over"] .dt-field::before { --tick: var(--accent); }
+
+/* The one orchestrated moment: a new stage's sector sweeps open from the floor. The attributes rank it above
+   stage.css's per-seat sweeps, which it replaces. No `to` frame: it ends on the live angle. */
+.dt-stage[data-theme="construct"][data-mode][data-side].is-entering :is(.dt-field, .dt-half-field) {
+  animation: dt-construct-open 560ms var(--ease-out);
+}
+@keyframes dt-construct-open { from { --construct-sweep: 0deg; } }
+
+/* ---- the warn bell point: a yellow ray of the dial, where the needle will be when it rings ---- */
+
+.dt-stage[data-theme="construct"] .dt-warnline {
+  top: var(--dial-y);
+  right: auto;
+  bottom: auto;
+  left: calc(-1 * var(--dial-out));
+  width: var(--construct-r);
+  height: .8cqh;
+  margin: -.4cqh 0 0;
+  background: linear-gradient(to right, transparent calc(var(--hub-r) + 1.5cqh), var(--accent) 0);
+  transform-origin: 0 50%;
+  rotate: calc(90deg - var(--warn-at) * 180deg);
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.dt-stage[data-theme="construct"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
+.dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-warnline {
+  left: calc(100% + var(--dial-out));
+  rotate: calc(90deg + var(--warn-at) * 180deg);
+}
+
+/* ---- digits: one cream layer, which reads on the red, the blue and the ground as the needle crosses them ---- */
+
+.dt-stage[data-theme="construct"] .dt-digits-on { display: none; }
+.dt-stage[data-theme="construct"][data-kind][data-pro-seat][data-side] .dt-clock .dt-digits:not(.dt-digits-on),
+.dt-stage[data-theme="construct"] .dt-half .dt-digits:not(.dt-digits-on) { clip-path: none; }
+
+/* ---- the grid and the band ---- */
+
+/* Twelve columns and eight rows of fine lines over the whole sheet, the dial included. */
+.dt-stage[data-theme="construct"] .dt-deco-over {
+  background:
+    repeating-linear-gradient(to right, var(--grid-line) 0 1px, transparent 1px calc(100cqw / 12)),
+    repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px calc(100cqh / 8));
+}
+
+/* A thick band rising from the floor away from the seat, under the dial and clear of the digits. It turns yellow when
+   the time is up. Free debate has its two dials and the end card its table, so neither has it. */
+.dt-stage[data-theme="construct"] .dt-deco::before {
+  content: "";
+  position: absolute;
+  left: 62cqw;
+  top: 86cqh;
+  width: 80cqw;
+  height: 7.5cqh;
+  margin-top: -3.75cqh;
+  background: var(--band);
+  transform-origin: 0 50%;
+  rotate: -34deg;
+}
+.dt-stage[data-theme="construct"][data-pro-seat="right"][data-side="pro"] .dt-deco::before,
+.dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-deco::before {
+  left: auto;
+  right: 62cqw;
+  transform-origin: 100% 50%;
+  rotate: 34deg;
+}
+.dt-stage[data-theme="construct"][data-phase="over"] .dt-deco::before { background: var(--accent); }
+.dt-stage[data-theme="construct"][data-kind="dual"] .dt-deco::before,
+.dt-stage[data-theme="construct"][data-mode="end"] .dt-deco::before { display: none; }
+
+/* ---- the stage's number: counted from the progress bar, so it is its true place in the order ---- */
+
+.dt-stage[data-theme="construct"] .dt-progress { counter-reset: dt-construct-stage; }
+/* Static, so the number is placed against the bottom bar rather than its own small segment. */
+.dt-stage[data-theme="construct"] .dt-seg { position: static; counter-increment: dt-construct-stage; }
+/* The current segment's marker below it would now be placed against the bar too: a yellow frame instead. */
+.dt-stage[data-theme="construct"] .dt-seg[data-state="current"] { outline: .25cqh solid var(--accent); outline-offset: .3cqh; }
+.dt-stage[data-theme="construct"] .dt-seg[data-state="current"]::after { display: none; }
+.dt-stage[data-theme="construct"][data-mode="stage"]:not([data-kind="dual"]) .dt-seg[data-state="current"]::before {
+  content: counter(dt-construct-stage, decimal-leading-zero);
+  position: absolute;
+  right: 0;
+  bottom: 30cqh;
+  font-family: var(--font-digits);
+  font-size: 30cqh;
+  font-variation-settings: "wght" 600, "wdth" 78;
+  line-height: .72;
+  letter-spacing: -.02em;
+  color: transparent;
+  -webkit-text-stroke: .3cqh var(--ink);
+}
+.dt-stage[data-theme="construct"][data-pro-seat="right"][data-side="pro"] .dt-seg[data-state="current"]::before,
+.dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-seg[data-state="current"]::before {
+  right: auto;
+  left: 0;
+}
+
+/* ---- type ---- */
+
+/* The top bar is turned 90° into the outer grid columns, above the dials' hubs: the match reads up the left edge, the
+   format down the right. */
+.dt-stage[data-theme="construct"] .dt-top {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  font-family: var(--font-title);
+  font-size: 1.9cqh;
+  font-weight: 700;
+  letter-spacing: .24em;
+  color: var(--ink);
+}
+.dt-stage[data-theme="construct"] .dt-top span {
+  position: absolute;
+  max-width: none;
+  max-height: 34cqh;
+  writing-mode: vertical-rl;
+  text-orientation: sideways;
+}
+.dt-stage[data-theme="construct"] .dt-match { left: calc(100cqw / 24); top: 6cqh; translate: -50% 0; rotate: 180deg; }
+.dt-stage[data-theme="construct"] .dt-format { right: calc(100cqw / 24); top: 6cqh; translate: 50% 0; }
+
+.dt-stage[data-theme="construct"] .dt-head { margin-top: 5cqh; }
+.dt-stage[data-theme="construct"] .dt-title { font-size: 6.2cqh; font-weight: 700; letter-spacing: .1em; }
+.dt-stage[data-theme="construct"][data-long="true"] .dt-title { font-size: 4.6cqh; }
+.dt-stage[data-theme="construct"] .dt-speaker { font-family: var(--font-title); font-weight: 700; letter-spacing: .2em; }
+.dt-stage[data-theme="construct"] .dt-bottom { color: var(--ink); }
+/* The bar's shade reaches the edges past the wider grid margins. */
+.dt-stage[data-theme="construct"] .dt-bottom::before { inset: -7cqh calc(-100cqw / 12) -3.6cqh; }
+
+/* ---- free debate: two dials face each other from the outer edges; the speaker's is the larger ---- */
+
+.dt-stage[data-theme="construct"] .dt-half {
+  --half-ground: transparent;   /* the ground shows between the two dials */
+  --dial-y: 60cqh;
+  --hub-r: 10cqh;
+  --construct-r: 74cqh;
+  --construct-sweep: calc(var(--remain, 1) * 180deg);
+  box-shadow: none;
+  transition: filter 300ms ease, --construct-r 520ms var(--ease-spring);
+}
+@supports (width: round(nearest, 1px, 1px)) {
+  .dt-stage[data-theme="construct"] .dt-half { --construct-sweep: round(nearest, calc(var(--remain, 1) * 180deg), .5deg); }
+}
+.dt-stage[data-theme="construct"] .dt-half[data-active] { --construct-r: 98cqh; }
+.dt-stage[data-theme="construct"] .dt-halves[data-idle] .dt-half { --construct-r: 86cqh; }   /* clear of the larger idle digits */
+.dt-stage[data-theme="construct"] .dt-team { left: calc(100cqw / 12); right: calc(100cqw / 12); }
+.dt-stage[data-theme="construct"] .dt-half-field { inset: 0; height: auto; clip-path: none; }
+/* A side whose time is up says so in the heading's weight, not stage.css's light fallback. */
+.dt-stage[data-theme="construct"] .dt-half[data-locked] .dt-state { font-weight: 700; letter-spacing: .2em; opacity: 1; }
+
+/* ---- cards ---- */
+
+/* The title card: each side's dial, full, at its seat. */
+.dt-stage[data-theme="construct"][data-mode="title"] .dt-deco {
+  background:
+    radial-gradient(circle 52cqh at var(--pro-x) 50%, var(--pro) calc(100% - 1px), transparent 100%),
+    radial-gradient(circle 52cqh at var(--con-x) 50%, var(--con) calc(100% - 1px), transparent 100%);
+}
+
+/* The end card: both dials have run down to their hubs, one at each side's seat. */
+.dt-stage[data-theme="construct"][data-mode="end"] .dt-deco {
+  background:
+    radial-gradient(circle calc(var(--hub-r) + .5cqh) at var(--pro-x) var(--dial-y), var(--hub-ring)),
+    radial-gradient(circle calc(var(--hub-r) + .5cqh) at var(--con-x) var(--dial-y), var(--hub-ring)),
+    radial-gradient(circle var(--hub-r) at var(--pro-x) var(--dial-y), var(--pro) calc(100% - 1px), transparent 100%),
+    radial-gradient(circle var(--hub-r) at var(--con-x) var(--dial-y), var(--con) calc(100% - 1px), transparent 100%);
+}
+
+/* The record marks each row's side with a quarter of a dial. */
+.dt-stage[data-theme="construct"] .dt-record td:first-child::before {
+  width: .7em;
+  height: .7em;
+  vertical-align: 0;
+  border-radius: 0 100% 0 0;
+}
