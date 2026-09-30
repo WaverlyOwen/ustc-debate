@@ -1,0 +1,168 @@
+/* @theme id=startrail name=星轨 desc=长曝光的夜空，发言越久星轨越长，适合暗场投影 tone=dark */
+/* 星轨: a long exposure of the night sky. The stars circle a pole off the speaking side's upper corner and the time
+   used is the length of their trails (the painter is themes/startrail.js); the speaking side's field is a nebula's
+   glow at its seat that fades as its time runs out (spec §2.2). */
+[data-theme="startrail"] {
+  --pro: #D65A7C;           /* H-alpha: the rose of an emission nebula */
+  --pro-deep: #0E1438;      /* the sky itself: there is no deep field, only the night */
+  --con: #3AA0C8;           /* O III: the teal of a planetary nebula */
+  --con-deep: #0E1438;
+  --ground: #0E1438;        /* deep indigo night, not a neutral black */
+  --ink: #EEF2FF;           /* starlight white, a little blue */
+  --ink-dim: rgb(214 222 250 / .78);
+  --accent: #F4C969;        /* a bright star's gold */
+  --speaker-ink: #C6D2F2;
+  --pro-glow: 214 90 124;   /* the nebulae as channels, for glows of any strength */
+  --con-glow: 58 160 200;
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "DengXian", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-ui: "DengXian", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  /* The sky: deep indigo overhead, paling toward the horizon, where a town below it leaves a warm haze. */
+  --backdrop:
+    radial-gradient(70% 24% at 64% 100%, rgb(236 150 96 / .24), transparent),
+    linear-gradient(to bottom, #080C2A, #0E1438 38%, #18194A 70%, #2C2250 88%, #452C4E);
+  --half-ground: transparent;   /* the painter's sky runs under both halves of free debate */
+  --meter-y: 85cqh;             /* the line of the time left, between the digits and the bottom bar */
+}
+
+/* --side-color is the glow at its strongest over the sky: what the digits and the head can sit on (spec §1.5). */
+.dt-stage[data-theme="startrail"][data-side="pro"] { --side-color: #5E3053; --glow: var(--pro-glow); }
+.dt-stage[data-theme="startrail"][data-side="con"] { --side-color: #204C72; --glow: var(--con-glow); }
+.dt-stage[data-theme="startrail"] { --glow: 150 170 230; --glow-x: 0%; }
+/* The speaking side sits on the right: its glow and its line of time start from the right edge. */
+.dt-stage[data-theme="startrail"][data-pro-seat="right"][data-side="pro"],
+.dt-stage[data-theme="startrail"][data-pro-seat="left"][data-side="con"] { --glow-x: 100%; }
+
+/* ---- the nebula: a translucent glow on the speaking side, clouded by noise, fading with the time left ---- */
+
+.dt-stage[data-theme="startrail"] .dt-field,
+.dt-stage[data-theme="startrail"] .dt-half-field {
+  background: radial-gradient(70% 80% at var(--glow-x) 56%, rgb(var(--glow) / .8), rgb(var(--glow) / .4) 34%,
+    rgb(var(--glow) / .1) 66%, transparent 88%);
+  /* A cloud of noise gives the glow a nebula's filaments; it thins out before the horizon. */
+  --nebula: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='640' height='640'><filter id='n' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.0045' numOctaves='4' seed='11' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  2.2 0 0 0 -.62'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>") 0 0 / 96cqh 96cqh,
+    linear-gradient(#000 64%, transparent 90%);
+  -webkit-mask: var(--nebula);
+  mask: var(--nebula);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  will-change: opacity;
+}
+.dt-stage[data-theme="startrail"] .dt-field { opacity: calc(.26 + .74 * (1 - var(--used))); }
+/* Not taken back: the glow fades instead. inset(0) rather than none, so the entrance sweep still animates; [data-mode]
+   ranks this with stage.css's per-seat clip-path rules, which it replaces. */
+.dt-stage[data-theme="startrail"][data-mode] .dt-field,
+.dt-stage[data-theme="startrail"] .dt-half-field { clip-path: inset(0); }
+
+/* ---- digits: starlight, with the faintest bloom ---- */
+
+.dt-stage[data-theme="startrail"] .dt-digits {
+  text-shadow: 0 0 .04em rgb(200 220 255 / .5), 0 0 .24em rgb(120 150 255 / .2);
+}
+/* The digits are one colour on the glow and off it, so the renderer's second, clipped layer is not needed: without it
+   the two layers' blooms cannot meet in a seam across a digit. */
+.dt-stage[data-theme="startrail"] .dt-digits-on { display: none; }
+/* The attribute selectors only rank this above stage.css's per-seat clips, which it removes. */
+.dt-stage[data-theme="startrail"][data-kind][data-pro-seat][data-side] .dt-clock .dt-digits:not(.dt-digits-on) { clip-path: none; }
+/* The zenith is the darkest sky, so the top bar and the stage name sit on quiet night; and a little night is kept
+   clear behind the digits, so the trails pass behind them without eating their edges. */
+.dt-stage[data-theme="startrail"] .dt-deco { background: linear-gradient(rgb(7 10 34 / .5), transparent 30cqh); }
+.dt-stage[data-theme="startrail"][data-mode="stage"]:not([data-kind="dual"]) .dt-deco {
+  background: radial-gradient(44% 34% at 50% var(--clock-y), rgb(8 11 36 / .6), transparent),
+    linear-gradient(rgb(7 10 34 / .5), transparent 30cqh);
+}
+/* The end card's table is read line by line: the whole match's exposure stays, dimmed behind it. */
+.dt-stage[data-theme="startrail"][data-mode="end"] .dt-canvas { opacity: .5; }
+
+/* ---- the time left: a line of light from the speaking seat, its head where hall's field edge would be ---- */
+
+.dt-stage[data-theme="startrail"][data-mode="stage"][data-kind="single"] .dt-deco::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--meter-y) - 1cqh);
+  left: 0;
+  width: calc((1 - var(--used)) * 100%);
+  height: 2cqh;
+  background:
+    radial-gradient(circle closest-side, #fff, rgb(var(--glow) / .7) 45%, transparent) 100% 50% / 2cqh 2cqh no-repeat,
+    linear-gradient(to right, rgb(var(--glow) / .08), rgb(var(--glow) / .6) 70%, var(--ink)) 0 50% / 100% max(2px, .2cqh) no-repeat;
+}
+.dt-stage[data-theme="startrail"][data-mode="stage"][data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-deco::before,
+.dt-stage[data-theme="startrail"][data-mode="stage"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-deco::before {
+  left: auto;
+  right: 0;
+  background:
+    radial-gradient(circle closest-side, #fff, rgb(var(--glow) / .7) 45%, transparent) 0 50% / 2cqh 2cqh no-repeat,
+    linear-gradient(to left, rgb(var(--glow) / .08), rgb(var(--glow) / .6) 70%, var(--ink)) 0 50% / 100% max(2px, .2cqh) no-repeat;
+}
+
+/* The warn bell point: a four-pointed gold star on the line, where its head passes as the warn bell rings. */
+.dt-stage[data-theme="startrail"] .dt-warnline {
+  top: calc(var(--meter-y) - 1.8cqh);
+  bottom: auto;
+  width: 3.6cqh;
+  height: 3.6cqh;
+  margin-left: -1.8cqh;
+  clip-path: polygon(50% 0, 57% 43%, 100% 50%, 57% 57%, 50% 100%, 43% 57%, 0 50%, 43% 43%);
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/* ---- the horizon: a low ridge and a small observatory, its slit open and one window lit, black against the town's
+   glow ---- */
+
+.dt-stage[data-theme="startrail"] .dt-deco::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  aspect-ratio: 1600 / 90;
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 90'><path fill='%23060919' d='M0 90V66C80 62 160 58 250 60C340 62 420 58 500 54C540 52 570 52 590 53V38A30 30 0 0 1 650 38V53C700 54 760 60 840 62C940 64 1040 58 1140 54C1240 50 1340 44 1440 42C1510 41 1560 44 1600 46V90Z'/><path fill='%231B1D40' d='M617 10h6v26h-6z'/><path fill='%23F4C969' fill-opacity='.8' d='M600 44h7v5h-7z'/></svg>") 0 100% / 100% 100% no-repeat;
+}
+
+/* ---- the meteor: crossing the warn point sends one shooting star over the digits (the warn bell's ring) ---- */
+
+.dt-stage[data-theme="startrail"][data-phase="warn"] .dt-ring {
+  width: 34cqh;
+  height: .5cqh;
+  margin: -.25cqh 0 0 -34cqh;   /* the head sits at the ring's point, the tail trails behind */
+  border: 0;
+  border-radius: .25cqh;
+  background: linear-gradient(to right, transparent, rgb(190 214 255 / .5) 70%, #fff);
+  transform-origin: 100% 50%;
+  animation: dt-startrail-meteor 900ms cubic-bezier(.35, 0, .65, 1) forwards;
+}
+@keyframes dt-startrail-meteor {
+  from { opacity: 0; transform: translate(-26cqh, -30cqh) rotate(12deg) scaleX(.2); }
+  20% { opacity: 1; }
+  to { opacity: 0; transform: translate(34cqh, -17cqh) rotate(12deg) scaleX(1); }
+}
+
+/* ---- head and bars ---- */
+
+.dt-stage[data-theme="startrail"] .dt-title { font-weight: 400; letter-spacing: .1em; }
+.dt-stage[data-theme="startrail"] .dt-speaker { letter-spacing: .3em; }
+.dt-stage[data-theme="startrail"] .dt-top { letter-spacing: .2em; }
+
+/* ---- free debate: two skies, each side's nebula at its own seat ---- */
+
+.dt-stage[data-theme="startrail"] .dt-half[data-side="pro"] { --glow: var(--pro-glow); }
+.dt-stage[data-theme="startrail"] .dt-half[data-side="con"] { --glow: var(--con-glow); }
+.dt-stage[data-theme="startrail"] .dt-half:first-child { --glow-x: 8%; }
+.dt-stage[data-theme="startrail"] .dt-half:last-child { --glow-x: 92%; }
+.dt-stage[data-theme="startrail"] .dt-half-field {
+  inset: 0;
+  height: auto;
+  opacity: calc(.3 + .7 * var(--remain, 1));
+}
+.dt-stage[data-theme="startrail"] .dt-half[data-locked] .dt-half-field { opacity: 0; }
+
+/* ---- cards: each motion is marked with a star of its side's colour ---- */
+
+.dt-stage[data-theme="startrail"] .dt-motion::before {
+  top: .5em;
+  width: .32em;
+  height: .32em;
+  border-radius: 50%;
+  box-shadow: 0 0 .35em .05em var(--pro);
+}
+.dt-stage[data-theme="startrail"] .dt-motion[data-side="con"]::before { box-shadow: 0 0 .35em .05em var(--con); }

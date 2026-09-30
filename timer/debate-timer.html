@@ -2370,13 +2370,183 @@ body {
   .dt-stage[data-theme="ink"] .dt-deco-over::after { filter: none; }
 }
 
+/* === themes/startrail.css === */
+/* @theme id=startrail name=星轨 desc=长曝光的夜空，发言越久星轨越长，适合暗场投影 tone=dark */
+/* 星轨: a long exposure of the night sky. The stars circle a pole off the speaking side's upper corner and the time
+   used is the length of their trails (the painter is themes/startrail.js); the speaking side's field is a nebula's
+   glow at its seat that fades as its time runs out (spec §2.2). */
+[data-theme="startrail"] {
+  --pro: #D65A7C;           /* H-alpha: the rose of an emission nebula */
+  --pro-deep: #0E1438;      /* the sky itself: there is no deep field, only the night */
+  --con: #3AA0C8;           /* O III: the teal of a planetary nebula */
+  --con-deep: #0E1438;
+  --ground: #0E1438;        /* deep indigo night, not a neutral black */
+  --ink: #EEF2FF;           /* starlight white, a little blue */
+  --ink-dim: rgb(214 222 250 / .78);
+  --accent: #F4C969;        /* a bright star's gold */
+  --speaker-ink: #C6D2F2;
+  --pro-glow: 214 90 124;   /* the nebulae as channels, for glows of any strength */
+  --con-glow: 58 160 200;
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "DengXian", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-ui: "DengXian", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  /* The sky: deep indigo overhead, paling toward the horizon, where a town below it leaves a warm haze. */
+  --backdrop:
+    radial-gradient(70% 24% at 64% 100%, rgb(236 150 96 / .24), transparent),
+    linear-gradient(to bottom, #080C2A, #0E1438 38%, #18194A 70%, #2C2250 88%, #452C4E);
+  --half-ground: transparent;   /* the painter's sky runs under both halves of free debate */
+  --meter-y: 85cqh;             /* the line of the time left, between the digits and the bottom bar */
+}
+
+/* --side-color is the glow at its strongest over the sky: what the digits and the head can sit on (spec §1.5). */
+.dt-stage[data-theme="startrail"][data-side="pro"] { --side-color: #5E3053; --glow: var(--pro-glow); }
+.dt-stage[data-theme="startrail"][data-side="con"] { --side-color: #204C72; --glow: var(--con-glow); }
+.dt-stage[data-theme="startrail"] { --glow: 150 170 230; --glow-x: 0%; }
+/* The speaking side sits on the right: its glow and its line of time start from the right edge. */
+.dt-stage[data-theme="startrail"][data-pro-seat="right"][data-side="pro"],
+.dt-stage[data-theme="startrail"][data-pro-seat="left"][data-side="con"] { --glow-x: 100%; }
+
+/* ---- the nebula: a translucent glow on the speaking side, clouded by noise, fading with the time left ---- */
+
+.dt-stage[data-theme="startrail"] .dt-field,
+.dt-stage[data-theme="startrail"] .dt-half-field {
+  background: radial-gradient(70% 80% at var(--glow-x) 56%, rgb(var(--glow) / .8), rgb(var(--glow) / .4) 34%,
+    rgb(var(--glow) / .1) 66%, transparent 88%);
+  /* A cloud of noise gives the glow a nebula's filaments; it thins out before the horizon. */
+  --nebula: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='640' height='640'><filter id='n' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.0045' numOctaves='4' seed='11' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  2.2 0 0 0 -.62'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>") 0 0 / 96cqh 96cqh,
+    linear-gradient(#000 64%, transparent 90%);
+  -webkit-mask: var(--nebula);
+  mask: var(--nebula);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  will-change: opacity;
+}
+.dt-stage[data-theme="startrail"] .dt-field { opacity: calc(.26 + .74 * (1 - var(--used))); }
+/* Not taken back: the glow fades instead. inset(0) rather than none, so the entrance sweep still animates; [data-mode]
+   ranks this with stage.css's per-seat clip-path rules, which it replaces. */
+.dt-stage[data-theme="startrail"][data-mode] .dt-field,
+.dt-stage[data-theme="startrail"] .dt-half-field { clip-path: inset(0); }
+
+/* ---- digits: starlight, with the faintest bloom ---- */
+
+.dt-stage[data-theme="startrail"] .dt-digits {
+  text-shadow: 0 0 .04em rgb(200 220 255 / .5), 0 0 .24em rgb(120 150 255 / .2);
+}
+/* The digits are one colour on the glow and off it, so the renderer's second, clipped layer is not needed: without it
+   the two layers' blooms cannot meet in a seam across a digit. */
+.dt-stage[data-theme="startrail"] .dt-digits-on { display: none; }
+/* The attribute selectors only rank this above stage.css's per-seat clips, which it removes. */
+.dt-stage[data-theme="startrail"][data-kind][data-pro-seat][data-side] .dt-clock .dt-digits:not(.dt-digits-on) { clip-path: none; }
+/* The zenith is the darkest sky, so the top bar and the stage name sit on quiet night; and a little night is kept
+   clear behind the digits, so the trails pass behind them without eating their edges. */
+.dt-stage[data-theme="startrail"] .dt-deco { background: linear-gradient(rgb(7 10 34 / .5), transparent 30cqh); }
+.dt-stage[data-theme="startrail"][data-mode="stage"]:not([data-kind="dual"]) .dt-deco {
+  background: radial-gradient(44% 34% at 50% var(--clock-y), rgb(8 11 36 / .6), transparent),
+    linear-gradient(rgb(7 10 34 / .5), transparent 30cqh);
+}
+/* The end card's table is read line by line: the whole match's exposure stays, dimmed behind it. */
+.dt-stage[data-theme="startrail"][data-mode="end"] .dt-canvas { opacity: .5; }
+
+/* ---- the time left: a line of light from the speaking seat, its head where hall's field edge would be ---- */
+
+.dt-stage[data-theme="startrail"][data-mode="stage"][data-kind="single"] .dt-deco::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--meter-y) - 1cqh);
+  left: 0;
+  width: calc((1 - var(--used)) * 100%);
+  height: 2cqh;
+  background:
+    radial-gradient(circle closest-side, #fff, rgb(var(--glow) / .7) 45%, transparent) 100% 50% / 2cqh 2cqh no-repeat,
+    linear-gradient(to right, rgb(var(--glow) / .08), rgb(var(--glow) / .6) 70%, var(--ink)) 0 50% / 100% max(2px, .2cqh) no-repeat;
+}
+.dt-stage[data-theme="startrail"][data-mode="stage"][data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-deco::before,
+.dt-stage[data-theme="startrail"][data-mode="stage"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-deco::before {
+  left: auto;
+  right: 0;
+  background:
+    radial-gradient(circle closest-side, #fff, rgb(var(--glow) / .7) 45%, transparent) 0 50% / 2cqh 2cqh no-repeat,
+    linear-gradient(to left, rgb(var(--glow) / .08), rgb(var(--glow) / .6) 70%, var(--ink)) 0 50% / 100% max(2px, .2cqh) no-repeat;
+}
+
+/* The warn bell point: a four-pointed gold star on the line, where its head passes as the warn bell rings. */
+.dt-stage[data-theme="startrail"] .dt-warnline {
+  top: calc(var(--meter-y) - 1.8cqh);
+  bottom: auto;
+  width: 3.6cqh;
+  height: 3.6cqh;
+  margin-left: -1.8cqh;
+  clip-path: polygon(50% 0, 57% 43%, 100% 50%, 57% 57%, 50% 100%, 43% 57%, 0 50%, 43% 43%);
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/* ---- the horizon: a low ridge and a small observatory, its slit open and one window lit, black against the town's
+   glow ---- */
+
+.dt-stage[data-theme="startrail"] .dt-deco::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  aspect-ratio: 1600 / 90;
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 90'><path fill='%23060919' d='M0 90V66C80 62 160 58 250 60C340 62 420 58 500 54C540 52 570 52 590 53V38A30 30 0 0 1 650 38V53C700 54 760 60 840 62C940 64 1040 58 1140 54C1240 50 1340 44 1440 42C1510 41 1560 44 1600 46V90Z'/><path fill='%231B1D40' d='M617 10h6v26h-6z'/><path fill='%23F4C969' fill-opacity='.8' d='M600 44h7v5h-7z'/></svg>") 0 100% / 100% 100% no-repeat;
+}
+
+/* ---- the meteor: crossing the warn point sends one shooting star over the digits (the warn bell's ring) ---- */
+
+.dt-stage[data-theme="startrail"][data-phase="warn"] .dt-ring {
+  width: 34cqh;
+  height: .5cqh;
+  margin: -.25cqh 0 0 -34cqh;   /* the head sits at the ring's point, the tail trails behind */
+  border: 0;
+  border-radius: .25cqh;
+  background: linear-gradient(to right, transparent, rgb(190 214 255 / .5) 70%, #fff);
+  transform-origin: 100% 50%;
+  animation: dt-startrail-meteor 900ms cubic-bezier(.35, 0, .65, 1) forwards;
+}
+@keyframes dt-startrail-meteor {
+  from { opacity: 0; transform: translate(-26cqh, -30cqh) rotate(12deg) scaleX(.2); }
+  20% { opacity: 1; }
+  to { opacity: 0; transform: translate(34cqh, -17cqh) rotate(12deg) scaleX(1); }
+}
+
+/* ---- head and bars ---- */
+
+.dt-stage[data-theme="startrail"] .dt-title { font-weight: 400; letter-spacing: .1em; }
+.dt-stage[data-theme="startrail"] .dt-speaker { letter-spacing: .3em; }
+.dt-stage[data-theme="startrail"] .dt-top { letter-spacing: .2em; }
+
+/* ---- free debate: two skies, each side's nebula at its own seat ---- */
+
+.dt-stage[data-theme="startrail"] .dt-half[data-side="pro"] { --glow: var(--pro-glow); }
+.dt-stage[data-theme="startrail"] .dt-half[data-side="con"] { --glow: var(--con-glow); }
+.dt-stage[data-theme="startrail"] .dt-half:first-child { --glow-x: 8%; }
+.dt-stage[data-theme="startrail"] .dt-half:last-child { --glow-x: 92%; }
+.dt-stage[data-theme="startrail"] .dt-half-field {
+  inset: 0;
+  height: auto;
+  opacity: calc(.3 + .7 * var(--remain, 1));
+}
+.dt-stage[data-theme="startrail"] .dt-half[data-locked] .dt-half-field { opacity: 0; }
+
+/* ---- cards: each motion is marked with a star of its side's colour ---- */
+
+.dt-stage[data-theme="startrail"] .dt-motion::before {
+  top: .5em;
+  width: .32em;
+  height: .32em;
+  border-radius: 50%;
+  box-shadow: 0 0 .35em .05em var(--pro);
+}
+.dt-stage[data-theme="startrail"] .dt-motion[data-side="con"]::before { box-shadow: 0 0 .35em .05em var(--con); }
+
 </style>
 </head>
 <body data-dt-autoboot>
   <div id="app"></div>
 <script id="dt-main">
 window.DT = window.DT || {};
-DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放在本方色底板上，供直播抠像", "tone": "dark"}, {"id": "daylight", "name": "昼", "desc": "浅色底，色场收成数字后的一条横带，适合亮场投影", "tone": "light"}, {"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场投影", "tone": "dark"}, {"id": "ink", "name": "墨", "desc": "宣纸上的一道水墨笔触，朱砂对花青，适合亮场投影", "tone": "light"}];
+DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放在本方色底板上，供直播抠像", "tone": "dark"}, {"id": "daylight", "name": "昼", "desc": "浅色底，色场收成数字后的一条横带，适合亮场投影", "tone": "light"}, {"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场投影", "tone": "dark"}, {"id": "ink", "name": "墨", "desc": "宣纸上的一道水墨笔触，朱砂对花青，适合亮场投影", "tone": "light"}, {"id": "startrail", "name": "星轨", "desc": "长曝光的夜空，发言越久星轨越长，适合暗场投影", "tone": "dark"}];
 /* === builtin-formats.js === */
 /* Generated by timer/build.py from the debate-prep format library. Do not edit by hand. */
 /* Sources: recruit-1v1.md, recruit-2v2.md, recruit-3v3.md, ustc-freshman-cup.md, ustc-school-cup-2025.md */
@@ -4698,6 +4868,187 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     defs: '<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>' +
       Object.keys(SIZES).map(name => brush(name, SIZES[name])).join('') + SEAL + DROP + '</defs></svg>',
   });
+})(window.DT = window.DT || {});
+
+/* === themes/startrail.js === */
+/* themes/startrail.js: 星轨's canvas painter (spec §2.2). A long exposure of the night sky: the stars circle a
+   celestial pole just off the speaking side's upper corner, and the time used is the length of their trails. */
+(function (DT) {
+  'use strict';
+  const MAX_STARS = 600;          // over the whole sky, on any stage (spec §2.2)
+  const SKY_PER_STAR = 3400;      // CSS px² of sky per star: the cap at 1920×1080, about 300 at 1366×768
+  const MIN_STARS = 140;          // a thumbnail still shows a sky
+  const SWEEP = 0.6;              // radians a trail turns through over a whole stage (about 34°)
+  const DOT = 0.003;              // a star before any of its time is used: a point
+  const OVER = 0.35;              // overtime lengthens the trails further, up to this share of a stage
+  const TITLE_USED = 0.3;         // the title card shows an exposure already under way
+  const ACTIVE_COL = 0.58;        // the speaking half's share of the width in free debate (as render.js)
+  const HALF_SKY = 0.62;          // a pole's stars in free debate reach this far, so the wider half is covered too
+  const STEP_PX = 2;              // a trail is drawn on only once it has grown this many pixels: pieces shorter than a
+                                  // pixel would each be antialiased on their own and add up dimmer than one stroke
+  const POLE = { x: -0.07, y: -0.42 };   // the pole, off the upper corner, in stage widths and heights
+
+  // Starlight from hot to cool, and each side's cast: 正方 warm, 反方 cold.
+  const TEMPS = [[170, 198, 255], [212, 225, 255], [246, 246, 255], [255, 238, 212], [255, 210, 160]];
+  const CAST = { pro: [255, 176, 118], con: [128, 190, 255] };
+
+  const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+  const quant = (x, step) => Math.round(x / step) * step;
+
+  // The stars one pole carries across a region `w` wide from its own edge: their places at the start of the
+  // exposure, spread evenly over every part of the sky whose trail can cross the region.
+  function makeSky(seed, W, H, w, cap) {
+    const rand = DT.themes.rng(seed);
+    const px = POLE.x * W, py = POLE.y * H;
+    const angles = [[0, 0], [w, 0], [0, H], [w, H]].map(([x, y]) => Math.atan2(y - py, x - px));
+    const reach = SWEEP * (1 + OVER);
+    const amin = Math.min.apply(null, angles) - reach, amax = Math.max.apply(null, angles);
+    const r0 = Math.hypot(px, py), r1 = Math.hypot(w - px, H - py);
+    const inside = (r, a) => {
+      const x = px + r * Math.cos(a), y = py + r * Math.sin(a);
+      return x >= 0 && x <= w && y >= 0 && y <= H;
+    };
+    const n = Math.max(MIN_STARS, Math.min(cap, Math.round(w * H / SKY_PER_STAR)));
+    const stars = [];
+    let rmax = 0;
+    for (let tries = 0; stars.length < n && tries < n * 40; tries++) {
+      const r = Math.sqrt(r0 * r0 + rand() * (r1 * r1 - r0 * r0));
+      const a = amin + rand() * (amax - amin);
+      const m = rand(), t = rand();
+      let seen = false;
+      for (let k = 0; k <= 6 && !seen; k++) seen = inside(r, a + reach * k / 6);
+      if (!seen) continue;
+      const x = px + r * Math.cos(a);
+      stars.push({ i: stars.length, r, a, m, t, x: Math.min(1, Math.max(0, x / W)) });
+      rmax = Math.max(rmax, r);
+    }
+    return { stars, rmax, groups: {} };
+  }
+
+  // One stroke style per group of stars, so a frame strokes a few dozen paths rather than hundreds. `cast` tints
+  // the stars toward a side, the most at the pole's own edge; `spread` is how far across the stage that reaches.
+  function groupsOf(sky, cast, spread, k) {
+    const key = (cast || '') + '|' + spread;   // a sky is made again whenever the stage (and so k) changes size
+    if (sky.groups[key]) return sky.groups[key];
+    const halos = {}, cores = {};
+    const add = (into, style, width, star) => {
+      const id = style + '|' + width;
+      (into[id] = into[id] || { style, width, stars: [] }).stars.push(star);
+    };
+    sky.stars.forEach(s => {
+      const bright = Math.pow(s.m, 4);
+      const i = s.t * (TEMPS.length - 1), lo = Math.floor(i), hi = Math.min(TEMPS.length - 1, lo + 1);
+      let c = mix(TEMPS[lo], TEMPS[hi], i - lo);
+      if (cast) c = mix(c, CAST[cast], 0.85 * Math.max(0.15, 1 - s.x / spread));
+      const rgb = c.map(v => Math.min(255, quant(v, 8))).join(' ');
+      const alpha = quant(0.14 + 0.8 * Math.pow(s.m, 2.4), 0.04);
+      const width = quant((0.6 + 2 * bright) * k, 0.2);
+      // The brightest stars bloom a little, as they do on film: a wide faint stroke under the trail.
+      if (bright > 0.3) add(halos, 'rgb(' + rgb + ' / ' + quant(alpha * 0.14, 0.02) + ')', quant(width * 3.6, 0.4), s);
+      add(cores, 'rgb(' + rgb + ' / ' + alpha + ')', width, s);
+    });
+    const list = o => Object.keys(o).map(id => o[id]);
+    return (sky.groups[key] = list(halos).concat(list(cores)));   // the blooms first, under the trails
+  }
+
+  // What is on screen, as poles: which edge each sits beyond, whose stars it carries, how much of its time is used,
+  // how wide its part of the stage is. `key` changes whenever the sky has to be painted again from nothing.
+  function scene(v) {
+    const seat = v.proSeat === 'right' ? 'right' : 'left';
+    const edgeOf = side => (side === 'pro') === (seat === 'left') ? 'left' : 'right';
+    const used = c => !c ? 0 : 1 - c.fraction + Math.min(OVER, c.total > 0 ? c.overtime / c.total : 0);
+    const pair = u => ['pro', 'con'].map(side => ({ edge: edgeOf(side), sky: side + '/half', cast: side, used: u, width: 0.5 }));
+    if (v.mode === 'title') return { key: 'title|' + seat, poles: pair(TITLE_USED) };
+    if (v.mode !== 'stage' || !v.stage) return { key: 'end|' + seat, poles: pair(1) };
+    const st = v.stage;
+    if (st.type === 'dual') {
+      const active = v.clocks.find(c => c.active) || null;
+      return {
+        key: ['dual', st.id, seat, active ? active.side : ''].join('|'),
+        poles: v.clocks.map(c => ({
+          edge: edgeOf(c.side), sky: c.side + '/half', cast: c.side, used: used(c),
+          width: !active ? 0.5 : c.active ? ACTIVE_COL : 1 - ACTIVE_COL,
+        })),
+      };
+    }
+    const clock = v.clocks[0];
+    if (st.type === 'break') return { key: 'break|' + st.id, poles: [{ edge: 'right', sky: 'break', cast: null, used: used(clock), width: 1 }] };
+    const side = st.side === 'con' ? 'con' : 'pro';
+    return { key: ['single', st.id, seat, side].join('|'), poles: [{ edge: edgeOf(side), sky: side, cast: side, used: used(clock), width: 1 }] };
+  }
+
+  const theta = used => DOT + SWEEP * used;
+
+  function painter(canvas, ctx) {
+    // drawn: the scene on the canvas, each pole's used share and the angle each of its trails has been drawn to.
+    let W = 0, H = 0, skies = {}, drawn = null;
+
+    function skyOf(name) {
+      const half = /\/half$/.test(name);
+      if (!skies[name]) skies[name] = makeSky('startrail/' + name, W, H, half ? HALF_SKY * W : W, half ? MAX_STARS / 2 : MAX_STARS);
+      return skies[name];
+    }
+
+    // Draw a pole's trails on from the angle each has reached (`ends`, past its start) to `to`, skipping those that
+    // have not yet grown by a step, and note where each now ends. A pole beyond the right edge is the left one
+    // mirrored: its angles run the other way round.
+    function arcs(pole, ends, to, cap) {
+      const sky = skyOf(pole.sky);
+      const k = Math.max(0.75, Math.sqrt(Math.min(1, W / 1920)));   // thinner on a small stage, never hairlines
+      const groups = groupsOf(sky, pole.cast, pole.width < 1 ? HALF_SKY : 1, k);
+      const mirror = pole.edge === 'right';
+      const cx = mirror ? W - POLE.x * W : POLE.x * W, cy = POLE.y * H;
+      const due = sky.stars.map(s => (to - ends[s.i]) * s.r >= STEP_PX || ends[s.i] === 0);
+      ctx.save();
+      if (pole.width < 1) {
+        ctx.beginPath();
+        ctx.rect(mirror ? W * (1 - pole.width) : 0, 0, W * pole.width, H);
+        ctx.clip();
+      }
+      ctx.lineCap = cap;
+      groups.forEach(g => {
+        let any = false;
+        ctx.beginPath();
+        g.stars.forEach(s => {
+          if (!due[s.i]) return;
+          const a = mirror ? Math.PI - s.a - ends[s.i] : s.a + ends[s.i];
+          const b = mirror ? Math.PI - s.a - to : s.a + to;
+          ctx.moveTo(cx + s.r * Math.cos(a), cy + s.r * Math.sin(a));
+          ctx.arc(cx, cy, s.r, a, b, mirror);
+          any = true;
+        });
+        if (!any) return;
+        ctx.strokeStyle = g.style;
+        ctx.lineWidth = g.width;
+        ctx.stroke();
+      });
+      ctx.restore();
+      sky.stars.forEach(s => { if (due[s.i]) ends[s.i] = to; });
+    }
+
+    return {
+      // The whole sky when the scene changes, the canvas was resized or time went back; otherwise only the growth of
+      // the trails since they were last drawn on, a trail at a time once it has grown by a step.
+      frame(v) {
+        if (!W || !H || !v) return;
+        const sc = scene(v);
+        const fresh = !drawn || drawn.key !== sc.key || sc.poles.some((p, i) => p.used < drawn.used[i]);
+        if (fresh) {
+          ctx.clearRect(0, 0, W, H);
+          drawn = { key: sc.key, used: [], ends: sc.poles.map(p => new Float64Array(skyOf(p.sky).stars.length)) };
+        }
+        sc.poles.forEach((p, i) => {
+          if (!fresh && p.used === drawn.used[i]) return;
+          arcs(p, drawn.ends[i], theta(p.used), fresh ? 'round' : 'butt');
+          drawn.used[i] = p.used;
+        });
+      },
+      resize(w, h) { W = w; H = h; skies = {}; drawn = null; },
+      destroy() { skies = {}; drawn = null; },
+    };
+  }
+
+  DT.themes.register('startrail', { painter });
 })(window.DT = window.DT || {});
 
 /* === setup.js === */
