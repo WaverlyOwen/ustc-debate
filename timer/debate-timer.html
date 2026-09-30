@@ -2692,6 +2692,346 @@ body {
   .dt-stage[data-theme="ink"] .dt-deco-over::after { filter: none; }
 }
 
+/* === themes/riso.css === */
+/* @theme id=riso name=孔版 desc=两色孔版印刷的海报，红蓝网点随时间变稀，适合亮场投影 tone=light */
+/* 孔版: a club's recruiting poster run off a two-drum risograph. 正方 is Riso Bright Red and 反方 Riso Blue, the two
+   classic riso inks; the type goes through both drums, so it prints in their overprint, a third colour, with an edge
+   of each ink where the drums are off register. The floor is a halftone screen of the speaking side's ink laid from
+   its seat: the less time is left, the smaller and sparser the dots (spec §2.4). All of it is CSS. */
+[data-theme="riso"] {
+  --pro: #F15060;           /* Riso Bright Red */
+  --pro-deep: var(--ground);
+  --con: #0078BF;           /* Riso Blue */
+  --con-deep: var(--ground);
+  --ground: #EDF0EF;        /* uncoated printing paper, cool white */
+  /* Both drums over the paper: paper × red × blue, what multiply gives where the inks overlap. Deep enough to read
+     on either ink's solid (≥3:1 on the blue), and everything the poster says is printed in it. */
+  --overprint: #002343;
+  --ink: var(--overprint);
+  --ink-dim: rgb(0 35 67 / .72);
+  --accent: var(--overprint);
+  --speaker-ink: var(--overprint);
+  --digits-on-field: var(--overprint);
+  --digits-off-field: var(--overprint);
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "Source Han Sans SC", "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  --text-field: var(--ground);   /* the halftone stays below the head, so all text above it sits on the paper */
+  --text-deep: var(--ground);
+  /* A screen of dots, one tile: every cell holds a cone, black at its centre and white a pitch away, so a threshold
+     of the tile plus a ramp gives dots whose size follows the ramp. The screen is turned the way a riso turns each
+     drum's screen, by atan(1/3) so the tile still repeats (every √10 pitches); 反方's the other way. */
+  --screen-pro: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
+  --screen-con: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(-18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
+  /* Riso ink never lies quite even: a fine noise screened into the halftone before the threshold roughens each dot's
+     edge and leaves a few pinholes. Drawn pixel for pixel; scaled it would turn into a mesh. */
+  --ink-grain: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='3 0 0 0 -1.85  3 0 0 0 -1.85  3 0 0 0 -1.85  0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  /* The same unevenness in the type: a mask with a few pinholes where the ink did not take. */
+  --type-grain: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='t' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='2' seed='9' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -14 0 0 0 10.6'/></filter><rect width='100%25' height='100%25' filter='url(%23t)'/></svg>");
+  /* The paper: a faint tooth of darker and lighter fibres, pixel for pixel, and a printer's registration target in
+     each upper corner, printed in both drums a little off register. */
+  --paper-grain: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='p' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .3  0 0 0 0 .34  0 0 0 0 .36  2 0 0 0 -1.3' result='dark'/><feTurbulence type='fractalNoise' baseFrequency='.05 .4' numOctaves='2' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1.2 0 0 0 -.66' result='fibre'/><feMerge><feMergeNode in='fibre'/><feMergeNode in='dark'/></feMerge></filter><rect width='100%25' height='100%25' filter='url(%23p)'/></svg>");
+  --reg-mark: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><g fill='none' stroke-width='1.1'><g stroke='%23F15060' transform='translate(-.5 -.3)'><circle r='6'/><path d='M-11 0H11M0-11V11'/></g><g stroke='%230078BF' style='mix-blend-mode:multiply' transform='translate(.5 .3)'><circle r='6'/><path d='M-11 0H11M0-11V11'/></g></g></svg>");
+  --backdrop:
+    var(--reg-mark) 2.2cqw 2.4cqh / 2.6cqh 2.6cqh no-repeat,
+    var(--reg-mark) calc(100% - 2.2cqw) 2.4cqh / 2.6cqh 2.6cqh no-repeat,
+    var(--paper-grain) 0 0 / 300px 300px,
+    radial-gradient(130% 100% at 50% 40%, transparent 60%, rgb(0 35 67 / .05));
+  --band-top: 30cqh;        /* the printed image: between the head and the bottom bar */
+  --band-bottom: 89cqh;
+  --dot-pitch: 2.4cqh;      /* from one dot to the next: coarse, as a poster's screen is, to read from the back */
+  --misreg: .4cqh;          /* how far the second drum lands off register: about 4 px on a projector */
+  --stub: 7cqw;             /* the dots at the seat that are left when the time is up */
+}
+
+.dt-stage[data-theme="riso"] {
+  --clock-y: 59%;           /* the digits printed in the middle of the halftone */
+  --own-ink: var(--pro);
+  --other-ink: var(--con);
+  --screen: var(--screen-pro);
+  --screen-grain: var(--ink-grain);
+  --tile: calc(3.16228 * var(--dot-pitch));
+  --remain-q: calc(1 - var(--used));
+}
+.dt-stage[data-theme="riso"][data-side="con"] { --own-ink: var(--con); --other-ink: var(--pro); --screen: var(--screen-con); }
+
+/* The halftone is repainted only when the time left moves a step (400 steps a stage), not on every frame; and the
+   tile is a whole number of pixels, so it repeats without seams. */
+@supports (width: round(nearest, 1px, 1px)) {
+  .dt-stage[data-theme="riso"] {
+    --tile: round(nearest, calc(3.16228 * var(--dot-pitch)), 1px);
+    --remain-q: calc(1 - round(nearest, var(--used), .0025));
+  }
+}
+
+/* On a thumbnail the screen is coarser, so it still reads as dots, and the grain, which would only be noise there,
+   is left out. */
+@container (max-width: 520px) {
+  .dt-stage[data-theme="riso"] {
+    --dot-pitch: 4.2cqh;
+    --screen-grain: none;
+    --backdrop: var(--reg-mark) 2.2cqw 2.4cqh / 2.6cqh 2.6cqh no-repeat,
+      var(--reg-mark) calc(100% - 2.2cqw) 2.4cqh / 2.6cqh 2.6cqh no-repeat;
+  }
+}
+
+/* ---- the halftone ---- */
+
+/* Printed like a riso prints: the side's ink where the thresholded screen is dark, nothing where it is white, and
+   that sheet multiplied onto the paper. The screen's ramp starts at --dot-seat, the grey that gives the dots at the
+   seat (touching when the time is full, two thirds of that size at the end), and reaches the threshold at --edge, where the
+   dots die out. */
+.dt-stage[data-theme="riso"] .dt-field,
+.dt-stage[data-theme="riso"] .dt-half-field {
+  --dot-seat: hsl(0 0% calc(25% * (1 - var(--remain-q))));
+  background: var(--side-color);
+  isolation: isolate;
+}
+.dt-stage[data-theme="riso"] .dt-field { mix-blend-mode: multiply; }
+.dt-stage[data-theme="riso"] .dt-field::before,
+.dt-stage[data-theme="riso"] .dt-half-field::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    var(--screen-grain) 0 0 / 256px 256px,
+    linear-gradient(to right, var(--dot-seat) 0, hsl(0 0% 50%) var(--edge), #fff var(--edge)),
+    var(--screen) 0 0 / var(--tile) var(--tile);
+  background-blend-mode: screen, screen, normal;
+  filter: contrast(14);
+  mix-blend-mode: screen;
+}
+/* The ramp from the right-hand seat. */
+.dt-stage[data-theme="riso"][data-pro-seat="right"][data-side="pro"] .dt-field::before,
+.dt-stage[data-theme="riso"][data-pro-seat="left"][data-side="con"] .dt-field::before {
+  background:
+    var(--screen-grain) 0 0 / 256px 256px,
+    linear-gradient(to left, var(--dot-seat) 0, hsl(0 0% 50%) var(--edge), #fff var(--edge)),
+    var(--screen) 0 0 / var(--tile) var(--tile);
+  background-blend-mode: screen, screen, normal;
+}
+/* [data-mode] ranks this with stage.css's per-seat clip-path rules, which it replaces: the dots thin out instead of
+   being cut back. They never quite reach the seat: a stub stays there as the time runs out and through overtime,
+   clear of the digits, so the room still sees whose floor it is (spec §1.5). */
+.dt-stage[data-theme="riso"][data-mode] .dt-field {
+  --edge: max(var(--stub), var(--remain-q) * 100%);
+  top: var(--band-top);
+  bottom: auto;
+  height: calc(var(--band-bottom) - var(--band-top));
+  clip-path: inset(0);
+}
+
+/* When the time is up the stub is printed at full strength, so it still reads beside the slipped digits. */
+.dt-stage[data-theme="riso"][data-phase="over"] .dt-field { --dot-seat: #000; }
+
+/* ---- digits: through both drums, the second off register, the ink a little uneven ---- */
+
+/* An edge of the side's own ink up and to the left, the other ink down and to the right, the overprint between. They
+   are painted on each part rather than the whole, so the colon's breathing does not paint the numbers again. */
+.dt-stage[data-theme="riso"] .dt-digits > span {
+  text-shadow: calc(-1 * var(--misreg)) calc(-.4 * var(--misreg)) 0 var(--own-ink),
+    var(--misreg) calc(.4 * var(--misreg)) 0 var(--other-ink);
+  -webkit-mask: var(--type-grain) 0 0 / 200px 200px;
+  mask: var(--type-grain) 0 0 / 200px 200px;
+  -webkit-mask-clip: no-clip;
+  mask-clip: no-clip;
+}
+@container (max-width: 520px) {
+  .dt-stage[data-theme="riso"] .dt-digits > span { -webkit-mask: none; mask: none; }
+}
+/* For the same reason the digits tense up in steps rather than on every frame: 50 steps over a stage. */
+@supports (width: round(nearest, 1px, 1px)) {
+  .dt-stage[data-theme="riso"] .dt-digits {
+    --tension-step: round(nearest, var(--tension), .02);
+    font-variation-settings: "wght" calc(300 + 400 * var(--tension-step)), "wdth" calc(100 - 22 * var(--tension-step));
+  }
+}
+/* One colour on the halftone and off it, so the renderer's second, clipped layer is not needed. The attribute
+   selectors only rank these above stage.css's clips, which they remove. */
+.dt-stage[data-theme="riso"] .dt-digits-on { display: none; }
+.dt-stage[data-theme="riso"][data-kind][data-pro-seat][data-side] .dt-clock .dt-digits:not(.dt-digits-on),
+.dt-stage[data-theme="riso"] .dt-half .dt-digits:not(.dt-digits-on) { clip-path: none; }
+/* After the warn bell the second drum skips the colon: it prints in the side's ink alone. */
+.dt-stage[data-theme="riso"] .dt-clock[data-phase="warn"] .dt-colon,
+.dt-stage[data-theme="riso"] .dt-clock[data-phase="count"] .dt-colon { color: var(--own-ink); text-shadow: none; }
+
+.dt-stage[data-theme="riso"] .dt-backdrop,
+.dt-stage[data-theme="riso"] .dt-clock { will-change: transform; }
+
+/* ---- type: set like a poster, heavy and tight, through both drums ---- */
+
+.dt-stage[data-theme="riso"] .dt-title {
+  font-size: 6.4cqh;
+  font-weight: 900;
+  line-height: 1.12;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+  text-shadow: -.2cqh -.08cqh 0 var(--own-ink), .2cqh .08cqh 0 var(--other-ink);
+}
+.dt-stage[data-theme="riso"][data-long="true"] .dt-title { font-size: 4.8cqh; }
+.dt-stage[data-theme="riso"] .dt-speaker { font-family: var(--font-title); font-weight: 700; letter-spacing: .1em; }
+/* A block of the speaking side's ink before the speaker, like a colour swatch on the sheet. */
+.dt-stage[data-theme="riso"][data-kind="single"] .dt-speaker::before {
+  content: "";
+  display: inline-block;
+  width: .8em;
+  height: .8em;
+  margin-right: .6em;
+  vertical-align: -.06em;
+  background: var(--own-ink);
+}
+.dt-stage[data-theme="riso"] .dt-top { font-family: var(--font-title); font-size: 1.8cqh; font-weight: 700; letter-spacing: .3em; }
+
+/* ---- the warn bell point: a registration target on the halftone ---- */
+
+.dt-stage[data-theme="riso"] .dt-warnline {
+  top: calc(var(--band-bottom) - 8.4cqh);
+  bottom: auto;
+  left: clamp(2.8cqh, calc(var(--warn-at) * 100%), calc(100% - 2.8cqh));
+  width: 5.6cqh;
+  height: 5.6cqh;
+  margin-left: -2.8cqh;
+  background: var(--target) center / contain no-repeat;
+  -webkit-mask-image: none;
+  mask-image: none;
+  --target: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><g fill='none' stroke-width='1.3'><g stroke='%23F15060' transform='translate(-.5 -.3)'><circle r='6.5'/><path d='M-11.5 0H11.5M0-11.5V11.5'/></g><g stroke='%23002343' transform='translate(.2 .1)'><circle r='6.5'/><path d='M-11.5 0H11.5M0-11.5V11.5'/></g></g></svg>");
+}
+.dt-stage[data-theme="riso"][data-side="con"] .dt-warnline {
+  --target: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><g fill='none' stroke-width='1.3'><g stroke='%230078BF' transform='translate(-.5 -.3)'><circle r='6.5'/><path d='M-11.5 0H11.5M0-11.5V11.5'/></g><g stroke='%23002343' transform='translate(.2 .1)'><circle r='6.5'/><path d='M-11.5 0H11.5M0-11.5V11.5'/></g></g></svg>");
+}
+.dt-stage[data-theme="riso"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
+.dt-stage[data-theme="riso"][data-pro-seat="left"][data-side="con"] .dt-warnline {
+  left: clamp(2.8cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 2.8cqh));
+}
+
+/* ---- overtime: the second drum slips, and 超时 is knocked out of a block of the side's ink ---- */
+
+.dt-stage[data-theme="riso"] .dt-clock[data-phase="over"] { --misreg: 1.5cqh; }
+.dt-stage[data-theme="riso"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::after {
+  content: "超时";
+  position: absolute;
+  left: calc(50% + 24cqh);
+  top: calc(var(--clock-y) - 23cqh);
+  padding: 1cqh 0 1.1cqh 2.3cqh;   /* the letter-spacing after 时 is the right padding */
+  background: var(--own-ink);
+  color: var(--ground);
+  font-family: var(--font-title);
+  font-size: 4.6cqh;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: .5em;
+  rotate: -4deg;
+  mix-blend-mode: multiply;
+}
+
+/* ---- free debate: two posters side by side, the speaking side's freshly printed, the other faded ---- */
+
+.dt-stage[data-theme="riso"] .dt-half {
+  --half-ground: transparent;   /* the paper runs under both */
+  --own-ink: var(--pro);
+  --other-ink: var(--con);
+  --screen: var(--screen-pro);
+  --dual-top: 25cqh;            /* below the teams and the stage name */
+  box-shadow: none;
+}
+/* The halves are a stacking context of their own, so the two posters are printed onto the paper as one sheet. */
+.dt-stage[data-theme="riso"] .dt-halves { mix-blend-mode: multiply; }
+.dt-stage[data-theme="riso"] .dt-half[data-side="con"] { --own-ink: var(--con); --other-ink: var(--pro); --screen: var(--screen-con); }
+/* A poster that has hung in the sun: its ink gone pale, its type printed lighter. Not greyed by a filter. */
+.dt-stage[data-theme="riso"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) {
+  --side-color: color-mix(in srgb, var(--pro) 46%, var(--ground));
+  --misreg: .22cqh;
+  filter: none;
+}
+.dt-stage[data-theme="riso"] .dt-halves:not([data-idle]) .dt-half[data-side="con"]:not([data-active]) {
+  --side-color: color-mix(in srgb, var(--con) 46%, var(--ground));
+}
+/* Each poster's dots thin from the top down: the ramp runs up from the floor to as high as the time left. */
+.dt-stage[data-theme="riso"] .dt-half-field {
+  --remain-q: var(--remain, 1);
+  --edge: calc(var(--remain-q) * 100%);
+  inset: var(--dual-top) 2.2cqw calc(100cqh - var(--band-bottom));
+  height: auto;
+  clip-path: inset(0);
+}
+@supports (width: round(nearest, 1px, 1px)) {
+  .dt-stage[data-theme="riso"] .dt-half-field { --remain-q: round(nearest, var(--remain, 1), .0025); }
+}
+.dt-stage[data-theme="riso"] .dt-half-field::before {
+  background:
+    var(--screen-grain) 0 0 / 256px 256px,
+    linear-gradient(to top, var(--dot-seat) 0, hsl(0 0% 50%) var(--edge), #fff var(--edge)),
+    var(--screen) 0 0 / var(--tile) var(--tile);
+  background-blend-mode: screen, screen, normal;
+}
+.dt-stage[data-theme="riso"] .dt-half .dt-clock { top: calc((var(--dual-top) + var(--band-bottom)) / 2); }
+.dt-stage[data-theme="riso"] .dt-team { font-weight: 700; }
+.dt-stage[data-theme="riso"] .dt-team::before,
+.dt-stage[data-theme="riso"] .dt-teams span::before {
+  color: var(--ink);
+  opacity: 1;
+  font-weight: 700;
+  text-shadow: -.14cqh -.06cqh 0 var(--own-ink), .14cqh .06cqh 0 var(--other-ink);
+}
+/* The speaker's floor line: a rule of the side's ink under its poster. */
+.dt-stage[data-theme="riso"] .dt-floorline {
+  left: 2.2cqw;
+  right: 2.2cqw;
+  bottom: calc(100cqh - var(--band-bottom) - 2.2cqh);
+  height: 1cqh;
+  background: var(--own-ink);
+}
+
+/* ---- cards ---- */
+
+/* Title card: each motion is marked by a block of its side's ink (stage.css), printed heavy; the side labels over the
+   team names in both drums. */
+.dt-stage[data-theme="riso"] .dt-motion { font-weight: 700; letter-spacing: 0; }
+.dt-stage[data-theme="riso"] .dt-motion::before { width: .42em; top: .14em; height: 1.04em; }
+.dt-stage[data-theme="riso"] .dt-teams { font-weight: 700; }
+.dt-stage[data-theme="riso"] .dt-teams span[data-side="pro"] { --own-ink: var(--pro); --other-ink: var(--con); }
+.dt-stage[data-theme="riso"] .dt-teams span[data-side="con"] { --own-ink: var(--con); --other-ink: var(--pro); }
+
+/* The title card and the break are the poster's picture: a halftone disc of each ink rising from its side's seat,
+   the pro drum on the deco under the text and the con drum on the one over it, each printed onto the paper. The dots
+   are densest at the seat and die out at the rim, clear of the motions and the bars. */
+.dt-stage[data-theme="riso"] { --pro-x: 0%; --con-x: 100%; }
+.dt-stage[data-theme="riso"][data-pro-seat="right"] { --pro-x: 100%; --con-x: 0%; }
+.dt-stage[data-theme="riso"][data-mode="title"] .dt-deco,
+.dt-stage[data-theme="riso"][data-mode="stage"][data-kind="break"] .dt-deco {
+  --disc-x: var(--pro-x);
+  --disc-y: 56%;
+  --screen: var(--screen-pro);
+  background: var(--pro);
+  mix-blend-mode: multiply;
+  isolation: isolate;
+}
+.dt-stage[data-theme="riso"][data-mode="title"] .dt-deco-over,
+.dt-stage[data-theme="riso"][data-mode="stage"][data-kind="break"] .dt-deco-over {
+  --disc-x: var(--con-x);
+  --disc-y: 44%;
+  --screen: var(--screen-con);
+  background: var(--con);
+  mix-blend-mode: multiply;
+  isolation: isolate;
+}
+.dt-stage[data-theme="riso"][data-mode="title"] :is(.dt-deco, .dt-deco-over)::before,
+.dt-stage[data-theme="riso"][data-mode="stage"][data-kind="break"] :is(.dt-deco, .dt-deco-over)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    var(--screen-grain) 0 0 / 256px 256px,
+    radial-gradient(circle 36cqh at var(--disc-x) var(--disc-y), hsl(0 0% 6%) 0, hsl(0 0% 50%) 100%, #fff 100%),
+    var(--screen) 0 0 / var(--tile) var(--tile);
+  background-blend-mode: screen, screen, normal;
+  filter: contrast(14);
+  mix-blend-mode: screen;
+}
+
+/* The bells ring in the speaking side's ink. */
+.dt-stage[data-theme="riso"] .dt-ring { border-color: var(--own-ink); }
+
 /* === themes/startrail.css === */
 /* @theme id=startrail name=星轨 desc=长曝光的夜空，发言越久星轨越长，适合暗场投影 tone=dark */
 /* 星轨: a long exposure of the night sky. The stars circle a pole off the speaking side's upper corner and the time
@@ -2877,7 +3217,7 @@ body {
   <div id="app"></div>
 <script id="dt-main">
 window.DT = window.DT || {};
-DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔排线，时间用掉就被板擦擦去，适合暗场投影", "tone": "dark"}, {"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放在本方色底板上，供直播抠像", "tone": "dark"}, {"id": "daylight", "name": "昼", "desc": "浅色底，色场收成数字后的一条横带，适合亮场投影", "tone": "light"}, {"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场投影", "tone": "dark"}, {"id": "ink", "name": "墨", "desc": "宣纸上的一道水墨笔触，朱砂对花青，适合亮场投影", "tone": "light"}, {"id": "startrail", "name": "星轨", "desc": "长曝光的夜空，发言越久星轨越长，适合暗场投影", "tone": "dark"}];
+DT.THEMES = [{"id": "chalk", "name": "黑板", "desc": "教室黑板上的粉笔排线，时间用掉就被板擦擦去，适合暗场投影", "tone": "dark"}, {"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放在本方色底板上，供直播抠像", "tone": "dark"}, {"id": "daylight", "name": "昼", "desc": "浅色底，色场收成数字后的一条横带，适合亮场投影", "tone": "light"}, {"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场投影", "tone": "dark"}, {"id": "ink", "name": "墨", "desc": "宣纸上的一道水墨笔触，朱砂对花青，适合亮场投影", "tone": "light"}, {"id": "riso", "name": "孔版", "desc": "两色孔版印刷的海报，红蓝网点随时间变稀，适合亮场投影", "tone": "light"}, {"id": "startrail", "name": "星轨", "desc": "长曝光的夜空，发言越久星轨越长，适合暗场投影", "tone": "dark"}];
 /* === builtin-formats.js === */
 /* Generated by timer/build.py from the debate-prep format library. Do not edit by hand. */
 /* Sources: recruit-1v1.md, recruit-2v2.md, recruit-3v3.md, ustc-freshman-cup.md, ustc-school-cup-2025.md */
