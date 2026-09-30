@@ -2118,6 +2118,7 @@ body {
   --text-deep: var(--ground);
   --stroke-box: 48cqh;           /* the stroke's box; the ink itself is about 44cqh of it (spec §2.1) */
   --stroke-tail: 3cqw;           /* the stroke begins off screen, behind its seat's edge */
+  --stroke-dry: 7cqw;            /* the stroke's last stretch: loose hairs only, the brush's dry tip */
 }
 
 .dt-stage[data-theme="ink"] { --ink-stroke: var(--side-color); }
@@ -2137,8 +2138,8 @@ body {
       transparent 2.2cqh 2.9cqh, var(--ink-stroke) 2.9cqh 4.6cqh, transparent 4.6cqh 4.9cqh),
     linear-gradient(to bottom, transparent 4%, var(--ink-stroke) 4% 5.6%, transparent 5.6% 7%, var(--ink-stroke) 7% 91.4%,
       transparent 91.4% 92.6%, var(--ink-stroke) 92.6% 94%, transparent 94%);
-  --stroke-at: var(--stroke-len);
-  background-size: var(--stroke-at) 86%, max(0px, var(--stroke-at) - 7cqw) 100%;
+  --stroke-at: max(var(--stroke-stub, 0px), var(--stroke-len));
+  background-size: var(--stroke-at) 86%, max(0px, var(--stroke-at) - var(--stroke-dry)) 100%;
   background-position: 0% 50%;
   background-repeat: no-repeat;
   filter: url(#dt-ink-brush-xl);
@@ -2156,14 +2157,15 @@ body {
 /* Drawn back toward the right-hand seat: the stroke lies against the right edge. */
 .dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] .dt-field,
 .dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] .dt-field { background-position: 100% 50%; }
-/* Overtime: the last of the ink is gone from the seat's edge too. */
-.dt-stage[data-theme="ink"][data-phase="over"] .dt-field { opacity: 0; transition: opacity 600ms ease; }
+/* The ink runs out at the seat, not off the screen: a short dry stub of the side's colour stays at its edge as the
+   time runs out and through overtime, clear of the digits, so the room still sees whose floor it is (spec §1.5). */
+.dt-stage[data-theme="ink"] .dt-field { --stroke-stub: calc(var(--stroke-tail) + 6cqw); }
 
 /* The stroke's end moves in steps of a few pixels, so the filtered stroke is painted again a few times a second
    rather than on every frame; the digits' colour change still follows the time exactly, within those pixels. */
 @supports (width: round(nearest, 1px, 1px)) {
   .dt-stage[data-theme="ink"] .dt-field,
-  .dt-stage[data-theme="ink"] .dt-half-field { --stroke-at: round(nearest, var(--stroke-len), .2cqw); }
+  .dt-stage[data-theme="ink"] .dt-half-field { --stroke-at: max(var(--stroke-stub, 0px), round(nearest, var(--stroke-len), .2cqw)); }
 }
 
 /* The brush for the stage's size (see ink.js). */
@@ -2177,7 +2179,19 @@ body {
   .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-s); }
 }
 
-/* The digits' two layers change colour where the stroke ends; in warn the colon turns gold leaf on the stroke. */
+/* The digits' two layers change colour where the stroke's solid body ends, not at the tip of its dry hairs: across
+   the hairs the paper shows between them, so the digits stay ink there. Each layer carries a thin halo of the
+   other ground's colour, so a stray hair that still crosses it (paper in the body, ink beyond) keeps its edges. */
+.dt-stage[data-theme="ink"][data-kind="single"] .dt-clock {
+  --cut: calc((1 - var(--used)) * 100cqw - var(--stroke-dry) - 50cqw + 50%);
+}
+.dt-stage[data-theme="ink"][data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-clock,
+.dt-stage[data-theme="ink"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-clock {
+  --cut: calc(var(--used) * 100cqw + var(--stroke-dry) - 50cqw + 50%);
+}
+.dt-stage[data-theme="ink"] .dt-digits-on { filter: drop-shadow(0 0 .012em var(--digits-on-halo, rgb(27 29 33 / .6))); }
+.dt-stage[data-theme="ink"] .dt-digits:not(.dt-digits-on) { filter: drop-shadow(0 0 .014em var(--paper-ink)); }
+/* In warn the colon turns gold leaf on the stroke. */
 .dt-stage[data-theme="ink"] .dt-clock[data-phase="warn"] .dt-digits-on .dt-colon,
 .dt-stage[data-theme="ink"] .dt-clock[data-phase="count"] .dt-digits-on .dt-colon { color: var(--accent-on-field); }
 /* Overtime: the stroke is gone and the digits keep full ink; the seal below says it. */
@@ -2269,6 +2283,7 @@ body {
 .dt-stage[data-theme="ink"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) {
   --ink-stroke: color-mix(in oklab, var(--side-color) 42%, var(--ground));   /* 淡墨: the waiting side */
   --digits-on-field: var(--ink);
+  --digits-on-halo: var(--paper-ink);   /* ink digits on the pale stroke: a paper halo, as off it */
   filter: none;
 }
 .dt-stage[data-theme="ink"] .dt-half-field {
@@ -2291,10 +2306,10 @@ body {
 /* A side out of time has no ink left, not even the dry end of its brush at the edge. */
 .dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-half-field { opacity: 0; }
 
-/* The digits sit on their stroke, and change colour where its tip is: the clock spans the half, so --cut is the
-   tip's distance from the seat in the clock's own box. */
+/* The digits sit on their stroke, and change colour where its solid body ends: the clock spans the half, so --cut
+   is that point's distance from the seat in the clock's own box. */
 .dt-stage[data-theme="ink"] .dt-half .dt-clock {
-  --cut: calc(var(--remain, 1) * (100% - var(--gap)));
+  --cut: max(0px, var(--remain, 1) * (100% - var(--gap)) - var(--stroke-dry));
   left: 0;
   right: 0;
   top: var(--row);
@@ -4648,7 +4663,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     return '<filter id="dt-ink-brush-' + name + '" x="-4%" y="-12%" width="108%" height="124%" color-interpolation-filters="sRGB">' +
       '<feTurbulence type="fractalNoise" baseFrequency="' + freq(0.0012, 0.075, k) + '" numOctaves="2" seed="4" result="hairs"/>' +
       '<feColorMatrix in="hairs" type="matrix" values="1 0 0 0 0  0 0 0 0 .5  0 0 0 0 0  0 0 0 0 1" result="rows"/>' +
-      '<feDisplacementMap in="SourceGraphic" in2="rows" scale="' + n(170 * k) + '" xChannelSelector="R" yChannelSelector="G" result="dry"/>' +
+      '<feDisplacementMap in="SourceGraphic" in2="rows" scale="' + n(110 * k) + '" xChannelSelector="R" yChannelSelector="G" result="dry"/>' +
       '<feTurbulence type="fractalNoise" baseFrequency="' + freq(0.005, 0.018, k) + '" numOctaves="3" seed="9" result="press"/>' +
       '<feDisplacementMap in="dry" in2="press" scale="' + n(64 * k) + '" xChannelSelector="G" yChannelSelector="R" result="swell"/>' +
       '<feTurbulence type="fractalNoise" baseFrequency="' + freq(0.3, 0.3, k) + '" numOctaves="1" seed="2" result="fibre"/>' +

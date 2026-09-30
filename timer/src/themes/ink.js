@@ -18,7 +18,7 @@
     return '<filter id="dt-ink-brush-' + name + '" x="-4%" y="-12%" width="108%" height="124%" color-interpolation-filters="sRGB">' +
       '<feTurbulence type="fractalNoise" baseFrequency="' + freq(0.0012, 0.075, k) + '" numOctaves="2" seed="4" result="hairs"/>' +
       '<feColorMatrix in="hairs" type="matrix" values="1 0 0 0 0  0 0 0 0 .5  0 0 0 0 0  0 0 0 0 1" result="rows"/>' +
-      '<feDisplacementMap in="SourceGraphic" in2="rows" scale="' + n(170 * k) + '" xChannelSelector="R" yChannelSelector="G" result="dry"/>' +
+      '<feDisplacementMap in="SourceGraphic" in2="rows" scale="' + n(110 * k) + '" xChannelSelector="R" yChannelSelector="G" result="dry"/>' +
       '<feTurbulence type="fractalNoise" baseFrequency="' + freq(0.005, 0.018, k) + '" numOctaves="3" seed="9" result="press"/>' +
       '<feDisplacementMap in="dry" in2="press" scale="' + n(64 * k) + '" xChannelSelector="G" yChannelSelector="R" result="swell"/>' +
       '<feTurbulence type="fractalNoise" baseFrequency="' + freq(0.3, 0.3, k) + '" numOctaves="1" seed="2" result="fibre"/>' +

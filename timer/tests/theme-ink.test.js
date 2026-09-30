@@ -49,6 +49,38 @@
   function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
   const pseudo = (el, which) => getComputedStyle(el, which);
   const px = s => parseFloat(s);
+  // Where the paper-coloured layer of the digits stops, in page x: --cut resolved in that layer's own box, the box
+  // its clip-path's percentages refer to. `from` is the side of the box the cut is measured from.
+  function cutX(on, from) {
+    const probe = document.createElement('i');
+    probe.style.cssText = 'position:absolute;left:0;top:0;height:1px;width:var(--cut)';
+    on.appendChild(probe);
+    const w = probe.getBoundingClientRect().width;
+    probe.remove();
+    const r = on.getBoundingClientRect();
+    return from === 'left' ? r.left + w : r.right - w;
+  }
+  // The stroke's tip in page x: its painted length (--stroke-at, the first background-size) from the field's seat
+  // edge. A half's size keeps its percentages in the computed style, so it is resolved in the field's own box.
+  function tipX(field, seat) {
+    // The first layer's width: the size list up to its first top-level comma, less the height after it.
+    const size = getComputedStyle(field).backgroundSize;
+    let depth = 0, end = size.length;
+    for (let i = 0; i < size.length; i++) {
+      const c = size[i];
+      if (c === '(') depth++;
+      else if (c === ')') depth--;
+      else if (c === ',' && depth === 0) { end = i; break; }
+    }
+    const probe = document.createElement('i');
+    probe.style.cssText = 'position:absolute;left:0;top:0;height:1px;width:' + size.slice(0, end).trim().replace(/\s+\S+$/, '');
+    field.appendChild(probe);
+    const len = probe.getBoundingClientRect().width;
+    probe.remove();
+    assert.ok(len > 0, 'stroke length ' + getComputedStyle(field).backgroundSize);
+    const f = field.getBoundingClientRect();
+    return seat === 'left' ? f.left + len : f.right - len;
+  }
 
   DT.test('theme ink: 墨 is a light theme registered with SVG defs and no painter', () => {
     const meta = (DT.THEMES || []).find(t => t.id === 'ink');
@@ -106,6 +138,47 @@
       const fieldBox = field.getBoundingClientRect(), stageBox = root.getBoundingClientRect();
       const offscreen = from === 'left' ? stageBox.left - fieldBox.left : fieldBox.right - stageBox.right;
       assert.near(stroke - offscreen, (1 - used) * stageBox.width, 1.5, where);
+      stage.destroy();
+    });
+  });
+
+  // The last 7cqw of the stroke is loose hairs only (the dry tip), so the digits turn paper-coloured only over the
+  // solid body: across the hairs they stay ink, and each layer carries a thin halo of the other ground's colour.
+  DT.test('theme ink: the paper-coloured digits end where the solid body of the stroke ends, not at its dry tip', () => {
+    [[OPENING, 'left', 'left'], [OPENING, 'right', 'right'], [REBUTTAL, 'left', 'right'], [REBUTTAL, 'right', 'left']].forEach(([name, seat, from]) => {
+      const { stage, root } = mountInk(singleAt(name, 60, seat));
+      root.classList.remove('is-entering');
+      const S = root.getBoundingClientRect().width;
+      const on = root.querySelector('.dt-clock[data-clock="main"] .dt-digits-on');
+      const tip = tipX(root.querySelector('.dt-field'), from);
+      const body = from === 'left' ? tip - 0.07 * S : tip + 0.07 * S;
+      assert.near(cutX(on, 'left'), body, 2, name + ' / ' + seat);
+      stage.destroy();
+    });
+  });
+
+  DT.test('theme ink: in free debate too the digits change colour at the end of the stroke\'s body', () => {
+    ['left', 'right'].forEach(seat => {
+      const { stage, root } = mountInk(dualAt(30, seat));
+      root.classList.remove('is-entering');
+      const S = root.getBoundingClientRect().width;
+      root.querySelectorAll('.dt-half').forEach((h, i) => {
+        const from = i === 0 ? 'left' : 'right';
+        const tip = tipX(h.querySelector('.dt-half-field'), from);
+        const body = from === 'left' ? tip - 0.07 * S : tip + 0.07 * S;
+        assert.near(cutX(h.querySelector('.dt-digits-on'), from), body, 2, seat + ' ' + h.dataset.side);
+      });
+      stage.destroy();
+    });
+  });
+
+  DT.test('theme ink: each layer of the digits has a thin halo, so a stray hair crossing it does not eat its edge', () => {
+    [singleAt(OPENING, 60), dualAt(30)].forEach(view => {
+      const { stage, root } = mountInk(view);
+      root.querySelectorAll('.dt-digits').forEach(d => {
+        const f = getComputedStyle(d).filter;
+        assert.ok(/drop-shadow/.test(f), root.dataset.kind + ' ' + d.className + ': ' + f);
+      });
       stage.destroy();
     });
   });
@@ -181,7 +254,7 @@
     stage.destroy();
   });
 
-  // Overtime: the stroke is gone; the digits keep full ink and a seal stamps 超时 beside them.
+  // Overtime: the digits keep full ink and a seal stamps 超时 beside them.
   DT.test('theme ink: overtime keeps the digits in ink and stamps a 超时 seal', () => {
     const calm = mountInk(singleAt(OPENING, 60));
     const none = pseudo(calm.root.querySelector('.dt-deco-over'), '::after');
@@ -195,5 +268,27 @@
     assert.equal(stamp.content, '"超时"');
     assert.ok(stamp.display !== 'none');
     stage.destroy();
+  });
+
+  // Spec §1.5: the speaking side shows in every state. When the time runs out the ink runs out at the seat: a short
+  // dry stub of the side's colour stays at its edge, clear of the digits (the red seal alone would read as 正方's).
+  DT.test('theme ink: in overtime a dry stub of the speaking side\'s ink stays at its seat', () => {
+    [[OPENING, 'left', 'left', '--pro'], [OPENING, 'right', 'right', '--pro'], [REBUTTAL, 'left', 'right', '--con'], [REBUTTAL, 'right', 'left', '--con']].forEach(([name, seat, from, color]) => {
+      [179, 187].forEach(secs => {
+        const { stage, root } = mountInk(singleAt(name, secs, seat));
+        root.classList.remove('is-entering');
+        const where = name + ' / ' + seat + ' @' + secs;
+        const field = root.querySelector('.dt-field');
+        const box = root.getBoundingClientRect(), S = box.width;
+        assert.equal(getComputedStyle(field).opacity, '1', where);
+        assert.equal(resolve(field, '--ink-stroke'), resolve(root, color), where);
+        const onScreen = from === 'left' ? tipX(field, from) - box.left : box.right - tipX(field, from);
+        assert.ok(onScreen >= 0.05 * S && onScreen <= 0.1 * S, where + ': stub ' + onScreen);
+        const d = root.querySelector('.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect();
+        const clear = from === 'left' ? d.left - tipX(field, from) : tipX(field, from) - d.right;
+        assert.ok(clear > 0.1 * S, where + ': clear of the digits by ' + clear);
+        stage.destroy();
+      });
+    });
   });
 })();
