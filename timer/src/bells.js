@@ -5,7 +5,9 @@
   let factory = defaultFactory;
   let ctx = null, master = null, volume = 0.8, muted = false;
   let pending = [];     // last list passed to schedule(), replayed after unlock
-  let live = [];        // {node, key} currently scheduled, stopped by cancelAll()
+  let live = [];        // {nodes, key, start} per scheduled bell; start is on the audio clock
+
+  const RING_S = 5;     // every voice has died away within this many seconds of its start
 
   const SOUNDS = ['ding', 'double', 'triple', 'long', 'tick', 'chime'];
   const PARTIALS = [[1, 1], [2.76, 0.35], [5.4, 0.15]];   // [frequency ratio, gain]
@@ -114,25 +116,44 @@
     VOICES[sound](ctx.currentTime);
   }
 
-  function cancelAll() {
-    live.forEach(({ node }) => {
+  function stopNodes(nodes) {
+    nodes.forEach(node => {
       try { node.stop(0); } catch (e) { /* already stopped */ }
       try { node.disconnect(); } catch (e) { /* already disconnected */ }
     });
+  }
+
+  // Stops every scheduled bell, including one that is ringing now.
+  function cancelAll() {
+    live.forEach(bell => stopNodes(bell.nodes));
     live = [];
   }
 
+  // Stops the bells that have not started yet. A bell that is already ringing
+  // plays out, so an action taken right after a double or long bell does not cut it off.
+  function cancelPending() {
+    const t = ctx ? ctx.currentTime : 0;
+    const ringing = [];
+    live.forEach(bell => {
+      if (bell.start > t) stopNodes(bell.nodes);
+      else if (bell.start > t - RING_S) ringing.push(bell);
+    });
+    live = ringing;
+  }
+
   function schedule(list, now) {
-    cancelAll();
+    cancelPending();
     pending = list || [];
     if (!ctx) return;
     const seen = {};
+    live.forEach(bell => { seen[bell.key] = true; });   // never strike a ringing bell twice
     pending.forEach(item => {
       if (!VOICES[item.sound] || item.at < now - 20) return;
       const key = item.sound + '@' + item.at;
       if (seen[key]) return;
       seen[key] = true;
-      VOICES[item.sound](ctx.currentTime + Math.max(0, item.at - now) / 1000).forEach(node => live.push({ node, key }));
+      const start = ctx.currentTime + Math.max(0, item.at - now) / 1000;
+      live.push({ nodes: VOICES[item.sound](start), key, start });
     });
   }
 

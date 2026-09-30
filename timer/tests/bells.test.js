@@ -51,6 +51,47 @@
     DT.clock.reset();
   });
 
+  DT.test('bells: rescheduling lets a ringing bell play out but drops bells not yet started', () => {
+    fresh(); DT.clock.set(() => 0); B.unlock();
+    B.schedule([{ at: 1000, sound: 'double' }, { at: 5000, sound: 'long' }], 0);
+    const ringing = ctx.started.filter(n => n.startAt < 12);
+    const later = ctx.started.filter(n => n.startAt > 14);
+    assert.ok(ringing.length > 0 && later.length > 0);
+    ctx.currentTime = 11.2;   // between the two strikes of the double bell
+    B.schedule([{ at: 1000, sound: 'double' }, { at: 1200, sound: 'double' }, { at: 4000, sound: 'ding' }], 1200);
+    ringing.forEach(n => {
+      assert.ok(!(n.stopCalls || []).includes(0), 'the ringing double is not stopped');
+      assert.ok(!n.disconnected, 'the ringing double stays connected');
+    });
+    later.forEach(n => assert.ok(n.stopCalls.includes(0) && n.disconnected, 'the future long bell is dropped'));
+    const added = ctx.started.slice(ringing.length + later.length);
+    assert.ok(added.length > 0);
+    added.forEach(n => assert.ok(n.startAt >= 11.2 - 0.01, 'nothing is struck in the past'));
+    const restruck = added.filter(n => Math.abs(n.startAt - 11) < 0.01);
+    assert.equal(restruck.length, 0, 'the ringing bell is not struck again');
+    DT.clock.reset();
+  });
+
+  DT.test('bells: a ringing bell is not struck twice when the same plan is scheduled again', () => {
+    fresh(); DT.clock.set(() => 0); B.unlock();
+    B.schedule([{ at: 0, sound: 'ding' }], 0);
+    const n = ctx.started.length;
+    ctx.currentTime = 10.1;
+    B.schedule([{ at: 0, sound: 'ding' }], 10);
+    assert.equal(ctx.started.length, n);
+    DT.clock.reset();
+  });
+
+  DT.test('bells: cancelAll stops a ringing bell too', () => {
+    fresh(); DT.clock.set(() => 0); B.unlock();
+    B.schedule([{ at: 0, sound: 'long' }], 0);
+    const nodes = ctx.started.slice();
+    ctx.currentTime = 11;
+    B.cancelAll();
+    nodes.forEach(n => assert.ok(n.stopCalls.includes(0) && n.disconnected));
+    DT.clock.reset();
+  });
+
   DT.test('bells: double and triple strike two and three times', () => {
     fresh(); DT.clock.set(() => 0); B.unlock();
     B.schedule([{ at: 0, sound: 'ding' }], 0); const one = ctx.started.length; B.cancelAll();

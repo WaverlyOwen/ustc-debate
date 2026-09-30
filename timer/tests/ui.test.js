@@ -365,4 +365,25 @@
     assert.equal(document.querySelector('.dt-dock'), null);
     DT.clock.reset();
   });
+
+  DT.test('ui: pausing while the end bell rings lets it ring out', () => {
+    const started = [];
+    const node = () => ({ frequency: { value: 0 }, gain: { value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} },
+      Q: { value: 0 }, connect() {}, disconnect() { this.disconnected = true; },
+      start(t) { this.startAt = t; started.push(this); }, stop(t) { (this.stopCalls = this.stopCalls || []).push(t); } });
+    const ctx = { currentTime: 10, destination: node(), sampleRate: 48000, resume: () => Promise.resolve(),
+      createOscillator: node, createGain: node, createBiquadFilter: node, createBufferSource: node,
+      createBuffer: (ch, len) => ({ getChannelData: () => new Float32Array(len) }) };
+    DT.bells._setContextFactory(() => ctx); DT.bells._resetForTests();
+    const t = boot({ bells: DT.bells });
+    press('Space'); press('Space');
+    const endBell = started.filter(n => n.startAt >= 190 - 0.01);
+    assert.ok(endBell.length > 0, 'the end bell is planned at 180 s');
+    t.clock.advance(180400); ctx.currentTime = 190.4;   // between the two strikes of the double bell
+    press('Space');
+    assert.equal(DT.engine.getRun(t.c.session()).running, false);
+    endBell.forEach(n => assert.ok(!(n.stopCalls || []).includes(0) && !n.disconnected, 'the end bell is not cut off'));
+    t.done();
+    DT.bells._setContextFactory(null); DT.bells._resetForTests();
+  });
 })();
