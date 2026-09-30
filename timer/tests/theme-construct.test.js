@@ -76,6 +76,45 @@
   const shown = cs => cs.content !== 'none' && cs.display !== 'none';
   const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
   const used = root => parseFloat(root.style.getPropertyValue('--used'));
+  // A 60-minute first stage: its 30 s warn bell sits within a degree of the dial's axis.
+  const LONG = () => {
+    const f = JSON.parse(JSON.stringify(F()));
+    f.stages[0].secs = 3600;
+    return f;
+  };
+  const longAt = (secs, seat) => E.view(E.toggle(E.goto(E.createSession(LONG(), Object.assign({}, MATCH, { proSeat: seat || 'left' }), T0,
+    { theme: 'construct' }), 0, T0), T0), T0 + secs * 1000);
+  // Two convex polygons ([[x, y], ...]) overlap unless some edge's normal separates them.
+  function polysOverlap(a, b) {
+    return [a, b].every(poly => poly.every((p, i) => {
+      const q = poly[(i + 1) % poly.length], nx = q[1] - p[1], ny = p[0] - q[0];
+      const span = pts => pts.map(([x, y]) => x * nx + y * ny);
+      const sa = span(a), sb = span(b);
+      return Math.max.apply(null, sa) > Math.min.apply(null, sb) && Math.max.apply(null, sb) > Math.min.apply(null, sa);
+    }));
+  }
+  const rectPoly = r => [[r.left, r.top], [r.right, r.top], [r.right, r.bottom], [r.left, r.bottom]];
+  // The diagonal band (.dt-deco::before) as a polygon in page coordinates, turned about its transform origin.
+  function bandPoly(root) {
+    const deco = root.querySelector('.dt-deco'), d = deco.getBoundingClientRect();
+    const cs = pseudo(deco, '::before');
+    const x0 = d.left + px(cs.left), y0 = d.top + px(cs.top) + px(cs.marginTop), w = px(cs.width), h = px(cs.height);
+    const [ox, oy] = cs.transformOrigin.split(' ').map(px);
+    const t = angle(root, cs.rotate) * Math.PI / 180, cx = x0 + ox, cy = y0 + oy;
+    return [[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]].map(([x, y]) =>
+      [cx + (x - cx) * Math.cos(t) - (y - cy) * Math.sin(t), cy + (x - cx) * Math.sin(t) + (y - cy) * Math.cos(t)]);
+  }
+  // The stage's number (the current segment's ::before) as a box in page coordinates, from its containing block.
+  function numberRect(root) {
+    const cur = root.querySelector('.dt-seg[data-state="current"]');
+    let cb = cur.parentElement;
+    while (cb && getComputedStyle(cb).position === 'static') cb = cb.parentElement;
+    const b = cb.getBoundingClientRect(), n = pseudo(cur, '::before');
+    const w = px(n.width), h = px(n.height);
+    const left = b.left + px(n.left);
+    const bottom = b.bottom - px(n.bottom);
+    return { left, right: left + w, top: bottom - h, bottom };
+  }
 
   DT.test('theme construct: 构成 is a dark theme drawn by its stylesheet alone', () => {
     const meta = (DT.THEMES || []).find(t => t.id === 'construct');
@@ -252,6 +291,58 @@
     });
   });
 
+  // When the bell is within a degree or so of the axis (30 s of an hour) two notches would lie a few units apart beside
+  // the digits and read as '='. They merge into one wedge on the axis, just outside the rim, pointing in.
+  DT.test('theme construct: a warn bell near the end is one wedge on the axis outside the rim, not two notches', () => {
+    SEATINGS.slice(0, 2).forEach(([, seat, from]) => {
+      const { stage, root } = mountPoster(longAt(73, seat), 1920, 1080);
+      const where = seat;
+      const line = root.querySelector('.dt-warnline');
+      const field = root.querySelector('.dt-field');
+      const warnAt = parseFloat(root.style.getPropertyValue('--warn-at'));
+      assert.ok(warnAt > 0 && warnAt < 0.01, where + ': the bell is near the end: ' + warnAt);
+      const axis = from === 'left' ? 0 : 180;
+      const r = pos(field, 'var(--construct-r)');
+      const [a, b] = ['::before', '::after'].map(w => pseudo(line, w));
+      assert.near(angle(line, a.rotate), axis, 0.01, where + ': on the axis');
+      assert.near(angle(line, b.rotate), axis, 0.01, where + ': both on the axis');
+      assert.ok(/polygon/.test(a.clipPath), where + ': cut to a wedge: ' + a.clipPath);
+      assert.ok(px(a.height) > 0.03 * 1080, where + ': a wedge, broad at its base: ' + a.height);
+      // The wedge's point lies just outside the rim (100% - 5.2cqh along the ray), so it cannot sit by the digits.
+      const tip = px(a.width) - 0.052 * 1080;
+      assert.ok(tip > r && tip < r + 0.02 * 1080, where + ': the point just outside the rim: ' + tip + ' vs ' + r);
+      const digits = root.querySelector('.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect();
+      const hub = root.getBoundingClientRect().left + pos(field, 'var(--dial-x)');
+      const far = from === 'left' ? digits.right - hub : hub - digits.left;
+      assert.ok(tip - far > 0.05 * 1080, where + ': clear of the digits by ' + (tip - far));
+      stage.destroy();
+    });
+    // A three-minute stage keeps its two notches, at the fan's edges at the bell.
+    const { stage, root } = mountPoster(singleAt(OPENING, 60), 1920, 1080);
+    const line = root.querySelector('.dt-warnline');
+    const warnAt = parseFloat(root.style.getPropertyValue('--warn-at'));
+    assert.near(angle(line, pseudo(line, '::before').rotate), -warnAt * 90, 0.1);
+    assert.near(angle(line, pseudo(line, '::after').rotate), warnAt * 90, 0.1);
+    stage.destroy();
+  });
+
+  // Who opens the free debate is set in the cream of all the type, underlined in yellow: yellow type on the con's
+  // blue would read only 3.8:1.
+  DT.test('theme construct: who speaks first in free debate reads 4.5:1 on either disc', () => {
+    ['left', 'right'].forEach(seat => {
+      const s = E.goto(E.createSession(F(), Object.assign({}, MATCH, { proSeat: seat }), T0, { theme: 'construct' }), idx('自由辩论'), T0);
+      const { stage, root } = mountPoster(E.view(s, T0), 1920, 1080);
+      const name = root.querySelector('.dt-next-name');
+      assert.equal(name.textContent, '先由正方发言');
+      const cs = getComputedStyle(name);
+      ['--pro', '--con', '--ground'].forEach(v => {
+        assert.ok(contrast(cs.color, resolve(root, v)) >= 4.5, seat + ' on ' + v + ': ' + contrast(cs.color, resolve(root, v)).toFixed(2));
+      });
+      assert.ok(/underline/.test(cs.textDecorationLine) && sameColour(cs.textDecorationColor, resolve(root, '--accent')), seat + ': ' + cs.textDecoration);
+      stage.destroy();
+    });
+  });
+
   // Spec §2.5: a fine grid and a thick diagonal band are part of the composition.
   DT.test('theme construct: a fine grid over the stage and a thick diagonal band', () => {
     SEATINGS.forEach(([name, seat]) => {
@@ -297,8 +388,35 @@
     stage.destroy();
   });
 
+  // An outlined numeral with the solid band through it reads as noise: the band's path keeps clear of the number, in
+  // every seating and phase, at both projector sizes.
+  DT.test('theme construct: the diagonal band keeps clear of the stage number', () => {
+    [[1920, 1080], [1366, 768]].forEach(([w, h]) => {
+      SEATINGS.forEach(([name, seat]) => {
+        [60, 200].forEach(secs => {
+          const { stage, root } = mountPoster(singleAt(name, secs, seat), w, h);
+          const where = w + ' ' + name + ' / ' + seat + ' @' + secs;
+          const n = numberRect(root);
+          assert.ok(n.right - n.left > 0.05 * w && n.bottom - n.top > 0.1 * h, where + ': the number measured: ' + JSON.stringify(n));
+          assert.ok(!polysOverlap(bandPoly(root), rectPoly(n)), where + ': the band crosses the number');
+          const bar = root.querySelector('.dt-progress').getBoundingClientRect();
+          assert.ok(n.bottom <= bar.top, where + ': above the bottom bar');
+          stage.destroy();
+        });
+      });
+      const { stage, root } = mountPoster(longAt(73), w, h);
+      assert.ok(!polysOverlap(bandPoly(root), rectPoly(numberRect(root))), w + ' long stage');
+      stage.destroy();
+    });
+    // The check itself: the old placement, higher up, did cross the band.
+    const { stage, root } = mountPoster(singleAt(OPENING, 60), 1920, 1080);
+    const n = numberRect(root), up = { left: n.left, right: n.right, top: n.top - 0.226 * 1080, bottom: n.bottom - 0.226 * 1080 };
+    assert.ok(polysOverlap(bandPoly(root), rectPoly(up)), 'the band did cross the number where it used to stand');
+    stage.destroy();
+  });
+
   // Spec §2.5: the top bar is turned 90° and set against the edges, in the outer columns of the grid.
-  DT.test('theme construct: the top bar is turned 90° against the edges', () => {
+  DT.test('theme construct: the top bar is set in upright columns against the edges', () => {
     [[1920, 1080], [1366, 768]].forEach(([w, h]) => {
       ['left', 'right'].forEach(seat => {
         const { stage, root } = mountPoster(singleAt(OPENING, 60, seat), w, h);
@@ -307,7 +425,12 @@
         const match = root.querySelector('.dt-match'), format = root.querySelector('.dt-format');
         [match, format].forEach(el => {
           const cs = getComputedStyle(el);
-          assert.ok(/^vertical/.test(cs.writingMode) && cs.textOrientation === 'sideways', where + ': turned: ' + cs.writingMode + ' ' + cs.textOrientation);
+          // Upright characters in a column, read top to bottom on both edges: the two labels are a matched pair, and
+          // neither is turned over (Edge sets CJK upright under sideways once there is letter-spacing).
+          assert.equal(cs.writingMode, 'vertical-rl', where + ': in a column');
+          assert.equal(cs.textOrientation, 'upright', where + ': characters upright');
+          assert.equal(cs.rotate, 'none', where + ': not turned over');
+          assert.equal(cs.transform, 'none', where + ': not turned over');
           const r = el.getBoundingClientRect();
           assert.ok(r.height > 2 * r.width, where + ': runs down the edge');
           [root.querySelector('.dt-head'), root.querySelector('.dt-clock[data-clock="main"] .dt-digits')].forEach(o => {

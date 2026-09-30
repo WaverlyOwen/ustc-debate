@@ -2442,7 +2442,10 @@ body {
 
 /* The line itself is a layer over the whole stage, cut short of the bottom bar so the notches never cross the progress
    bar. Its pseudo-elements are the two rays from the hub, drawn only across the rim: from inside the scale to a
-   little past it, clear of the digits even when the bell is close to the axis. */
+   little past it, clear of the digits even when the bell is close to the axis.
+   When the bell is so near the end that the two notches would lie a few units apart at the rim (30 s of an hour),
+   they would read as an equals sign after the digits. Then --warn-close is 1: both rays lie on the axis and become
+   one yellow wedge just outside the rim, pointing in at it, clear of the digits. */
 .dt-stage[data-theme="construct"] .dt-warnline {
   inset: 0;
   width: auto;
@@ -2453,6 +2456,7 @@ body {
   mask-image: var(--warn-mask);
   --warn-x: calc(-1 * var(--dial-out));
   --warn-axis: 0deg;
+  --warn-close: clamp(0, (.03 - var(--warn-at)) * 100000, 1);
 }
 .dt-stage[data-theme="construct"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
 .dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-warnline {
@@ -2466,14 +2470,17 @@ body {
   position: absolute;
   left: var(--warn-x);
   top: var(--dial-y);
-  width: calc(var(--construct-r) + 3cqh);
-  height: .8cqh;
-  margin-top: -.4cqh;
+  width: calc(var(--construct-r) + 3cqh + var(--warn-close) * 2.6cqh);
+  height: calc(.8cqh + var(--warn-close) * 3.6cqh);
+  margin-top: calc(-.4cqh - var(--warn-close) * 1.8cqh);
   background: linear-gradient(to right, transparent calc(100% - 12cqh), var(--accent) calc(100% - 12cqh));
+  /* A ray's end, or, merged, a wedge whose point sits just outside the rim. */
+  clip-path: polygon(calc(var(--warn-close) * (100% - 5.2cqh)) calc(var(--warn-close) * 50%), 100% 0, 100% 100%,
+    calc(var(--warn-close) * (100% - 5.2cqh)) calc(100% - var(--warn-close) * 50%));
   transform-origin: 0 50%;
 }
-.dt-stage[data-theme="construct"] .dt-warnline::before { rotate: calc(var(--warn-axis) - var(--warn-at) * 90deg); }
-.dt-stage[data-theme="construct"] .dt-warnline::after { rotate: calc(var(--warn-axis) + var(--warn-at) * 90deg); }
+.dt-stage[data-theme="construct"] .dt-warnline::before { rotate: calc(var(--warn-axis) - var(--warn-at) * 90deg * (1 - var(--warn-close))); }
+.dt-stage[data-theme="construct"] .dt-warnline::after { rotate: calc(var(--warn-axis) + var(--warn-at) * 90deg * (1 - var(--warn-close))); }
 
 /* ---- digits: one cream layer, which reads on the red, the blue and the ground as the fan's edges cross them ---- */
 
@@ -2496,8 +2503,9 @@ body {
     repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px calc(100cqh / 8));
 }
 
-/* A thick band rising from the floor away from the seat, under the dial and clear of the digits. It turns yellow when
-   the time is up. Free debate has its two dials and the end card its table, so neither has it. */
+/* A thick band rising from the floor away from the seat, under the dial and clear of the digits and of the stage's
+   number, which sits below it in the far corner. It turns yellow when the time is up. Free debate has its two dials
+   and the end card its table, so neither has it. */
 .dt-stage[data-theme="construct"] .dt-deco::before {
   content: "";
   position: absolute;
@@ -2533,7 +2541,7 @@ body {
   content: counter(dt-construct-stage, decimal-leading-zero);
   position: absolute;
   right: calc(-100cqw / 24);   /* half into the outer grid column, under the turned label, clear of the rim */
-  bottom: 30cqh;
+  bottom: 7.4cqh;               /* standing on the grid line above the bottom bar, under the band's path */
   font-family: var(--font-digits);
   font-size: 24cqh;
   font-variation-settings: "wght" 600, "wdth" 78;
@@ -2550,8 +2558,10 @@ body {
 
 /* ---- type ---- */
 
-/* The top bar is turned 90° into the outer grid columns, above the dials' hubs: the match reads up the left edge, the
-   format down the right. */
+/* The top bar is set upright in columns in the outer grid columns, above the dials' hubs: the match down the left
+   edge, the format down the right, both read top to bottom in the native vertical form. (Sideways glyphs would not
+   do: Edge sets CJK upright under text-orientation: sideways once there is letter-spacing, so a label turned 180° to
+   read upward came out with its characters upside down.) */
 .dt-stage[data-theme="construct"] .dt-top {
   position: absolute;
   inset: 0;
@@ -2567,9 +2577,9 @@ body {
   max-width: none;
   max-height: 34cqh;
   writing-mode: vertical-rl;
-  text-orientation: sideways;
+  text-orientation: upright;
 }
-.dt-stage[data-theme="construct"] .dt-match { left: calc(100cqw / 24); top: 6cqh; translate: -50% 0; rotate: 180deg; }
+.dt-stage[data-theme="construct"] .dt-match { left: calc(100cqw / 24); top: 6cqh; translate: -50% 0; }
 .dt-stage[data-theme="construct"] .dt-format { right: calc(100cqw / 24); top: 6cqh; translate: 50% 0; }
 
 .dt-stage[data-theme="construct"] .dt-head { margin-top: 5cqh; }
@@ -2577,6 +2587,14 @@ body {
 .dt-stage[data-theme="construct"][data-long="true"] .dt-title { font-size: 4.6cqh; }
 .dt-stage[data-theme="construct"] .dt-speaker { font-family: var(--font-title); font-weight: 700; letter-spacing: .2em; }
 .dt-stage[data-theme="construct"] .dt-bottom { color: var(--ink); }
+/* Who opens a free debate: in cream, as all the type, underlined in the yellow (the yellow type on the con's blue disc
+   would read only 3.8:1). */
+.dt-stage[data-theme="construct"] .dt-halves[data-idle] ~ .dt-bottom .dt-next-name {
+  padding-bottom: .3em;
+  color: var(--ink);
+  text-decoration: underline .16em var(--accent);
+  text-underline-offset: .32em;
+}
 /* The bar's shade reaches the edges past the wider grid margins. */
 .dt-stage[data-theme="construct"] .dt-bottom::before { inset: -7cqh calc(-100cqw / 12) -3.6cqh; }
 
