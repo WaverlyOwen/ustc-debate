@@ -151,7 +151,7 @@
     assert.ok(bad([{ group: 5, perSide: 1, variants: [{ type: 'single', secs: 30 }] }]).length, 'non-string group');
     assert.ok(bad([{ group: ' ', perSide: 1, variants: [{ type: 'single', secs: 30 }] }]).length, 'empty group');
     assert.ok(!bad([null]).join('').includes('undefined'));
-    assert.deepEqual(bad([{ group: '质询', perSide: 1, variants: [{ type: 'single', secs: 30 }] }]), []);
+    assert.deepEqual(bad([{ group: '质询', perSide: 1, variants: [{ name: '质询', type: 'single', secs: 30 }] }]), []);
     const r = S.parseImport(JSON.stringify(Object.assign(good(), { extras: {} })));
     assert.equal(r.formats.length, 0); assert.equal(r.errors.length, 1);
   });
@@ -169,5 +169,49 @@
     assert.equal(users.length, 1);
     assert.equal(users[0].id, 'dup'); assert.equal(users[0].name, '甲');
     assert.equal(list.length, DT.BUILTIN_FORMATS.length + 1);
+  });
+  // ---- final review ----
+
+  DT.test('store: an extra needs a variant name that fits the inserted stage, and a group name of its own', () => {
+    const errs = extras => S.validateFormat(Object.assign(good(), { extras }));
+    const group = (name, variants) => ({ group: name, perSide: 1, variants });
+    const v = name => ({ name, type: 'single', secs: 60 });
+    assert.deepEqual(errs([group('奇袭', [{ type: 'single', secs: 60 }])]), ['可插入环节「奇袭」第 1 种：名称不能为空']);
+    assert.deepEqual(errs([group('奇袭', [v('质询'), v('  ')])]), ['可插入环节「奇袭」第 2 种：名称不能为空']);
+    assert.deepEqual(errs([group('奇袭', [v('长'.repeat(39))])]),
+      ['可插入环节「奇袭」第 1 种：名称最多 38 个字（插入时前面还要加上正方或反方）']);
+    assert.deepEqual(errs([group('奇袭', [v('长'.repeat(38))])]), []);
+    assert.deepEqual(errs([group('奇袭', [v('质询')]), group('申论', [v('申论')]), group('奇袭 ', [v('申论')])]),
+      ['可插入环节「奇袭 」：名称和前面的一组重复']);
+    // The longest name that passes still makes a stage the saved match accepts.
+    const f = Object.assign(good(), { extras: [group('奇袭', [v('长'.repeat(38))])] });
+    const s = DT.engine.insertExtra(DT.engine.goto(DT.engine.createSession(f, {}, 1000), 0, 1000), '奇袭', 0, 'pro', 1000);
+    assert.deepEqual(S.validateFormat(Object.assign({}, s.format, { stages: s.timeline })), []);
+  });
+
+  DT.test('store: an imported format whose id is not text gets an id of its own', () => {
+    [7, '', '  ', null].forEach(id => {
+      const r = S.parseImport(JSON.stringify(Object.assign(good(), { id })));
+      assert.deepEqual(r.errors, [], String(id));
+      assert.ok(typeof r.formats[0].id === 'string' && /^u-/.test(r.formats[0].id), String(id));
+    });
+  });
+
+  DT.test('store: saving keeps the stored formats that could not be loaded', () => {
+    const st = memStorage(); S.useStorage(st);
+    const odd = Object.assign(good(), { id: 'u-odd', name: '旧格式', extras: null });
+    st.setItem('dt.formats.v1', JSON.stringify({ schema: 1, formats: [good(), odd] }));
+    const warn = console.warn; console.warn = () => {};
+    let list;
+    try { list = S.loadFormats(); } finally { console.warn = warn; }
+    assert.equal(list.some(f => f.id === 'u-odd'), false);
+    S.saveFormats(list.filter(f => f.id !== 'u-x'));
+    const stored = JSON.parse(st.getItem('dt.formats.v1')).formats;
+    assert.deepEqual(stored.map(f => f.id), ['u-odd'], 'the deleted one goes, the unreadable one stays');
+    assert.equal(stored[0].extras, null, 'kept as it was');
+    const other = memStorage(); S.useStorage(other);
+    S.saveFormats(list);
+    assert.equal(JSON.parse(other.getItem('dt.formats.v1')).formats.some(f => f.id === 'u-odd'), false,
+      'another storage does not receive them');
   });
 })();

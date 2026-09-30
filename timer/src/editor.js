@@ -196,8 +196,9 @@
       return true;
     }
 
-    // Validation messages go to the part of the form they are about; 第 N 个环节 goes to that row.
-    function slotOf(msg) {
+    // Validation messages go to the part of the form they are about; 第 N 个环节 goes to that row, and a repeated
+    // extra group's name to the repeat rather than the first group of that name (`dups` counts them per name).
+    function slotOf(msg, dups) {
       const m = /^第 (\d+) 个环节：/.exec(msg);
       if (m) return ['stage:' + (+m[1] - 1), msg.slice(m[0].length)];
       if (msg.indexOf('赛制名称') === 0) return ['name', msg];
@@ -207,6 +208,14 @@
       if (msg === '可插入环节的名称不能为空') {
         const gi = groups.findIndex(g => !g || typeof g.group !== 'string' || !g.group.trim());
         if (gi >= 0) return ['extra:' + gi, '名称不能为空'];
+      }
+      const dup = /^可插入环节「([\s\S]*)」：名称和前面的一组重复$/.exec(msg);
+      if (dup) {
+        const name = dup[1].trim();
+        const same = groups.map((g, gi) => (g && typeof g.group === 'string' && g.group.trim() === name ? gi : -1)).filter(gi => gi >= 0);
+        dups[name] = (dups[name] || 0) + 1;
+        const gi = same[Math.min(dups[name], same.length - 1)];
+        if (gi !== undefined) return ['extra:' + gi, '名称和前面的一组重复'];
       }
       for (let gi = 0; gi < groups.length; gi++) {
         const p = '可插入环节「' + (groups[gi] && groups[gi].group) + '」';
@@ -220,8 +229,9 @@
       const add = (slot, msg) => { (slots[slot] = slots[slot] || []).push(msg); };
       Object.keys(bad).forEach(k => add(bad[k].where(), bad[k].msg));
       const marks = Object.keys(bad);
+      const dups = {};
       errs.forEach(e => {
-        const [slot, msg] = slotOf(e);
+        const [slot, msg] = slotOf(e, dups);
         add(slot, msg);
         const row = /^stage:(\d+)$/.exec(slot);
         const s = row && draft.stages[+row[1]];

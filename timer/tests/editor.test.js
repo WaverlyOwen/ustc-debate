@@ -404,6 +404,18 @@
     t.h.destroy();
   });
 
+  DT.test('editor: a second extra group with the same name is refused in that group', () => {
+    const t = mount();
+    $(t, 'button[data-action="add-extra"]').click();
+    $(t, 'button[data-action="add-extra"]').click();
+    const group = i => $(t, '[data-extra-index="' + i + '"]');
+    typeInto(group(1).querySelector('input[name="group"]'), '奇袭');
+    assert.ok(group(1).textContent.indexOf('名称和前面的一组重复') >= 0, group(1).textContent);
+    assert.equal(group(0).querySelector('.dt-ed-msg').textContent, '');
+    assert.equal(current(t.state).extras[1].group, '可插入环节 2', 'not saved');
+    t.h.destroy();
+  });
+
   // ---- the editor in the app (ui.js) ----
 
   function memStorage() {

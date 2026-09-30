@@ -7,6 +7,7 @@
   };
   const END_BELLS = ['double', 'triple', 'long', 'none', 'chime'];
   const HISTORY_LIMIT = 20;
+  const VARIANT_NAME_MAX = 38;   // an inserted stage is named 正方 / 反方 + this, and stage names stop at 40
 
   // ---- storage ----
   function memoryStorage() {
@@ -100,6 +101,9 @@
     } else {
       g.variants.forEach((v, k) => {
         const q = p + '第 ' + (k + 1) + ' 种：';
+        const name = isObj(v) && typeof v.name === 'string' ? v.name.trim() : '';
+        if (!name) errs.push(q + '名称不能为空');
+        else if (v.name.length > VARIANT_NAME_MAX) errs.push(q + '名称最多 ' + VARIANT_NAME_MAX + ' 个字（插入时前面还要加上正方或反方）');
         if (!isObj(v) || v.type !== 'single') errs.push(q + '只能是单方环节');
         if (!isObj(v) || secsError(v.secs)) errs.push(q + '时长要大于 0 秒');
       });
@@ -120,8 +124,16 @@
     }
     if (f.bells !== undefined && f.bells !== null) bellsErrors(f.bells).forEach(e => errs.push(e));
     if (f.extras !== undefined) {
-      if (Array.isArray(f.extras)) f.extras.forEach(g => extraErrors(g).forEach(e => errs.push(e)));
-      else errs.push('可插入环节的格式不对');
+      if (Array.isArray(f.extras)) {
+        // The insert menu finds a group by its name, so two groups may not share one.
+        const seen = {};
+        f.extras.forEach(g => {
+          extraErrors(g).forEach(e => errs.push(e));
+          const name = isObj(g) && typeof g.group === 'string' ? g.group.trim() : '';
+          if (name && seen[name]) errs.push('可插入环节「' + g.group + '」：名称和前面的一组重复');
+          if (name) seen[name] = true;
+        });
+      } else errs.push('可插入环节的格式不对');
     }
     return errs;
   }
@@ -148,16 +160,22 @@
   }
 
   // ---- formats persistence ----
+  // Stored entries the last load could not use, kept as they were so the next save does not erase them.
+  let unread = { from: null, entries: [] };
   function loadFormats() {
     const data = readJSON(KEYS.formats);
     const seen = {};
-    // Drop invalid entries, entries without a usable id, and repeated ids (first one wins).
+    const skipped = [];
+    // Skip invalid entries, entries without a usable id, and repeated ids (first one wins).
     const stored = data && Array.isArray(data.formats) ? data.formats.filter(f => {
-      if (!isObj(f) || typeof f.id !== 'string' || !f.id || Object.prototype.hasOwnProperty.call(seen, f.id)) return false;
-      if (validateFormat(f).length) return false;
+      const ok = isObj(f) && typeof f.id === 'string' && !!f.id && !Object.prototype.hasOwnProperty.call(seen, f.id) &&
+        !validateFormat(f).length;
+      if (!ok) { skipped.push(f); return false; }
       seen[f.id] = true;
       return true;
     }) : [];
+    unread = { from: store(), entries: skipped };
+    if (skipped.length) console.warn('有 ' + skipped.length + ' 个保存的赛制读不出来，已跳过（仍然保留在存储里）');
     const byId = {};
     stored.forEach(f => { byId[f.id] = f; });
     const out = DT.BUILTIN_FORMATS.map(b => clone(byId[b.id] || b));
@@ -165,7 +183,8 @@
     return out;
   }
   function saveFormats(list) {
-    writeJSON(KEYS.formats, { schema: 1, formats: list.filter(f => !isPristine(f)) });
+    const keep = unread.from === store() ? unread.entries : [];
+    writeJSON(KEYS.formats, { schema: 1, formats: list.filter(f => !isPristine(f)).concat(keep) });
   }
 
   // ---- constructors ----
@@ -199,7 +218,7 @@
   function withDefaults(f) {
     if (!isObj(f)) return f;
     const o = clone(f);
-    if (!o.id) o.id = uid('u');
+    if (typeof o.id !== 'string' || !o.id.trim()) o.id = uid('u');   // loadFormats would skip any other id
     if (!o.theme) o.theme = 'hall';
     if (!o.bells) o.bells = clone(DT.engine.DEFAULT_BELLS);
     if (!o.extras) o.extras = [];
