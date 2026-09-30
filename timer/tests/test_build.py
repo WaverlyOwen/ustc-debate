@@ -122,6 +122,40 @@ class CheckTests(unittest.TestCase):
             build.BUILTIN_JS.write_text(original, encoding="utf-8", newline="\n")
 
 
+class MissingSourceTests(unittest.TestCase):
+    """A source named in ORDER or STYLES that is not on disk fails the build instead of being skipped."""
+
+    def setUp(self):
+        self.order, self.styles = build.ORDER, build.STYLES
+
+    def tearDown(self):
+        build.ORDER, build.STYLES = self.order, self.styles
+
+    def test_a_missing_script_fails_the_build_and_is_listed(self):
+        build.ORDER = self.order + ["gone.js"]
+        self.assertIn(build.SRC / "gone.js", build.script_files())
+        with self.assertRaises(build.FormatError) as cm:
+            build.inline_html(build.parse_all(FORMATS))
+        self.assertIn("gone.js", str(cm.exception))
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(build.main(["--check"]), 1)
+
+    def test_a_missing_stylesheet_fails_the_build(self):
+        build.STYLES = self.styles + ["styles/gone.css"]
+        with self.assertRaises(build.FormatError) as cm:
+            build.inline_html(build.parse_all(FORMATS))
+        self.assertIn("gone.css", str(cm.exception))
+
+    def test_the_test_page_refuses_to_run_without_every_script(self):
+        sys.path.insert(0, str(HERE))
+        import run_js_tests
+        build.ORDER = self.order + ["gone.js"]
+        self.assertEqual(run_js_tests.missing_sources(), [build.SRC / "gone.js"])
+        build.ORDER = self.order
+        self.assertEqual(run_js_tests.missing_sources(), [])
+        self.assertIn("__loadErrors", run_js_tests.test_page(""))
+
+
 class InlineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

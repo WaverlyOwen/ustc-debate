@@ -4,10 +4,11 @@
 Usage:
     python timer/tests/run_js_tests.py [--filter 子串] [--keep]
 
-A throwaway page loads every existing src script in build.ORDER, then
+A throwaway page loads every src script in build.ORDER, then
 tests/harness.js and tests/*.test.js, runs them, and writes the JSON result
 into <pre id="results">. The browser dumps the DOM and this script parses it.
-Exit 0 all pass, 1 some fail, 2 no browser / page did not finish.
+A script that throws while it loads (a syntax error, say) counts as a failure.
+Exit 0 all pass, 1 some fail, 2 no browser / a source missing / page did not finish.
 """
 import argparse
 import html
@@ -43,12 +44,24 @@ def find_browser():
     return None
 
 
+# Collects what is thrown while the scripts load; a test file that does not parse would otherwise just be absent.
+LOAD_ERRORS = ("<script>window.__loadErrors = []; window.addEventListener('error', function (e) {"
+               "__loadErrors.push((e.filename || '').split('/').pop() + ':' + (e.lineno || '?') + ' ' + e.message);"
+               "});</script>")
+
+
+def missing_sources():
+    return [p for p in build.script_files() if not p.exists()]
+
+
 def test_page(filter_text):
-    tags = [f'<script src="{p.as_uri()}"></script>' for p in build.script_files()]
+    tags = [LOAD_ERRORS]
+    tags += [f'<script src="{p.as_uri()}"></script>' for p in build.script_files()]
     tags.append(f'<script src="{(HERE / "harness.js").as_uri()}"></script>')
     tags += [f'<script src="{p.as_uri()}"></script>' for p in sorted(HERE.glob("*.test.js"))]
     runner = (
         "<script>DT.test.run(%s).then(function (r) {"
+        "__loadErrors.forEach(function (e) { r.results.push({name: 'load ' + e, ok: false, error: e}); r.failed++; });"
         "document.getElementById('results').textContent = JSON.stringify(r);"
         "}).catch(function (e) {"
         "document.getElementById('results').textContent = JSON.stringify({fatal: String(e)});"
@@ -65,6 +78,10 @@ def main():
     ap.add_argument("--filter", default="")
     ap.add_argument("--keep", action="store_true", help="keep the generated test page and print its path")
     args = ap.parse_args()
+    missing = missing_sources()
+    if missing:
+        print("找不到这些源文件：", "、".join(p.relative_to(build.SRC).as_posix() for p in missing))
+        return 2
     browser = find_browser()
     if not browser:
         print("找不到 Edge 或 Chrome。装一个 Chromium 内核浏览器后重试。")

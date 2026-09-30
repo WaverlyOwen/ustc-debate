@@ -27,14 +27,13 @@ ORDER = [
 STYLES = ["styles/base.css", "styles/stage.css", "styles/console.css", "styles/editor.css"]
 
 
-def script_files(existing_only=True):
-    paths = [SRC / name for name in ORDER]
-    return [p for p in paths if p.exists()] if existing_only else paths
+def script_files():
+    """Every script in ORDER, on disk or not: a missing one is a mistake to report, not a file to skip."""
+    return [SRC / name for name in ORDER]
 
 
-def style_files(existing_only=True):
-    paths = [SRC / name for name in STYLES] + sorted((SRC / "themes").glob("*.css"))
-    return [p for p in paths if p.exists()] if existing_only else paths
+def style_files():
+    return [SRC / name for name in STYLES] + sorted((SRC / "themes").glob("*.css"))
 
 
 class FormatError(Exception):
@@ -196,8 +195,13 @@ def themes_meta():
 def _script_text(name, formats):
     if name == "builtin-formats.js":
         return builtin_js(formats)  # from the parsed formats, not the disk copy, so --check sees one truth
-    path = SRC / name
-    return path.read_text(encoding="utf-8") if path.exists() else "/* not written yet */\n"
+    return _source_text(SRC / name)
+
+
+def _source_text(path):
+    if not path.exists():
+        raise FormatError(f"src/{path.relative_to(SRC).as_posix()}: 找不到（build.py 的列表里有它）")
+    return path.read_text(encoding="utf-8")
 
 
 def inline_html(formats):
@@ -210,7 +214,7 @@ def inline_html(formats):
     page = re.sub(r"^<!doctype html>\n", lambda m: m.group() + (
         "<!-- 由 timer/build.py 生成。改源码请改 timer/src/，改完运行 python timer/build.py。"
         f"赛制来源：{sources} -->\n"), page, count=1, flags=re.I)
-    css = "".join(f"/* === {p.relative_to(SRC).as_posix()} === */\n{p.read_text(encoding='utf-8')}\n"
+    css = "".join(f"/* === {p.relative_to(SRC).as_posix()} === */\n{_source_text(p)}\n"
                   for p in style_files())
     js = "window.DT = window.DT || {};\nDT.THEMES = " + json.dumps(themes_meta(), ensure_ascii=False) + ";\n"
     js += "".join(f"/* === {name} === */\n{_script_text(name, formats)}\n" for name in ORDER)
