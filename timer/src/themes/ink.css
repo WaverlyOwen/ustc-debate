@@ -1,0 +1,268 @@
+/* @theme id=ink name=墨 desc=宣纸上的一道水墨笔触，朱砂对花青，适合亮场投影 tone=light */
+/* 墨: the floor is a stroke of ink laid across cool xuan paper from the speaking side's seat; as the time is used
+   the stroke draws back toward that seat (spec §2.1). The brush filters are in themes/ink.js. */
+[data-theme="ink"] {
+  --pro: #A3321F;           /* 朱砂: cinnabar as it dries on paper, not a screen red */
+  --pro-deep: #E5E8E3;      /* where the stroke has been drawn back: the paper itself */
+  --con: #2C4B5F;           /* 花青: the blue-green of indigo ink */
+  --con-deep: #E5E8E3;
+  --ground: #E5E8E3;        /* 生宣 in daylight: cool and a little green, never cream */
+  --ink: #1B1D21;
+  --ink-dim: rgb(27 29 33 / .7);
+  --accent: #8C5D16;        /* 赭金: ochre gold, dark enough to read as small text on the paper */
+  --accent-on-field: #E8C66E;
+  --seal: #B8341F;          /* seal paste, brighter than the cinnabar of the stroke */
+  --paper-ink: #F2F3EE;     /* ink the colour of paper, for what is written on the stroke */
+  --on-side: var(--paper-ink);
+  --digits-on-field: var(--paper-ink);
+  --digits-off-field: var(--ink);
+  --speaker-ink: var(--ink);
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "Source Han Serif SC", "Noto Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", "SimSun", serif;
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  /* Paper, drawn by feTurbulence in one tile: faint clouds where it took the size unevenly, a fine tooth, grey and
+     pale fibres and a few specks of old ink. Sized in cqh, so a thumbnail shows the same sheet, smaller; one image,
+     because each tiled image layer is painted again wherever the digits change. */
+  --backdrop:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='800'><filter id='p' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.0022' numOctaves='3' seed='30' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .32  0 0 0 0 .38  0 0 0 0 .37  .45 0 0 0 -.19' result='cloud'/><feTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .3  0 0 0 0 .33  0 0 0 0 .32  .4 0 0 0 -.17' result='tooth'/><feTurbulence type='turbulence' baseFrequency='.014 .0075' numOctaves='3' seed='12' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .42  0 0 0 0 .46  0 0 0 0 .45  -6 0 0 0 .16' result='grey'/><feTurbulence type='turbulence' baseFrequency='.008 .015' numOctaves='3' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 .99  -9 0 0 0 .4' result='pale'/><feTurbulence type='fractalNoise' baseFrequency='.3' numOctaves='2' seed='21' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .1  0 0 0 0 .11  0 0 0 0 .13  26 0 0 0 -20.6' result='specks'/><feMerge><feMergeNode in='cloud'/><feMergeNode in='tooth'/><feMergeNode in='grey'/><feMergeNode in='pale'/><feMergeNode in='specks'/></feMerge></filter><rect width='100%25' height='100%25' filter='url(%23p)'/></svg>") 0 0 / 80cqh 80cqh,
+    radial-gradient(120% 90% at 50% 45%, transparent 55%, rgb(40 52 50 / .07));
+  --text-field: var(--ground);   /* the stroke stays below the head, so all text above it sits on the paper */
+  --text-deep: var(--ground);
+  --stroke-box: 48cqh;           /* the stroke's box; the ink itself is about 44cqh of it (spec §2.1) */
+  --stroke-tail: 3cqw;           /* the stroke begins off screen, behind its seat's edge */
+}
+
+.dt-stage[data-theme="ink"] { --ink-stroke: var(--side-color); }
+
+/* ---- the stroke ---- */
+
+/* The ink is painted as a background as long as the time left, from the seat, so the brush filter frays its tip
+   wherever it ends. Two layers: loose hairs over the whole length (they show only near the tip, the dry end of the
+   brush) and the full body up to a little before the tip. Inside the box: loose hairs at top and bottom, the body
+   between. */
+.dt-stage[data-theme="ink"] .dt-field,
+.dt-stage[data-theme="ink"] .dt-half-field {
+  --stroke-len: calc(var(--stroke-tail) + (1 - var(--used)) * 100cqw);
+  background-color: transparent;
+  background-image:
+    repeating-linear-gradient(to bottom, var(--ink-stroke) 0 1.1cqh, transparent 1.1cqh 1.5cqh, var(--ink-stroke) 1.5cqh 2.2cqh,
+      transparent 2.2cqh 2.9cqh, var(--ink-stroke) 2.9cqh 4.6cqh, transparent 4.6cqh 4.9cqh),
+    linear-gradient(to bottom, transparent 4%, var(--ink-stroke) 4% 5.6%, transparent 5.6% 7%, var(--ink-stroke) 7% 91.4%,
+      transparent 91.4% 92.6%, var(--ink-stroke) 92.6% 94%, transparent 94%);
+  --stroke-at: var(--stroke-len);
+  background-size: var(--stroke-at) 86%, max(0px, var(--stroke-at) - 7cqw) 100%;
+  background-position: 0% 50%;
+  background-repeat: no-repeat;
+  filter: url(#dt-ink-brush-xl);
+}
+/* [data-mode] ranks this with stage.css's per-seat clip-path rules, which it replaces. */
+.dt-stage[data-theme="ink"][data-mode] .dt-field {
+  top: var(--clock-y);
+  bottom: auto;
+  left: calc(-1 * var(--stroke-tail));
+  right: calc(-1 * var(--stroke-tail));
+  height: var(--stroke-box);
+  translate: 0 -50%;
+  clip-path: inset(0);   /* the whole stroke: its end is the filtered tip, not a straight cut */
+}
+/* Drawn back toward the right-hand seat: the stroke lies against the right edge. */
+.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] .dt-field,
+.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] .dt-field { background-position: 100% 50%; }
+/* Overtime: the last of the ink is gone from the seat's edge too. */
+.dt-stage[data-theme="ink"][data-phase="over"] .dt-field { opacity: 0; transition: opacity 600ms ease; }
+
+/* The stroke's end moves in steps of a few pixels, so the filtered stroke is painted again a few times a second
+   rather than on every frame; the digits' colour change still follows the time exactly, within those pixels. */
+@supports (width: round(nearest, 1px, 1px)) {
+  .dt-stage[data-theme="ink"] .dt-field,
+  .dt-stage[data-theme="ink"] .dt-half-field { --stroke-at: round(nearest, var(--stroke-len), .2cqw); }
+}
+
+/* The brush for the stage's size (see ink.js). */
+@container (max-width: 1600px) {
+  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-l); }
+}
+@container (max-width: 1100px) {
+  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-m); }
+}
+@container (max-width: 520px) {
+  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-s); }
+}
+
+/* The digits' two layers change colour where the stroke ends; in warn the colon turns gold leaf on the stroke. */
+.dt-stage[data-theme="ink"] .dt-clock[data-phase="warn"] .dt-digits-on .dt-colon,
+.dt-stage[data-theme="ink"] .dt-clock[data-phase="count"] .dt-digits-on .dt-colon { color: var(--accent-on-field); }
+/* Overtime: the stroke is gone and the digits keep full ink; the seal below says it. */
+.dt-stage[data-theme="ink"] .dt-clock[data-phase="over"] .dt-digits { color: var(--digits-off-field); }
+/* 「暂停」 goes under the stroke, onto the paper, in ink. */
+.dt-stage[data-theme="ink"][data-kind="single"] .dt-clock .dt-state { top: calc(50% + 25cqh); margin-top: 0; color: var(--ink); opacity: .8; }
+
+/* The paper and the digits each get a layer of their own: the paper's feTurbulence tile is then drawn once, not
+   again under every frame's change of the digits (in software rendering that halves the frame rate). */
+.dt-stage[data-theme="ink"] .dt-backdrop,
+.dt-stage[data-theme="ink"] .dt-clock { will-change: transform; }
+
+/* ---- the warn bell point: a drop of ink on the paper under the stroke ---- */
+
+.dt-stage[data-theme="ink"] .dt-warnline {
+  top: calc(var(--clock-y) + var(--stroke-box) / 2 + 1.4cqh);
+  bottom: auto;
+  width: 2.6cqh;
+  height: 2.6cqh;
+  margin-left: -1.3cqh;
+  border-radius: 50%;
+  background-color: var(--ink);
+  -webkit-mask-image: none;
+  mask-image: none;
+  filter: url(#dt-ink-drop);
+}
+
+/* ---- the seal: the stage type in a small 朱文 seal before the stage name, in the app's own words ---- */
+
+.dt-stage[data-theme="ink"] .dt-head { position: relative; padding-left: 6.6cqh; }
+.dt-stage[data-theme="ink"] .dt-head::before {
+  position: absolute;
+  left: 0;
+  top: .2cqh;
+  width: 4.6cqh;
+  padding: .5cqh 0;
+  border: .36cqh solid var(--seal);
+  border-radius: .6cqh;
+  font-family: var(--font-title);
+  font-size: 2.7cqh;
+  font-weight: 700;
+  line-height: 1.02;
+  text-align: center;
+  color: var(--seal);
+  writing-mode: vertical-rl;
+  white-space: nowrap;
+  letter-spacing: .06em;
+  filter: url(#dt-ink-seal);
+}
+.dt-stage[data-theme="ink"][data-kind="single"] .dt-head::before { content: "单方"; }
+.dt-stage[data-theme="ink"][data-kind="dual"] .dt-head::before { content: "双方"; }
+.dt-stage[data-theme="ink"][data-kind="break"] .dt-head::before { content: "间隔"; }
+.dt-stage[data-theme="ink"][data-mode="end"] .dt-head::before { content: "终局"; }
+
+.dt-stage[data-theme="ink"] .dt-speaker { font-family: var(--font-title); letter-spacing: .18em; }
+.dt-stage[data-theme="ink"] .dt-top { font-family: var(--font-title); letter-spacing: .16em; }
+
+/* Overtime: a larger seal, pressed at a slant against the digits' upper corner. */
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::after {
+  content: "超时";
+  position: absolute;
+  left: calc(50% + 37cqh);
+  top: calc(var(--clock-y) - 21cqh);
+  padding: .5cqh 1.3cqh .7cqh;
+  border: .5cqh solid var(--seal);
+  border-radius: .9cqh;
+  font-family: var(--font-title);
+  font-size: 4.6cqh;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: .12em;
+  text-indent: .12em;
+  color: var(--seal);
+  rotate: -5deg;
+  filter: url(#dt-ink-seal);
+}
+
+/* ---- free debate: two strokes face each other, one high and one low, each from its own seat ---- */
+
+.dt-stage[data-theme="ink"] .dt-half {
+  --half-ground: transparent;   /* the paper's texture runs under both halves */
+  --ink-stroke: var(--side-color);
+  --row: 47%;                   /* the left stroke rides higher, the right one lower: 上下相对 */
+  --gap: 2.4cqw;                /* the paper left between the two strokes' tips */
+  --stroke-box: 40cqh;
+  box-shadow: none;
+}
+.dt-stage[data-theme="ink"] .dt-half:last-child { --row: 57%; }
+.dt-stage[data-theme="ink"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) {
+  --ink-stroke: color-mix(in oklab, var(--side-color) 42%, var(--ground));   /* 淡墨: the waiting side */
+  --digits-on-field: var(--ink);
+  filter: none;
+}
+.dt-stage[data-theme="ink"] .dt-half-field {
+  --stroke-len: calc(var(--stroke-tail) + var(--remain, 1) * (100% - var(--stroke-tail) - var(--gap)));
+  inset: auto;
+  top: calc(var(--row) - var(--stroke-box) / 2);
+  left: calc(-1 * var(--stroke-tail));
+  right: 0;
+  height: var(--stroke-box);
+}
+.dt-stage[data-theme="ink"] .dt-half:last-child .dt-half-field {
+  left: 0;
+  right: calc(-1 * var(--stroke-tail));
+  background-position: 100% 50%;
+}
+/* 提笔再落笔: the side taking the floor presses its brush down to a full, dense stroke; the side yielding it lifts
+   the brush, and its stroke thins and pales. */
+.dt-stage[data-theme="ink"] .dt-half-field { transition: transform 520ms var(--ease-spring); }
+.dt-stage[data-theme="ink"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-half-field { transform: scaleY(.7); }
+/* A side out of time has no ink left, not even the dry end of its brush at the edge. */
+.dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-half-field { opacity: 0; }
+
+/* The digits sit on their stroke, and change colour where its tip is: the clock spans the half, so --cut is the
+   tip's distance from the seat in the clock's own box. */
+.dt-stage[data-theme="ink"] .dt-half .dt-clock {
+  --cut: calc(var(--remain, 1) * (100% - var(--gap)));
+  left: 0;
+  right: 0;
+  top: var(--row);
+  translate: 0 -50%;
+  text-align: center;
+}
+.dt-stage[data-theme="ink"] .dt-half:first-child .dt-digits-on { clip-path: inset(-50% calc(100% - var(--cut)) -50% -50%); }
+.dt-stage[data-theme="ink"] .dt-half:first-child .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% -50% var(--cut)); }
+.dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits-on { clip-path: inset(-50% -50% -50% calc(100% - var(--cut))); }
+.dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% var(--cut) -50% -50%); }
+.dt-stage[data-theme="ink"] .dt-half .dt-clock .dt-state { top: calc(50% + 21cqh); }
+.dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-clock { color: var(--ink); }
+.dt-stage[data-theme="ink"] .dt-team { color: var(--ink); }
+
+/* ---- cards ---- */
+
+/* Title card: each motion is marked with a dab of its side's ink; the teams are parted by one upright stroke. */
+.dt-stage[data-theme="ink"] .dt-motion::before {
+  top: .1em;
+  width: .3em;
+  height: 1.12em;
+  border-radius: 45% 40% 50% 35% / 14% 20% 16% 22%;
+  filter: url(#dt-ink-drop);
+}
+.dt-stage[data-theme="ink"] .dt-teams::before {
+  width: .5cqh;
+  top: 0;
+  bottom: 0;
+  border-radius: 50% / 8%;
+  background: linear-gradient(to bottom, var(--ink) 70%, color-mix(in oklab, var(--ink) 40%, transparent));
+  filter: url(#dt-ink-drop);
+}
+
+/* Break: a pale 圆相, the circle a painter draws in one breath, rests behind the digits. */
+.dt-stage[data-theme="ink"][data-kind="break"] .dt-clock::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 40cqh;
+  height: 40cqh;
+  translate: -50% -48%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, transparent 83%, color-mix(in oklab, var(--ink) 20%, transparent) 85% 97%, transparent 99%);
+  -webkit-mask-image: conic-gradient(from 200deg, transparent 0 14deg, #000 60deg 300deg, rgb(0 0 0 / .35) 336deg, transparent 346deg);
+  mask-image: conic-gradient(from 200deg, transparent 0 14deg, #000 60deg 300deg, rgb(0 0 0 / .35) 336deg, transparent 346deg);
+  filter: url(#dt-ink-drop);
+}
+
+/* The seal, the drop and the dabs have pixel-sized filters: on a thumbnail they would smear, so they go flat. */
+@container (max-width: 520px) {
+  .dt-stage[data-theme="ink"] .dt-head::before,
+  .dt-stage[data-theme="ink"] .dt-warnline,
+  .dt-stage[data-theme="ink"] .dt-motion::before,
+  .dt-stage[data-theme="ink"] .dt-teams::before,
+  .dt-stage[data-theme="ink"] .dt-clock::before,
+  .dt-stage[data-theme="ink"] .dt-deco-over::after { filter: none; }
+}

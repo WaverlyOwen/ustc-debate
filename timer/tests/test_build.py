@@ -197,7 +197,7 @@ class InlineTests(unittest.TestCase):
 
     def test_themes_are_declared(self):
         ids = [t["id"] for t in build.themes_meta()]
-        self.assertEqual(sorted(ids), ["chroma", "daylight", "hall"])
+        self.assertEqual(sorted(ids), ["chroma", "daylight", "hall", "ink"])
         self.assertIn('DT.THEMES = ', self.html)
 
     def test_generated_banner(self):
