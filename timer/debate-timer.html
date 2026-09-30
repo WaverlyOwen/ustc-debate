@@ -680,6 +680,7 @@ body {
 }
 .dt-dock button[data-primary]:hover:not(:disabled) { background: color-mix(in oklab, var(--ink) 19%, transparent); }
 .dt-dock .dt-icon { display: inline-flex; }
+.dt-dock button[hidden] { display: none; }
 
 /* ---- status pills: top right, under the top bar ---- */
 
@@ -909,6 +910,309 @@ body {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* === styles/editor.css === */
+/* editor.css: pages outside the stage: the setup page (spec §5.9), and the form and list parts it shares with
+   the format editor (§5.10). Same palette and type as the stage: the ground and ink, the two side colours,
+   the serif for names and motions. Surfaces reuse the console's panel variables from console.css. */
+
+/* ---- shared form parts ---- */
+
+.dt-input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: .55em .8em;
+  border: 1px solid var(--panel-line);
+  border-radius: .45em;
+  background: color-mix(in oklab, var(--ground) 72%, transparent);
+  color: var(--ink);
+  font: inherit;
+  letter-spacing: .04em;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.dt-input::placeholder { color: var(--ink-dim); opacity: .6; }
+.dt-input:hover { border-color: color-mix(in oklab, var(--ink) 30%, transparent); }
+.dt-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.dt-input-title { font-family: var(--font-title); font-size: 1.06em; letter-spacing: .06em; }
+
+/* A row of radio choices drawn as buttons; the radio stays over its label, invisible but clickable. */
+.dt-choices { display: flex; flex-wrap: wrap; gap: .45em; }
+.dt-choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: .6em;
+  padding: .5em 1.05em;
+  border: 1px solid var(--panel-line);
+  border-radius: .45em;
+  color: var(--ink-dim);
+  letter-spacing: .12em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.dt-choice input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.dt-choice:hover { background: var(--panel-hover); color: var(--ink); }
+.dt-choice:has(input:checked) {
+  border-color: color-mix(in oklab, var(--ink) 55%, transparent);
+  background: color-mix(in oklab, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+.dt-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* A format's shape: one segment per stage, as long as the stage, in the stage's side colour. */
+.dt-setup-strip { display: flex; gap: 2px; height: .3em; }
+.dt-setup-strip i {
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--ground) 55%, var(--ink));
+}
+.dt-setup-strip i[data-side="pro"] { background: var(--pro); }
+.dt-setup-strip i[data-side="con"] { background: var(--con); }
+.dt-setup-strip i[data-kind="dual"] { background: linear-gradient(var(--pro) 50%, var(--con) 50%); }
+
+/* ---- setup page ---- */
+
+.dt-setup {
+  --gap: clamp(20px, 3vw, 56px);
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+  gap: clamp(14px, 2.6vh, 32px);
+  height: 100%;
+  overflow: auto;
+  padding: clamp(18px, 5vh, 64px) clamp(16px, 5vw, 96px) clamp(18px, 4.5vh, 56px);
+  background: radial-gradient(120% 90% at 50% 25%, transparent 55%, rgb(0 0 0 / .22)), var(--ground);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: clamp(14px, calc(1.45vh + 2px), 18px);
+  line-height: 1.5;
+  font-synthesis: none;
+}
+.dt-setup > * { flex: none; width: 100%; max-width: 1320px; margin-inline: auto; }
+.dt-setup :where(h1, h2, p) { margin: 0; }
+.dt-setup :where(button) {
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.dt-setup button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.dt-setup-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3em 1.6em; }
+.dt-setup-head h1 {
+  font-family: var(--font-title);
+  font-size: 1.9em;
+  font-weight: 600;
+  letter-spacing: .3em;
+}
+/* The mark: one bar, half each side's colour, like a free debate's segment on the progress bar. */
+.dt-setup-head h1::before {
+  content: "";
+  display: inline-block;
+  width: .2em;
+  height: .95em;
+  margin-right: .65em;
+  border-radius: .04em;
+  vertical-align: -.1em;
+  background: linear-gradient(var(--pro) 50%, var(--con) 50%);
+}
+.dt-setup-head p { color: var(--ink-dim); letter-spacing: .14em; }
+
+.dt-setup-label {
+  font-size: .8em;
+  font-weight: normal;
+  letter-spacing: .32em;
+  color: var(--ink-dim);
+}
+
+/* Resume banner: the one gold surface on the page, since it asks for a decision. */
+.dt-setup-resume {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8em 2em;
+  padding: .75em .8em .75em 1.4em;
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
+  border-radius: .6em;
+  background: color-mix(in oklab, var(--accent) 8%, var(--ground));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.dt-setup-resume p { letter-spacing: .06em; }
+.dt-setup-resume strong { font-family: var(--font-title); font-weight: 600; letter-spacing: .08em; }
+.dt-setup-resume-acts { display: flex; gap: .6em; }
+
+.dt-setup-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(16em, 25em) minmax(0, 1fr);
+  gap: var(--gap);
+}
+
+/* Format list: a quiet column; the chosen one is lifted and marked with an ink bar. */
+.dt-setup-formats { display: flex; flex-direction: column; gap: .7em; min-height: 0; }
+.dt-setup-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid var(--panel-line);
+  outline: none;
+}
+.dt-setup-group-label { padding: 1.1em 1em .35em; font-size: .78em; letter-spacing: .32em; color: var(--ink-dim); }
+.dt-setup-format {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: .3em;
+  padding: .85em 1em .95em 1.2em;
+  border-bottom: 1px solid var(--panel-line);
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.dt-setup-format:hover { background: var(--panel-hover); }
+.dt-setup-format[aria-selected="true"] { background: color-mix(in oklab, var(--ink) 10%, transparent); }
+.dt-setup-format[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .85em;
+  bottom: .85em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+.dt-setup-list:focus-visible .dt-setup-format[aria-selected="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dt-setup-format-name {
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 1.1em;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dt-setup-format-meta { display: flex; gap: 1.2em; font-size: .85em; letter-spacing: .06em; color: var(--ink-dim); }
+.dt-setup-format .dt-setup-strip { margin-top: .35em; opacity: .5; transition: opacity 150ms ease; }
+.dt-setup-format:hover .dt-setup-strip, .dt-setup-format[aria-selected="true"] .dt-setup-strip { opacity: 1; }
+
+/* This match: a panel headed by the chosen format and its shape. */
+.dt-setup-match {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(.75em, 1.6vh, 1.2em);   /* tighter on short screens, so 1366×768 fits without scrolling */
+  min-width: 0;
+  padding: clamp(1em, 2.4vh, 1.5em) 2em clamp(1em, 2.2vh, 1.4em);
+  border: 1px solid var(--panel-line);
+  border-radius: .9em;
+  background: var(--panel);
+  box-shadow: var(--panel-shadow);
+}
+.dt-setup-chosen { padding-bottom: clamp(.8em, 1.8vh, 1.2em); border-bottom: 1px solid var(--panel-line); }
+.dt-setup-chosen-name {
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 1.65em;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: .1em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dt-setup-meta { margin: .25em 0 .85em; letter-spacing: .08em; color: var(--ink-dim); }
+.dt-setup-chosen .dt-setup-strip { height: .5em; gap: 3px; }
+
+.dt-setup-row { display: flex; flex-direction: column; gap: .5em; min-width: 0; margin: 0; padding: 0; border: 0; }
+.dt-setup-row > legend { margin-bottom: .5em; padding: 0; }
+.dt-setup-teams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5em 1.4em; }
+
+/* A side's label with its colour bar, then the box. */
+.dt-setup-side { display: grid; grid-template-columns: 3.4em minmax(0, 1fr); align-items: center; }
+.dt-setup-side > span { position: relative; padding-left: .85em; font-size: .9em; letter-spacing: .2em; color: var(--ink-dim); }
+.dt-setup-side > span::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .15em;
+  bottom: .15em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--pro);
+}
+.dt-setup-side[data-side="con"] > span::before { background: var(--con); }
+
+.dt-setup-pair { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.2em 2.6em; }
+.dt-setup-seat { display: flex; flex-wrap: wrap; align-items: center; gap: .6em 1em; }
+/* How the projection will seat the two sides. */
+.dt-setup-seats {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--panel-line);
+  border-radius: .35em;
+  background: color-mix(in oklab, var(--ground) 72%, transparent);
+}
+.dt-setup-seats i {
+  display: grid;
+  place-items: center;
+  width: 2.3em;
+  height: 1.7em;
+  border-radius: .2em;
+  background: var(--pro);
+  color: var(--ink);
+  font-size: .8em;
+  font-style: normal;
+}
+.dt-setup-seats i[data-side="con"] { background: var(--con); }
+.dt-setup-seats[data-seat="right"] i[data-side="pro"] { order: 1; }
+
+/* Theme swatches: each carries its theme's data-theme, so the theme's own variables paint it. */
+.dt-setup-swatch {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 1.7em;
+  height: 1.1em;
+  padding: 3px;
+  border-radius: .2em;
+  background: var(--ground);
+  box-shadow: 0 0 0 1px var(--panel-line);
+}
+.dt-setup-swatch i { flex: 1; height: 100%; border-radius: 1px; background: var(--pro); }
+.dt-setup-swatch i[data-side="con"] { height: 62%; background: var(--con); }
+.dt-setup-hint { font-size: .85em; letter-spacing: .06em; color: var(--ink-dim); }
+.dt-setup-hint:empty { display: none; }
+
+.dt-setup-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .8em;
+  margin-top: auto;
+  padding-top: clamp(.8em, 1.8vh, 1.2em);
+  border-top: 1px solid var(--panel-line);
+}
+.dt-setup-foot [data-action="edit"] { margin-right: auto; }
+.dt-setup .dt-button:hover { background: var(--panel-hover); }
+/* Primary: solid ink, the loudest thing on this page and the only solid button. */
+.dt-setup .dt-button[data-primary] { border-color: var(--ink); background: var(--ink); color: var(--ground); font-weight: 600; }
+.dt-setup .dt-button[data-primary]:hover { background: color-mix(in oklab, var(--ink) 86%, var(--ground)); }
+.dt-setup-start { padding: .7em 2.4em; font-size: 1.06em; letter-spacing: .3em; }
+
+@media (max-width: 760px) {
+  .dt-setup-body, .dt-setup-pair { grid-template-columns: minmax(0, 1fr); }
+  .dt-setup-list { max-height: 40vh; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-setup, .dt-setup * { transition: none !important; }
 }
 
 /* === themes/chroma.css === */
@@ -3170,7 +3474,271 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
 })(window.DT = window.DT || {});
 
 /* === setup.js === */
-/* not written yet */
+/* setup.js: the setup page, the first page of the file. Pick a format, fill in this match, start (spec §5.9). */
+(function (DT) {
+  'use strict';
+  const TEXT_FIELDS = ['title', 'proMotion', 'conMotion', 'proTeam', 'conTeam'];
+  const PREFILL = ['proMotion', 'conMotion', 'proTeam', 'conTeam'];   // the match title is new every time
+  const ENTER = ['Enter', 'NumpadEnter'];
+  let mounts = 0;   // keeps option ids unique if the page is mounted again
+
+  // Static markup only; format names and match text go in through textContent and value.
+  const TEMPLATE =
+    '<header class="dt-setup-head"><h1>辩论计时器</h1><p>选好赛制，填好这一场，就可以开始</p></header>' +
+    '<div class="dt-setup-body">' +
+    '<section class="dt-setup-formats"><h2 class="dt-setup-label">赛制</h2>' +
+    '<div class="dt-setup-list" role="listbox" tabindex="0" aria-label="赛制"></div></section>' +
+    '<section class="dt-setup-match" aria-label="这一场">' +
+    '<div class="dt-setup-chosen"><h2 class="dt-setup-chosen-name"></h2><p class="dt-setup-meta"></p>' +
+    '<div class="dt-setup-strip" aria-hidden="true"></div></div>' +
+    '<label class="dt-setup-row"><span class="dt-setup-label">场次名</span>' +
+    '<input class="dt-input" type="text" name="title" autocomplete="off" maxlength="40" placeholder="可不填，如：新生赛 第 3 场"></label>' +
+    '<fieldset class="dt-setup-row"><legend class="dt-setup-label">辩题</legend>' +
+    '<label class="dt-setup-side" data-side="pro"><span>正方</span>' +
+    '<input class="dt-input dt-input-title" type="text" name="proMotion" autocomplete="off" placeholder="正方的表述，可不填"></label>' +
+    '<label class="dt-setup-side" data-side="con"><span>反方</span>' +
+    '<input class="dt-input dt-input-title" type="text" name="conMotion" autocomplete="off" placeholder="反方的表述，可不填"></label>' +
+    '</fieldset>' +
+    '<fieldset class="dt-setup-row dt-setup-teams"><legend class="dt-setup-label">队名</legend>' +
+    '<label class="dt-setup-side" data-side="pro"><span>正方</span>' +
+    '<input class="dt-input" type="text" name="proTeam" autocomplete="off" maxlength="40" placeholder="不填就显示「正方」"></label>' +
+    '<label class="dt-setup-side" data-side="con"><span>反方</span>' +
+    '<input class="dt-input" type="text" name="conTeam" autocomplete="off" maxlength="40" placeholder="不填就显示「反方」"></label>' +
+    '</fieldset>' +
+    '<div class="dt-setup-pair">' +
+    '<fieldset class="dt-setup-row"><legend class="dt-setup-label">正方坐在</legend><div class="dt-setup-seat">' +
+    '<div class="dt-choices">' +
+    '<label class="dt-choice"><input type="radio" name="proSeat" value="left"><span>左边</span></label>' +
+    '<label class="dt-choice"><input type="radio" name="proSeat" value="right"><span>右边</span></label></div>' +
+    '<span class="dt-setup-seats" aria-hidden="true"><i data-side="pro">正</i><i data-side="con">反</i></span>' +
+    '</div></fieldset>' +
+    '<fieldset class="dt-setup-row"><legend class="dt-setup-label">主题</legend>' +
+    '<div class="dt-choices dt-setup-themes"></div><p class="dt-setup-hint dt-setup-theme-desc"></p></fieldset>' +
+    '</div>' +
+    '<footer class="dt-setup-foot">' +
+    '<button type="button" class="dt-button dt-setup-start" data-action="start" data-primary>开始这一场</button>' +
+    '</footer></section></div>';
+
+  function el(tag, cls, content) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (content !== undefined) e.textContent = content;
+    return e;
+  }
+
+  function button(label, action, primary) {
+    const b = el('button', 'dt-button', label);
+    b.type = 'button';
+    b.dataset.action = action;
+    if (primary) b.setAttribute('data-primary', '');
+    return b;
+  }
+
+  // Speaking stages (breaks left out) and the whole length, a free debate counting both sides.
+  function summary(format) {
+    const stages = format.stages.filter(s => s.type !== 'break').length;
+    const secs = format.stages.reduce((n, s) => n + s.secs * (s.type === 'dual' ? 2 : 1), 0);
+    return { stages, minutes: Math.max(1, Math.round(secs / 60)) };
+  }
+
+  // The format's shape: one segment per stage, as long as the stage and coloured by its side.
+  function strip(box, format) {
+    box.textContent = '';
+    format.stages.forEach(s => {
+      const seg = el('i');
+      seg.dataset.side = s.side || 'none';
+      seg.dataset.kind = s.type;
+      seg.style.flexGrow = String(s.secs * (s.type === 'dual' ? 2 : 1));
+      box.appendChild(seg);
+    });
+  }
+
+  function resumeText(r) {
+    const where = r.cursor >= 0 ? '停在第 ' + (r.cursor + 1) + ' 个环节' : '还没开始第一个环节';
+    return ['上一场还没打完：', String(r.title || ''), '，' + where + '。'];
+  }
+
+  function mount(root, opts) {
+    const o = opts || {};
+    const formats = Array.isArray(o.formats) ? o.formats : [];
+    const given = Array.isArray(o.themes) && o.themes.length ? o.themes : [{ id: 'hall', name: '堂' }];
+    const themes = given.slice().sort((a, b) => (b.id === 'hall') - (a.id === 'hall'));   // the default leads
+    const last = o.lastMatch && typeof o.lastMatch === 'object' ? o.lastMatch : {};
+    const prefix = 'dt-setup-' + (++mounts) + '-';
+
+    const page = el('div', 'dt-setup');
+    page.innerHTML = TEMPLATE;
+    const $ = sel => page.querySelector(sel);
+    const list = $('.dt-setup-list');
+    const field = name => $('input[name="' + name + '"]');
+    const texts = TEXT_FIELDS.map(field);
+
+    // ---- the resume banner ----
+    if (o.resumable) {
+      const banner = el('section', 'dt-setup-resume');
+      banner.dataset.role = 'resume';
+      const p = el('p');
+      const parts = resumeText(o.resumable);
+      p.appendChild(document.createTextNode(parts[0]));
+      p.appendChild(el('strong', null, parts[1]));
+      p.appendChild(document.createTextNode(parts[2]));
+      const acts = el('div', 'dt-setup-resume-acts');
+      const resume = button('继续', 'resume', true);
+      const discard = button('放弃并新开', 'discard');
+      resume.addEventListener('click', () => { if (o.onResume) o.onResume(); });
+      discard.addEventListener('click', () => {
+        if (o.onDiscard) o.onDiscard();
+        banner.remove();
+      });
+      acts.appendChild(resume);
+      acts.appendChild(discard);
+      banner.appendChild(p);
+      banner.appendChild(acts);
+      page.insertBefore(banner, $('.dt-setup-body'));
+    }
+
+    // ---- the format list: built-in first, the user's own after ----
+    const options = [];
+    const groups = [['内置', formats.filter(f => f.builtin)], ['我的', formats.filter(f => !f.builtin)]];
+    const labelled = groups.every(g => g[1].length);
+    groups.forEach(([label, group]) => {
+      if (!group.length) return;
+      const box = el('div', 'dt-setup-group');
+      box.setAttribute('role', 'group');
+      box.setAttribute('aria-label', label);
+      if (labelled) {
+        const head = el('p', 'dt-setup-group-label', label);
+        head.setAttribute('role', 'presentation');
+        box.appendChild(head);
+      }
+      group.forEach(f => {
+        const opt = el('div', 'dt-setup-format');
+        opt.id = prefix + options.length;
+        opt.setAttribute('role', 'option');
+        opt.setAttribute('aria-selected', 'false');
+        opt.dataset.formatId = f.id;
+        const sum = summary(f);
+        const meta = el('span', 'dt-setup-format-meta');
+        meta.appendChild(el('span', null, sum.stages + ' 个环节'));
+        meta.appendChild(el('span', null, '约 ' + sum.minutes + ' 分钟'));
+        const bar = el('span', 'dt-setup-strip');
+        bar.setAttribute('aria-hidden', 'true');
+        strip(bar, f);
+        opt.appendChild(el('span', 'dt-setup-format-name', f.name));
+        opt.appendChild(meta);
+        opt.appendChild(bar);
+        const index = options.length;
+        opt.addEventListener('click', () => select(index));
+        options.push({ format: f, el: opt });
+        box.appendChild(opt);
+      });
+      list.appendChild(box);
+    });
+
+    // ---- themes ----
+    const themeBox = $('.dt-setup-themes');
+    const themeDesc = $('.dt-setup-theme-desc');
+    themes.forEach(th => {
+      const label = el('label', 'dt-choice');
+      const radio = el('input');
+      radio.type = 'radio';
+      radio.name = 'theme';
+      radio.value = th.id;
+      const swatch = el('span', 'dt-setup-swatch');
+      swatch.setAttribute('data-theme', th.id);   // the theme's own variables paint the swatch
+      swatch.setAttribute('aria-hidden', 'true');
+      swatch.appendChild(el('i')).dataset.side = 'pro';
+      swatch.appendChild(el('i')).dataset.side = 'con';
+      label.appendChild(radio);
+      label.appendChild(swatch);
+      label.appendChild(el('span', null, th.name || th.id));
+      if (th.desc) label.title = th.desc;
+      themeBox.appendChild(label);
+    });
+    // Compared as values, not put into a selector: an imported format's theme id can be any string.
+    const themeRadio = id => Array.from(themeBox.querySelectorAll('input')).find(r => r.value === id) || null;
+    let themePicked = false;   // the theme follows the chosen format until the timekeeper picks one
+    function setTheme(id) {
+      const radio = themeRadio(id) || themeRadio('hall') || themeBox.querySelector('input');
+      radio.checked = true;
+      const th = themes.find(x => x.id === radio.value);
+      themeDesc.textContent = (th && th.desc) || '';
+    }
+    themeBox.addEventListener('change', e => { themePicked = true; setTheme(e.target.value); });
+
+    // ---- selection ----
+    let current = -1;
+    function select(i) {
+      if (i < 0 || i >= options.length) return;
+      if (current >= 0) options[current].el.setAttribute('aria-selected', 'false');
+      current = i;
+      const { format, el: opt } = options[i];
+      opt.setAttribute('aria-selected', 'true');
+      list.setAttribute('aria-activedescendant', opt.id);
+      if (page.isConnected) opt.scrollIntoView({ block: 'nearest' });
+      const sum = summary(format);
+      $('.dt-setup-chosen-name').textContent = format.name;
+      $('.dt-setup-meta').textContent = sum.stages + ' 个环节，约 ' + sum.minutes + ' 分钟';
+      strip($('.dt-setup-chosen .dt-setup-strip'), format);
+      if (!themePicked) setTheme(format.theme);
+    }
+
+    list.addEventListener('keydown', e => {
+      const moves = { ArrowDown: current + 1, ArrowUp: current - 1, Home: 0, End: options.length - 1 };
+      if (!(e.code in moves) || e.altKey || e.ctrlKey || e.metaKey) return;
+      e.preventDefault();
+      select(Math.min(options.length - 1, Math.max(0, moves[e.code])));
+    });
+
+    // ---- the match ----
+    PREFILL.forEach(k => { if (typeof last[k] === 'string') field(k).value = last[k]; });
+    const seat = last.proSeat === 'right' ? 'right' : 'left';
+    page.querySelector('input[name="proSeat"][value="' + seat + '"]').checked = true;
+    const seats = $('.dt-setup-seats');
+    function paintSeat() { seats.dataset.seat = page.querySelector('input[name="proSeat"]:checked').value; }
+    page.querySelectorAll('input[name="proSeat"]').forEach(r => r.addEventListener('change', paintSeat));
+    paintSeat();
+
+    function start() {
+      if (current < 0 || !o.onStart) return;
+      const match = {};
+      TEXT_FIELDS.forEach(k => { match[k] = field(k).value.trim(); });
+      match.proSeat = page.querySelector('input[name="proSeat"]:checked').value;
+      o.onStart(options[current].format, match, themeBox.querySelector('input:checked').value);
+    }
+    $('button[data-action="start"]').addEventListener('click', start);
+
+    // Enter steps through the text boxes and starts the match from the last one.
+    // An Enter that ends an input-method composition only commits the text.
+    page.addEventListener('keydown', e => {
+      const i = texts.indexOf(e.target);
+      if (i < 0 || ENTER.indexOf(e.code) < 0 || e.isComposing || e.keyCode === 229) return;
+      e.preventDefault();
+      if (i === texts.length - 1) start();
+      else texts[i + 1].focus();
+    });
+
+    if (o.onEdit) {
+      const edit = button('编辑赛制', 'edit');
+      edit.addEventListener('click', () => o.onEdit());
+      const foot = $('.dt-setup-foot');
+      foot.insertBefore(edit, foot.firstChild);
+    }
+
+    // Filled in before the page is attached, so the first frame has nothing to transition from.
+    const wanted = options.findIndex(x => x.format.id === last.formatId);
+    select(wanted >= 0 ? wanted : 0);
+    root.appendChild(page);
+    if (current >= 0) options[current].el.scrollIntoView({ block: 'nearest' });
+
+    return {
+      el: page,
+      destroy() { page.remove(); },
+    };
+  }
+
+  DT.setup = { mount };
+})(window.DT = window.DT || {});
 
 /* === editor.js === */
 /* not written yet */
@@ -3225,7 +3793,8 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
   }
 
   // Each scene (or a function returning one): `at` is the frozen moment in seconds after the first step;
-  // steps are [second, action, arg?]; `dock: true` keeps the control dock open.
+  // steps are [second, action, arg?]; `dock: true` keeps the control dock open. A `setup` scene opens the
+  // setup page with the match remembered from last time; its steps, if any, are a match left unfinished.
   const SINGLE = { at: 73, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle']] };
   const DUAL = { at: 137, steps: [[0, 'goto', '自由辩论'], [0, 'floor', 'pro'], [20, 'floor', 'con'], [68, 'floor', 'pro']] };
   const SCENES = {
@@ -3243,12 +3812,12 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     'seat-right': Object.assign({ seat: 'right' }, DUAL),
     'long': { at: 73, format: longFormat, steps: [[0, 'goto', LONG_NAME], [0, 'toggle']] },
     'dock': Object.assign({ dock: true }, SINGLE),   // the control dock held open over a running stage
+    'setup': { setup: true, at: 0, steps: [] },
+    'setup-resume': Object.assign({ setup: true }, DUAL),   // the free debate left half way
   };
 
   // Play the scene so that its last moment is `now`; the loop ticks before each action, as the UI does.
-  function build(name, now) {
-    if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
-    const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
+  function play(scene, now) {
     const E = DT.engine;
     const t0 = now - scene.at * S;
     const match = Object.assign({}, MATCH, scene.seat ? { proSeat: scene.seat } : {});
@@ -3260,20 +3829,32 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       else if (act === 'floor') s = E.floor(s, arg, t);
       else s = E[act](s, t);
     });
-    return { route: 'timer', session: E.tick(s, now).session, dock: !!scene.dock };
+    return E.tick(s, now).session;
+  }
+
+  function build(name, now) {
+    if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
+    const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
+    if (!scene.setup) return { route: 'timer', session: play(scene, now), dock: !!scene.dock };
+    const lastMatch = { formatId: FORMAT_ID };
+    ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'].forEach(k => { lastMatch[k] = MATCH[k]; });
+    return { route: 'setup', session: scene.steps.length ? play(scene, now) : null, lastMatch, dock: false };
   }
 
   DT.demo = { names: Object.keys(SCENES), build };
 })(window.DT = window.DT || {});
 
 /* === ui.js === */
-/* ui.js: application assembly: boot, routing, the timer controller (keys, dock, overlays, bells, persistence)
-   and the frame loop. */
+/* ui.js: application assembly: boot, routing between the setup page and the timer, the timer controller
+   (keys, dock, overlays, bells, persistence) and the frame loop. */
 (function (DT) {
   'use strict';
   const DOUBLE_MS = 1500;       // the second press of R R / G G must come within this
   const DOCK_IDLE_MS = 2500;    // the dock folds away after this long without pointer movement
   const SIDE_NAME = { pro: '正方', con: '反方' };
+  const LAST_MATCH = ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'];   // prefilled next time (§5.9)
+  // Used when build.py has not injected DT.THEMES (the test page loads the sources directly).
+  const FALLBACK_THEMES = [{ id: 'hall', name: '堂' }, { id: 'daylight', name: '昼' }, { id: 'chroma', name: '绿幕' }];
 
   // Keys in the help overlay (spec §5.8). E and O are added by the tasks that bring the editor and the projector.
   const HELP = [
@@ -3313,7 +3894,8 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     '<button type="button" data-act="prev">' + ICON.prev + '<span>上一环节</span><kbd>←</kbd></button>' +
     '<button type="button" data-act="next"><span>下一环节</span>' + ICON.next + '<kbd>→</kbd></button></div>' +
     '<div class="dt-dock-group"><button type="button" data-act="toggle" data-primary>' +
-    '<span class="dt-icon"></span><span class="dt-toggle-label">开始</span><kbd>空格</kbd></button></div>' +
+    '<span class="dt-icon"></span><span class="dt-toggle-label">开始</span><kbd>空格</kbd></button>' +
+    '<button type="button" data-act="new" data-primary hidden><span>新的一场</span></button></div>' +
     '<div class="dt-dock-group">' +
     '<button type="button" data-act="floor" data-side="pro"><i class="dt-swatch" data-side="pro"></i><span>正方</span><kbd>A</kbd></button>' +
     '<button type="button" data-act="floor" data-side="con"><i class="dt-swatch" data-side="con"></i><span>反方</span><kbd>L</kbd></button></div>' +
@@ -3387,7 +3969,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     const demo = params.get('demo');
     if (demo && DT.demo.names.indexOf(demo) >= 0) return { name: 'demo', demo, frozen: params.get('frozen') === '1' };
     // '#projector' becomes the projector window in the sync task; until then it opens like any other page.
-    return { name: 'timer' };
+    return { name: 'setup' };
   }
 
   // A saved match worth resuming: unfinished and sound enough to render. Anything else is dropped.
@@ -3403,11 +3985,18 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     return saved;
   }
 
-  // Until the setup page exists: a new match in the given format, or the first one, on its title card.
+  // The 'timer' route with nothing to resume: a new match in the given format, or the first one.
   function newSession(o, now) {
     const formats = DT.store.loadFormats();
     const format = formats.find(f => f.id === o.formatId) || formats[0];
     return DT.engine.createSession(format, o.match || {}, now);
+  }
+
+  // How the setup page names a match it can resume: its title, else the pro motion, else the format.
+  function resumeInfo(session) {
+    const m = isObj(session.match) ? session.match : {};
+    const title = [m.title, m.proMotion, session.format.name].map(x => String(x || '').trim()).find(x => x);
+    return { title: title || '', cursor: session.cursor };
   }
 
   // What a key does. `hold` lets a held key repeat; `twice` asks for a second press and names the toast.
@@ -3450,30 +4039,11 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     insert: (s, now, group, variant, side) => DT.engine.insertExtra(s, group, variant, side, now),
   };
 
-  function boot(opts) {
-    const o = opts || {};
-    const root = o.root;
-    if (o.clock) DT.clock.set(() => o.clock.now());
-    const route = o.route ? { name: o.route } : routeOf(o.location || window.location);
-    const bells = o.bells || DT.bells;
-    let session, demo = null;
-    if (route.name === 'demo') {
-      DT.store.useStorage(memoryStorage());
-      const now = DT.clock.now();
-      if (route.frozen) DT.clock.set(() => now);
-      demo = DT.demo.build(route.demo, now);
-      session = demo.session;
-    } else {
-      if (o.storage) DT.store.useStorage(o.storage);
-      const now = DT.clock.now();
-      session = resumable(DT.store.loadSession(), now) || newSession(o, now);
-    }
-    const still = route.name === 'demo' && route.frozen;   // a screenshot: no sound hint
-    const settings = DT.store.loadSettings();
-    bells.setVolume(settings.volume);
-    bells.setMuted(settings.muted);
-
-    root.classList.add('dt-app');
+  // The timer page for one match. env: {bells, settings, still (a screenshot: no sound hint), pinDock,
+  // emit(name, arg) to the app's listeners, onNewMatch() for 新的一场 on the end card}.
+  function mountTimer(root, first, env) {
+    const bells = env.bells, settings = env.settings, still = !!env.still, emit = env.emit;
+    let session = first;
     const stage = DT.render.mount(root);
     const dock = el('div', 'dt-dock');
     attr(dock, 'role', 'group');   // not a toolbar: the arrow keys belong to the timer
@@ -3487,16 +4057,13 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     const btn = {
       prev: dockBtn('prev'), next: dockBtn('next'), toggle: dockBtn('toggle'),
       pro: dock.querySelector('button[data-side="pro"]'), con: dock.querySelector('button[data-side="con"]'),
-      undo: dockBtn('undo'), insert: dockBtn('insert'),
+      undo: dockBtn('undo'), insert: dockBtn('insert'), new: dockBtn('new'),
     };
     const toggleIcon = btn.toggle.querySelector('.dt-icon');
     const toggleLabel = btn.toggle.querySelector('.dt-toggle-label');
     const pills = { sound: status.querySelector('[data-kind="sound"]'), muted: status.querySelector('[data-kind="muted"]') };
 
-    const listeners = { change: [], events: [] };
     let raf = null, destroyed = false, overlay = null, armed = null, dockTimer = null, dockPinned = false;
-
-    function emit(name, arg) { listeners[name].slice().forEach(fn => fn(arg)); }
 
     function viewAt(now) {
       const v = DT.engine.view(session, now);
@@ -3519,6 +4086,8 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       btn.prev.disabled = session.cursor < 0;
       btn.next.disabled = session.cursor >= session.timeline.length;
       btn.toggle.disabled = v.mode === 'end' || !!(run && run.done);
+      btn.toggle.hidden = v.mode === 'end';   // the end card offers 新的一场 in its place
+      btn.new.hidden = v.mode !== 'end';
       const started = v.clocks.some(c => c.remaining !== c.total);
       const label = v.running ? (dual ? '换边' : '暂停') : started ? '继续' : '开始';
       text(toggleLabel, label);
@@ -3834,6 +4403,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     const DOCK_ACTS = {
       prev: () => act('prev'), next: () => act('next'), toggle: () => act('toggle'), undo: () => act('undo'),
       insert: () => openOverlay('insert'), stages: () => openOverlay('stages'), fullscreen: () => act('fullscreen'),
+      new: () => env.onNewMatch(),
     };
     dock.addEventListener('click', e => {
       const b = e.target.closest('button');
@@ -3885,7 +4455,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     const bootNow = DT.clock.now();
     bells.schedule(DT.engine.upcomingBells(session, bootNow), bootNow);   // a resumed clock rings on time
     paintStatus();
-    if (demo && demo.dock) {
+    if (env.pinDock) {
       dockPinned = true;
       attr(dock, 'data-pinned', true);
       showDock();
@@ -3895,10 +4465,6 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       session: () => session,
       view: () => viewAt(DT.clock.now()),
       key, act, openOverlay, closeOverlay,
-      on(name, fn) {
-        listeners[name].push(fn);
-        return () => { listeners[name] = listeners[name].filter(f => f !== fn); };
-      },
       destroy() {
         if (destroyed) return;
         destroyed = true;
@@ -3912,8 +4478,116 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         dock.remove();
         status.remove();
         stage.destroy();
-        root.classList.remove('dt-app');
         ['data-theme', 'data-idle'].forEach(a => root.removeAttribute(a));
+      },
+    };
+  }
+
+  // Opens the page on its route and moves between the setup page and the timer. The returned controller
+  // speaks for the timer while it is on screen; on the setup page its timer methods do nothing.
+  function boot(opts) {
+    const o = opts || {};
+    const root = o.root;
+    if (o.clock) DT.clock.set(() => o.clock.now());
+    const route = o.route ? { name: o.route } : routeOf(o.location || window.location);
+    const bells = o.bells || DT.bells;
+    let demo = null;
+    if (route.name === 'demo') {
+      DT.store.useStorage(memoryStorage());
+      const now = DT.clock.now();
+      if (route.frozen) DT.clock.set(() => now);
+      demo = DT.demo.build(route.demo, now);
+    } else if (o.storage) {
+      DT.store.useStorage(o.storage);
+    }
+    const settings = DT.store.loadSettings();
+    bells.setVolume(settings.volume);
+    bells.setMuted(settings.muted);
+    root.classList.add('dt-app');
+
+    const listeners = { change: [], events: [] };
+    let screen = null, destroyed = false;   // {name: 'setup' | 'timer', handle}
+
+    function emit(name, arg) { listeners[name].slice().forEach(fn => fn(arg)); }
+    const timer = () => (screen && screen.name === 'timer' ? screen.handle : null);
+
+    function leave() {
+      if (screen) screen.handle.destroy();
+      screen = null;
+    }
+
+    // Starting or resuming is a click or a key press, so the sound can be unlocked right there.
+    function unlockSound() { if (!bells.isUnlocked()) bells.unlock(); }
+
+    function showTimer(session, pinDock) {
+      leave();
+      const env = { bells, settings, still: route.name === 'demo' && route.frozen, pinDock, emit, onNewMatch: newMatch };
+      screen = { name: 'timer', handle: mountTimer(root, session, env) };
+    }
+
+    function newMatch() {
+      DT.store.clearSession();   // the match is over: nothing to resume
+      showSetup();
+    }
+
+    function showSetup() {
+      leave();
+      const saved = resumable(DT.store.loadSession(), DT.clock.now());
+      const handle = DT.setup.mount(root, {
+        formats: DT.store.loadFormats(),
+        lastMatch: DT.store.loadLastMatch(),
+        resumable: saved ? resumeInfo(saved) : null,
+        themes: Array.isArray(DT.THEMES) && DT.THEMES.length ? DT.THEMES : FALLBACK_THEMES,
+        onStart(format, match, theme) {
+          const last = { formatId: format.id };
+          LAST_MATCH.forEach(k => { last[k] = match[k]; });
+          DT.store.saveLastMatch(last);
+          const session = DT.engine.createSession(format, match, DT.clock.now(), { theme });
+          DT.store.saveSession(session);
+          unlockSound();
+          showTimer(session);
+        },
+        onResume() {
+          unlockSound();
+          showTimer(saved);
+        },
+        onDiscard() { DT.store.clearSession(); },
+        onEdit: null,   // the format editor's task wires 编辑赛制
+      });
+      screen = { name: 'setup', handle };
+    }
+
+    if (demo && demo.route === 'setup') {
+      if (demo.lastMatch) DT.store.saveLastMatch(demo.lastMatch);
+      if (demo.session) DT.store.saveSession(demo.session);
+      showSetup();
+    } else if (demo) {
+      showTimer(demo.session, demo.dock);
+    } else if (route.name === 'timer') {
+      const now = DT.clock.now();
+      showTimer(resumable(DT.store.loadSession(), now) || newSession(o, now));
+    } else {
+      showSetup();
+    }
+
+    return {
+      route: () => (screen ? screen.name : null),
+      session: () => (timer() ? timer().session() : null),
+      view: () => (timer() ? timer().view() : null),
+      key: (code, k) => (timer() ? timer().key(code, k) : false),
+      act() { const t = timer(); return t ? t.act.apply(null, arguments) : false; },
+      openOverlay: name => (timer() ? timer().openOverlay(name) : false),
+      closeOverlay() { if (timer()) timer().closeOverlay(); },
+      on(name, fn) {
+        listeners[name].push(fn);
+        return () => { listeners[name] = listeners[name].filter(f => f !== fn); };
+      },
+      // The last screen stays readable (session(), view()) after destroy, but nothing acts any more.
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        if (screen) screen.handle.destroy();
+        root.classList.remove('dt-app');
         listeners.change = [];
         listeners.events = [];
       },

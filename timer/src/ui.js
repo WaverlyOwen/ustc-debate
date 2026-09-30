@@ -1,10 +1,13 @@
-/* ui.js: application assembly: boot, routing, the timer controller (keys, dock, overlays, bells, persistence)
-   and the frame loop. */
+/* ui.js: application assembly: boot, routing between the setup page and the timer, the timer controller
+   (keys, dock, overlays, bells, persistence) and the frame loop. */
 (function (DT) {
   'use strict';
   const DOUBLE_MS = 1500;       // the second press of R R / G G must come within this
   const DOCK_IDLE_MS = 2500;    // the dock folds away after this long without pointer movement
   const SIDE_NAME = { pro: '正方', con: '反方' };
+  const LAST_MATCH = ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'];   // prefilled next time (§5.9)
+  // Used when build.py has not injected DT.THEMES (the test page loads the sources directly).
+  const FALLBACK_THEMES = [{ id: 'hall', name: '堂' }, { id: 'daylight', name: '昼' }, { id: 'chroma', name: '绿幕' }];
 
   // Keys in the help overlay (spec §5.8). E and O are added by the tasks that bring the editor and the projector.
   const HELP = [
@@ -44,7 +47,8 @@
     '<button type="button" data-act="prev">' + ICON.prev + '<span>上一环节</span><kbd>←</kbd></button>' +
     '<button type="button" data-act="next"><span>下一环节</span>' + ICON.next + '<kbd>→</kbd></button></div>' +
     '<div class="dt-dock-group"><button type="button" data-act="toggle" data-primary>' +
-    '<span class="dt-icon"></span><span class="dt-toggle-label">开始</span><kbd>空格</kbd></button></div>' +
+    '<span class="dt-icon"></span><span class="dt-toggle-label">开始</span><kbd>空格</kbd></button>' +
+    '<button type="button" data-act="new" data-primary hidden><span>新的一场</span></button></div>' +
     '<div class="dt-dock-group">' +
     '<button type="button" data-act="floor" data-side="pro"><i class="dt-swatch" data-side="pro"></i><span>正方</span><kbd>A</kbd></button>' +
     '<button type="button" data-act="floor" data-side="con"><i class="dt-swatch" data-side="con"></i><span>反方</span><kbd>L</kbd></button></div>' +
@@ -118,7 +122,7 @@
     const demo = params.get('demo');
     if (demo && DT.demo.names.indexOf(demo) >= 0) return { name: 'demo', demo, frozen: params.get('frozen') === '1' };
     // '#projector' becomes the projector window in the sync task; until then it opens like any other page.
-    return { name: 'timer' };
+    return { name: 'setup' };
   }
 
   // A saved match worth resuming: unfinished and sound enough to render. Anything else is dropped.
@@ -134,11 +138,18 @@
     return saved;
   }
 
-  // Until the setup page exists: a new match in the given format, or the first one, on its title card.
+  // The 'timer' route with nothing to resume: a new match in the given format, or the first one.
   function newSession(o, now) {
     const formats = DT.store.loadFormats();
     const format = formats.find(f => f.id === o.formatId) || formats[0];
     return DT.engine.createSession(format, o.match || {}, now);
+  }
+
+  // How the setup page names a match it can resume: its title, else the pro motion, else the format.
+  function resumeInfo(session) {
+    const m = isObj(session.match) ? session.match : {};
+    const title = [m.title, m.proMotion, session.format.name].map(x => String(x || '').trim()).find(x => x);
+    return { title: title || '', cursor: session.cursor };
   }
 
   // What a key does. `hold` lets a held key repeat; `twice` asks for a second press and names the toast.
@@ -181,30 +192,11 @@
     insert: (s, now, group, variant, side) => DT.engine.insertExtra(s, group, variant, side, now),
   };
 
-  function boot(opts) {
-    const o = opts || {};
-    const root = o.root;
-    if (o.clock) DT.clock.set(() => o.clock.now());
-    const route = o.route ? { name: o.route } : routeOf(o.location || window.location);
-    const bells = o.bells || DT.bells;
-    let session, demo = null;
-    if (route.name === 'demo') {
-      DT.store.useStorage(memoryStorage());
-      const now = DT.clock.now();
-      if (route.frozen) DT.clock.set(() => now);
-      demo = DT.demo.build(route.demo, now);
-      session = demo.session;
-    } else {
-      if (o.storage) DT.store.useStorage(o.storage);
-      const now = DT.clock.now();
-      session = resumable(DT.store.loadSession(), now) || newSession(o, now);
-    }
-    const still = route.name === 'demo' && route.frozen;   // a screenshot: no sound hint
-    const settings = DT.store.loadSettings();
-    bells.setVolume(settings.volume);
-    bells.setMuted(settings.muted);
-
-    root.classList.add('dt-app');
+  // The timer page for one match. env: {bells, settings, still (a screenshot: no sound hint), pinDock,
+  // emit(name, arg) to the app's listeners, onNewMatch() for 新的一场 on the end card}.
+  function mountTimer(root, first, env) {
+    const bells = env.bells, settings = env.settings, still = !!env.still, emit = env.emit;
+    let session = first;
     const stage = DT.render.mount(root);
     const dock = el('div', 'dt-dock');
     attr(dock, 'role', 'group');   // not a toolbar: the arrow keys belong to the timer
@@ -218,16 +210,13 @@
     const btn = {
       prev: dockBtn('prev'), next: dockBtn('next'), toggle: dockBtn('toggle'),
       pro: dock.querySelector('button[data-side="pro"]'), con: dock.querySelector('button[data-side="con"]'),
-      undo: dockBtn('undo'), insert: dockBtn('insert'),
+      undo: dockBtn('undo'), insert: dockBtn('insert'), new: dockBtn('new'),
     };
     const toggleIcon = btn.toggle.querySelector('.dt-icon');
     const toggleLabel = btn.toggle.querySelector('.dt-toggle-label');
     const pills = { sound: status.querySelector('[data-kind="sound"]'), muted: status.querySelector('[data-kind="muted"]') };
 
-    const listeners = { change: [], events: [] };
     let raf = null, destroyed = false, overlay = null, armed = null, dockTimer = null, dockPinned = false;
-
-    function emit(name, arg) { listeners[name].slice().forEach(fn => fn(arg)); }
 
     function viewAt(now) {
       const v = DT.engine.view(session, now);
@@ -250,6 +239,8 @@
       btn.prev.disabled = session.cursor < 0;
       btn.next.disabled = session.cursor >= session.timeline.length;
       btn.toggle.disabled = v.mode === 'end' || !!(run && run.done);
+      btn.toggle.hidden = v.mode === 'end';   // the end card offers 新的一场 in its place
+      btn.new.hidden = v.mode !== 'end';
       const started = v.clocks.some(c => c.remaining !== c.total);
       const label = v.running ? (dual ? '换边' : '暂停') : started ? '继续' : '开始';
       text(toggleLabel, label);
@@ -565,6 +556,7 @@
     const DOCK_ACTS = {
       prev: () => act('prev'), next: () => act('next'), toggle: () => act('toggle'), undo: () => act('undo'),
       insert: () => openOverlay('insert'), stages: () => openOverlay('stages'), fullscreen: () => act('fullscreen'),
+      new: () => env.onNewMatch(),
     };
     dock.addEventListener('click', e => {
       const b = e.target.closest('button');
@@ -616,7 +608,7 @@
     const bootNow = DT.clock.now();
     bells.schedule(DT.engine.upcomingBells(session, bootNow), bootNow);   // a resumed clock rings on time
     paintStatus();
-    if (demo && demo.dock) {
+    if (env.pinDock) {
       dockPinned = true;
       attr(dock, 'data-pinned', true);
       showDock();
@@ -626,10 +618,6 @@
       session: () => session,
       view: () => viewAt(DT.clock.now()),
       key, act, openOverlay, closeOverlay,
-      on(name, fn) {
-        listeners[name].push(fn);
-        return () => { listeners[name] = listeners[name].filter(f => f !== fn); };
-      },
       destroy() {
         if (destroyed) return;
         destroyed = true;
@@ -643,8 +631,116 @@
         dock.remove();
         status.remove();
         stage.destroy();
-        root.classList.remove('dt-app');
         ['data-theme', 'data-idle'].forEach(a => root.removeAttribute(a));
+      },
+    };
+  }
+
+  // Opens the page on its route and moves between the setup page and the timer. The returned controller
+  // speaks for the timer while it is on screen; on the setup page its timer methods do nothing.
+  function boot(opts) {
+    const o = opts || {};
+    const root = o.root;
+    if (o.clock) DT.clock.set(() => o.clock.now());
+    const route = o.route ? { name: o.route } : routeOf(o.location || window.location);
+    const bells = o.bells || DT.bells;
+    let demo = null;
+    if (route.name === 'demo') {
+      DT.store.useStorage(memoryStorage());
+      const now = DT.clock.now();
+      if (route.frozen) DT.clock.set(() => now);
+      demo = DT.demo.build(route.demo, now);
+    } else if (o.storage) {
+      DT.store.useStorage(o.storage);
+    }
+    const settings = DT.store.loadSettings();
+    bells.setVolume(settings.volume);
+    bells.setMuted(settings.muted);
+    root.classList.add('dt-app');
+
+    const listeners = { change: [], events: [] };
+    let screen = null, destroyed = false;   // {name: 'setup' | 'timer', handle}
+
+    function emit(name, arg) { listeners[name].slice().forEach(fn => fn(arg)); }
+    const timer = () => (screen && screen.name === 'timer' ? screen.handle : null);
+
+    function leave() {
+      if (screen) screen.handle.destroy();
+      screen = null;
+    }
+
+    // Starting or resuming is a click or a key press, so the sound can be unlocked right there.
+    function unlockSound() { if (!bells.isUnlocked()) bells.unlock(); }
+
+    function showTimer(session, pinDock) {
+      leave();
+      const env = { bells, settings, still: route.name === 'demo' && route.frozen, pinDock, emit, onNewMatch: newMatch };
+      screen = { name: 'timer', handle: mountTimer(root, session, env) };
+    }
+
+    function newMatch() {
+      DT.store.clearSession();   // the match is over: nothing to resume
+      showSetup();
+    }
+
+    function showSetup() {
+      leave();
+      const saved = resumable(DT.store.loadSession(), DT.clock.now());
+      const handle = DT.setup.mount(root, {
+        formats: DT.store.loadFormats(),
+        lastMatch: DT.store.loadLastMatch(),
+        resumable: saved ? resumeInfo(saved) : null,
+        themes: Array.isArray(DT.THEMES) && DT.THEMES.length ? DT.THEMES : FALLBACK_THEMES,
+        onStart(format, match, theme) {
+          const last = { formatId: format.id };
+          LAST_MATCH.forEach(k => { last[k] = match[k]; });
+          DT.store.saveLastMatch(last);
+          const session = DT.engine.createSession(format, match, DT.clock.now(), { theme });
+          DT.store.saveSession(session);
+          unlockSound();
+          showTimer(session);
+        },
+        onResume() {
+          unlockSound();
+          showTimer(saved);
+        },
+        onDiscard() { DT.store.clearSession(); },
+        onEdit: null,   // the format editor's task wires 编辑赛制
+      });
+      screen = { name: 'setup', handle };
+    }
+
+    if (demo && demo.route === 'setup') {
+      if (demo.lastMatch) DT.store.saveLastMatch(demo.lastMatch);
+      if (demo.session) DT.store.saveSession(demo.session);
+      showSetup();
+    } else if (demo) {
+      showTimer(demo.session, demo.dock);
+    } else if (route.name === 'timer') {
+      const now = DT.clock.now();
+      showTimer(resumable(DT.store.loadSession(), now) || newSession(o, now));
+    } else {
+      showSetup();
+    }
+
+    return {
+      route: () => (screen ? screen.name : null),
+      session: () => (timer() ? timer().session() : null),
+      view: () => (timer() ? timer().view() : null),
+      key: (code, k) => (timer() ? timer().key(code, k) : false),
+      act() { const t = timer(); return t ? t.act.apply(null, arguments) : false; },
+      openOverlay: name => (timer() ? timer().openOverlay(name) : false),
+      closeOverlay() { if (timer()) timer().closeOverlay(); },
+      on(name, fn) {
+        listeners[name].push(fn);
+        return () => { listeners[name] = listeners[name].filter(f => f !== fn); };
+      },
+      // The last screen stays readable (session(), view()) after destroy, but nothing acts any more.
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        if (screen) screen.handle.destroy();
+        root.classList.remove('dt-app');
         listeners.change = [];
         listeners.events = [];
       },

@@ -7,7 +7,7 @@
 
   DT.test('demo: every name builds a timer session for the freshman cup match', () => {
     assert.ok(DT.demo.names.length >= 13);
-    DT.demo.names.forEach(name => {
+    DT.demo.names.filter(name => name.indexOf('setup') !== 0).forEach(name => {
       const d = build(name);
       assert.equal(d.route, 'timer', name);
       assert.equal(d.session.match.title, '新生赛 第 3 场', name);
@@ -73,6 +73,18 @@
     assert.equal(v.clocks[0].text.length, 5);
   });
 
+  DT.test('demo: the setup scenes remember the last match; setup-resume leaves the free debate unfinished', () => {
+    const plain = build('setup'), resume = build('setup-resume');
+    [plain, resume].forEach(d => {
+      assert.equal(d.route, 'setup');
+      assert.deepEqual(d.lastMatch, { formatId: 'ustc-freshman-cup', proMotion: '大学生应该优先发展兴趣',
+        conMotion: '大学生不应该优先发展兴趣', proTeam: '物理学院', conTeam: '化学院', proSeat: 'left' });
+    });
+    assert.equal(plain.session, null);
+    assert.equal(view(resume).stage.name, '自由辩论');
+    assert.deepEqual(texts(view(resume)), ['2:31', '3:12']);
+  });
+
   DT.test('demo: sessions are played out by engine actions, so undo works', () => {
     const s = build('single').session;
     assert.ok(s.history.length >= 2);
@@ -110,14 +122,23 @@
     } finally { t.c.destroy(); DT.clock.reset(); }
   });
 
-  DT.test('ui: without a demo it opens the first built-in format on the title card', () => {
+  DT.test('ui: without a demo it opens the setup page with the first built-in format chosen', () => {
     const t = bootDemo('');
     try {
-      assert.equal(t.c.session().cursor, -1);
-      assert.equal(t.c.session().format.id, DT.BUILTIN_FORMATS[0].id);
-      assert.equal(t.box.querySelector('.dt-stage').dataset.mode, 'title');
-      t.c.destroy();
+      assert.equal(t.c.route(), 'setup');
       assert.equal(t.box.querySelector('.dt-stage'), null);
+      const chosen = t.box.querySelector('[data-format-id][aria-selected="true"]');
+      assert.equal(chosen.dataset.formatId, DT.BUILTIN_FORMATS[0].id);
+      assert.deepEqual(t.writes, []);
+      t.c.destroy();
+      assert.equal(t.box.querySelector('.dt-setup'), null);
     } finally { DT.clock.reset(); }
+  });
+
+  DT.test('ui: an unknown demo name opens the setup page', () => {
+    const t = bootDemo('?demo=nope');
+    try {
+      assert.equal(t.c.route(), 'setup');
+    } finally { t.c.destroy(); DT.clock.reset(); }
   });
 })();

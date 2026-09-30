@@ -1,0 +1,301 @@
+/* editor.css: pages outside the stage: the setup page (spec §5.9), and the form and list parts it shares with
+   the format editor (§5.10). Same palette and type as the stage: the ground and ink, the two side colours,
+   the serif for names and motions. Surfaces reuse the console's panel variables from console.css. */
+
+/* ---- shared form parts ---- */
+
+.dt-input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: .55em .8em;
+  border: 1px solid var(--panel-line);
+  border-radius: .45em;
+  background: color-mix(in oklab, var(--ground) 72%, transparent);
+  color: var(--ink);
+  font: inherit;
+  letter-spacing: .04em;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.dt-input::placeholder { color: var(--ink-dim); opacity: .6; }
+.dt-input:hover { border-color: color-mix(in oklab, var(--ink) 30%, transparent); }
+.dt-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.dt-input-title { font-family: var(--font-title); font-size: 1.06em; letter-spacing: .06em; }
+
+/* A row of radio choices drawn as buttons; the radio stays over its label, invisible but clickable. */
+.dt-choices { display: flex; flex-wrap: wrap; gap: .45em; }
+.dt-choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: .6em;
+  padding: .5em 1.05em;
+  border: 1px solid var(--panel-line);
+  border-radius: .45em;
+  color: var(--ink-dim);
+  letter-spacing: .12em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.dt-choice input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.dt-choice:hover { background: var(--panel-hover); color: var(--ink); }
+.dt-choice:has(input:checked) {
+  border-color: color-mix(in oklab, var(--ink) 55%, transparent);
+  background: color-mix(in oklab, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+.dt-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* A format's shape: one segment per stage, as long as the stage, in the stage's side colour. */
+.dt-setup-strip { display: flex; gap: 2px; height: .3em; }
+.dt-setup-strip i {
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--ground) 55%, var(--ink));
+}
+.dt-setup-strip i[data-side="pro"] { background: var(--pro); }
+.dt-setup-strip i[data-side="con"] { background: var(--con); }
+.dt-setup-strip i[data-kind="dual"] { background: linear-gradient(var(--pro) 50%, var(--con) 50%); }
+
+/* ---- setup page ---- */
+
+.dt-setup {
+  --gap: clamp(20px, 3vw, 56px);
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+  gap: clamp(14px, 2.6vh, 32px);
+  height: 100%;
+  overflow: auto;
+  padding: clamp(18px, 5vh, 64px) clamp(16px, 5vw, 96px) clamp(18px, 4.5vh, 56px);
+  background: radial-gradient(120% 90% at 50% 25%, transparent 55%, rgb(0 0 0 / .22)), var(--ground);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: clamp(14px, calc(1.45vh + 2px), 18px);
+  line-height: 1.5;
+  font-synthesis: none;
+}
+.dt-setup > * { flex: none; width: 100%; max-width: 1320px; margin-inline: auto; }
+.dt-setup :where(h1, h2, p) { margin: 0; }
+.dt-setup :where(button) {
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.dt-setup button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.dt-setup-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3em 1.6em; }
+.dt-setup-head h1 {
+  font-family: var(--font-title);
+  font-size: 1.9em;
+  font-weight: 600;
+  letter-spacing: .3em;
+}
+/* The mark: one bar, half each side's colour, like a free debate's segment on the progress bar. */
+.dt-setup-head h1::before {
+  content: "";
+  display: inline-block;
+  width: .2em;
+  height: .95em;
+  margin-right: .65em;
+  border-radius: .04em;
+  vertical-align: -.1em;
+  background: linear-gradient(var(--pro) 50%, var(--con) 50%);
+}
+.dt-setup-head p { color: var(--ink-dim); letter-spacing: .14em; }
+
+.dt-setup-label {
+  font-size: .8em;
+  font-weight: normal;
+  letter-spacing: .32em;
+  color: var(--ink-dim);
+}
+
+/* Resume banner: the one gold surface on the page, since it asks for a decision. */
+.dt-setup-resume {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8em 2em;
+  padding: .75em .8em .75em 1.4em;
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
+  border-radius: .6em;
+  background: color-mix(in oklab, var(--accent) 8%, var(--ground));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.dt-setup-resume p { letter-spacing: .06em; }
+.dt-setup-resume strong { font-family: var(--font-title); font-weight: 600; letter-spacing: .08em; }
+.dt-setup-resume-acts { display: flex; gap: .6em; }
+
+.dt-setup-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(16em, 25em) minmax(0, 1fr);
+  gap: var(--gap);
+}
+
+/* Format list: a quiet column; the chosen one is lifted and marked with an ink bar. */
+.dt-setup-formats { display: flex; flex-direction: column; gap: .7em; min-height: 0; }
+.dt-setup-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid var(--panel-line);
+  outline: none;
+}
+.dt-setup-group-label { padding: 1.1em 1em .35em; font-size: .78em; letter-spacing: .32em; color: var(--ink-dim); }
+.dt-setup-format {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: .3em;
+  padding: .85em 1em .95em 1.2em;
+  border-bottom: 1px solid var(--panel-line);
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.dt-setup-format:hover { background: var(--panel-hover); }
+.dt-setup-format[aria-selected="true"] { background: color-mix(in oklab, var(--ink) 10%, transparent); }
+.dt-setup-format[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .85em;
+  bottom: .85em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+.dt-setup-list:focus-visible .dt-setup-format[aria-selected="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dt-setup-format-name {
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 1.1em;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dt-setup-format-meta { display: flex; gap: 1.2em; font-size: .85em; letter-spacing: .06em; color: var(--ink-dim); }
+.dt-setup-format .dt-setup-strip { margin-top: .35em; opacity: .5; transition: opacity 150ms ease; }
+.dt-setup-format:hover .dt-setup-strip, .dt-setup-format[aria-selected="true"] .dt-setup-strip { opacity: 1; }
+
+/* This match: a panel headed by the chosen format and its shape. */
+.dt-setup-match {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(.75em, 1.6vh, 1.2em);   /* tighter on short screens, so 1366×768 fits without scrolling */
+  min-width: 0;
+  padding: clamp(1em, 2.4vh, 1.5em) 2em clamp(1em, 2.2vh, 1.4em);
+  border: 1px solid var(--panel-line);
+  border-radius: .9em;
+  background: var(--panel);
+  box-shadow: var(--panel-shadow);
+}
+.dt-setup-chosen { padding-bottom: clamp(.8em, 1.8vh, 1.2em); border-bottom: 1px solid var(--panel-line); }
+.dt-setup-chosen-name {
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 1.65em;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: .1em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dt-setup-meta { margin: .25em 0 .85em; letter-spacing: .08em; color: var(--ink-dim); }
+.dt-setup-chosen .dt-setup-strip { height: .5em; gap: 3px; }
+
+.dt-setup-row { display: flex; flex-direction: column; gap: .5em; min-width: 0; margin: 0; padding: 0; border: 0; }
+.dt-setup-row > legend { margin-bottom: .5em; padding: 0; }
+.dt-setup-teams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5em 1.4em; }
+
+/* A side's label with its colour bar, then the box. */
+.dt-setup-side { display: grid; grid-template-columns: 3.4em minmax(0, 1fr); align-items: center; }
+.dt-setup-side > span { position: relative; padding-left: .85em; font-size: .9em; letter-spacing: .2em; color: var(--ink-dim); }
+.dt-setup-side > span::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .15em;
+  bottom: .15em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--pro);
+}
+.dt-setup-side[data-side="con"] > span::before { background: var(--con); }
+
+.dt-setup-pair { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.2em 2.6em; }
+.dt-setup-seat { display: flex; flex-wrap: wrap; align-items: center; gap: .6em 1em; }
+/* How the projection will seat the two sides. */
+.dt-setup-seats {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--panel-line);
+  border-radius: .35em;
+  background: color-mix(in oklab, var(--ground) 72%, transparent);
+}
+.dt-setup-seats i {
+  display: grid;
+  place-items: center;
+  width: 2.3em;
+  height: 1.7em;
+  border-radius: .2em;
+  background: var(--pro);
+  color: var(--ink);
+  font-size: .8em;
+  font-style: normal;
+}
+.dt-setup-seats i[data-side="con"] { background: var(--con); }
+.dt-setup-seats[data-seat="right"] i[data-side="pro"] { order: 1; }
+
+/* Theme swatches: each carries its theme's data-theme, so the theme's own variables paint it. */
+.dt-setup-swatch {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 1.7em;
+  height: 1.1em;
+  padding: 3px;
+  border-radius: .2em;
+  background: var(--ground);
+  box-shadow: 0 0 0 1px var(--panel-line);
+}
+.dt-setup-swatch i { flex: 1; height: 100%; border-radius: 1px; background: var(--pro); }
+.dt-setup-swatch i[data-side="con"] { height: 62%; background: var(--con); }
+.dt-setup-hint { font-size: .85em; letter-spacing: .06em; color: var(--ink-dim); }
+.dt-setup-hint:empty { display: none; }
+
+.dt-setup-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .8em;
+  margin-top: auto;
+  padding-top: clamp(.8em, 1.8vh, 1.2em);
+  border-top: 1px solid var(--panel-line);
+}
+.dt-setup-foot [data-action="edit"] { margin-right: auto; }
+.dt-setup .dt-button:hover { background: var(--panel-hover); }
+/* Primary: solid ink, the loudest thing on this page and the only solid button. */
+.dt-setup .dt-button[data-primary] { border-color: var(--ink); background: var(--ink); color: var(--ground); font-weight: 600; }
+.dt-setup .dt-button[data-primary]:hover { background: color-mix(in oklab, var(--ink) 86%, var(--ground)); }
+.dt-setup-start { padding: .7em 2.4em; font-size: 1.06em; letter-spacing: .3em; }
+
+@media (max-width: 760px) {
+  .dt-setup-body, .dt-setup-pair { grid-template-columns: minmax(0, 1fr); }
+  .dt-setup-list { max-height: 40vh; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-setup, .dt-setup * { transition: none !important; }
+}

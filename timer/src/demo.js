@@ -44,7 +44,8 @@
   }
 
   // Each scene (or a function returning one): `at` is the frozen moment in seconds after the first step;
-  // steps are [second, action, arg?]; `dock: true` keeps the control dock open.
+  // steps are [second, action, arg?]; `dock: true` keeps the control dock open. A `setup` scene opens the
+  // setup page with the match remembered from last time; its steps, if any, are a match left unfinished.
   const SINGLE = { at: 73, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle']] };
   const DUAL = { at: 137, steps: [[0, 'goto', '自由辩论'], [0, 'floor', 'pro'], [20, 'floor', 'con'], [68, 'floor', 'pro']] };
   const SCENES = {
@@ -62,12 +63,12 @@
     'seat-right': Object.assign({ seat: 'right' }, DUAL),
     'long': { at: 73, format: longFormat, steps: [[0, 'goto', LONG_NAME], [0, 'toggle']] },
     'dock': Object.assign({ dock: true }, SINGLE),   // the control dock held open over a running stage
+    'setup': { setup: true, at: 0, steps: [] },
+    'setup-resume': Object.assign({ setup: true }, DUAL),   // the free debate left half way
   };
 
   // Play the scene so that its last moment is `now`; the loop ticks before each action, as the UI does.
-  function build(name, now) {
-    if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
-    const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
+  function play(scene, now) {
     const E = DT.engine;
     const t0 = now - scene.at * S;
     const match = Object.assign({}, MATCH, scene.seat ? { proSeat: scene.seat } : {});
@@ -79,7 +80,16 @@
       else if (act === 'floor') s = E.floor(s, arg, t);
       else s = E[act](s, t);
     });
-    return { route: 'timer', session: E.tick(s, now).session, dock: !!scene.dock };
+    return E.tick(s, now).session;
+  }
+
+  function build(name, now) {
+    if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
+    const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
+    if (!scene.setup) return { route: 'timer', session: play(scene, now), dock: !!scene.dock };
+    const lastMatch = { formatId: FORMAT_ID };
+    ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'].forEach(k => { lastMatch[k] = MATCH[k]; });
+    return { route: 'setup', session: scene.steps.length ? play(scene, now) : null, lastMatch, dock: false };
   }
 
   DT.demo = { names: Object.keys(SCENES), build };

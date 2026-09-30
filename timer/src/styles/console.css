@@ -115,6 +115,7 @@
 }
 .dt-dock button[data-primary]:hover:not(:disabled) { background: color-mix(in oklab, var(--ink) 19%, transparent); }
 .dt-dock .dt-icon { display: inline-flex; }
+.dt-dock button[hidden] { display: none; }
 
 /* ---- status pills: top right, under the top bar ---- */
 
