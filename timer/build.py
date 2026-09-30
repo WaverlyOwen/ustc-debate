@@ -195,18 +195,24 @@ THEME_FIELD = re.compile(r"(\w+)=(.*?)(?=\s+\w+=|$)")
 
 
 def themes_meta():
-    """Read each theme's first line, /* @theme id=… name=… desc=… tone=… */, into [{id, name, desc, tone}]."""
+    """Read each theme's first line, /* @theme id=… name=… desc=… tone=… order=… */, into [{id, name, desc, tone}].
+
+    The list is in the order the setup page's grid shows the themes: by each header's order= (a whole number; the
+    grid groups the themes by purpose), then by file name; a theme without one goes after those that have one."""
     out = []
     for p in sorted((SRC / "themes").glob("*.css")):
         lines = p.read_text(encoding="utf-8").splitlines()
         m = THEME_LINE.fullmatch(lines[0].strip()) if lines else None
         fields = dict(THEME_FIELD.findall(m.group(1))) if m else {}
         if not all(fields.get(k) for k in ("id", "name", "desc")):
-            raise FormatError(f"themes/{p.name}:1: 第一行要写成 /* @theme id=… name=… desc=… tone=… */")
+            raise FormatError(f"themes/{p.name}:1: 第一行要写成 /* @theme id=… name=… desc=… tone=… order=… */")
         if fields.get("tone") not in ("dark", "light"):
             raise FormatError(f"themes/{p.name}:1: tone 要写 dark 或 light（主题是深底还是浅底）")
-        out.append({k: fields[k] for k in ("id", "name", "desc", "tone")})
-    return out
+        order = fields.get("order")
+        if order is not None and not re.fullmatch(r"\d+", order):
+            raise FormatError(f"themes/{p.name}:1: order 要写一个整数（主题在开赛页网格里的位置），现在是「{order}」")
+        out.append((int(order) if order is not None else float("inf"), {k: fields[k] for k in ("id", "name", "desc", "tone")}))
+    return [meta for _, meta in sorted(out, key=lambda x: x[0])]
 
 
 def _script_text(path, formats):

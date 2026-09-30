@@ -236,6 +236,24 @@ class ThemeBuildTests(unittest.TestCase):
         html = build.inline_html(build.parse_all(FORMATS))
         self.assertEqual(html.count('<script id="dt-main">'), 1)
 
+    def test_theme_order_comes_from_the_header(self):
+        # By purpose, not by file name: dark projection first, then light, the keying utility last.
+        ids = [t["id"] for t in build.themes_meta()]
+        self.assertEqual(ids, ["hall", "startrail", "chalk", "construct", "daylight", "ink", "riso", "chroma"])
+        self.assertNotIn("order", build.themes_meta()[0])
+
+    def test_a_theme_without_an_order_goes_last_and_a_bad_order_fails(self):
+        extra = build.SRC / "themes" / "aa-unordered.css"
+        extra.write_text("/* @theme id=aa-unordered name=无序 desc=测试 tone=dark */\n", encoding="utf-8")
+        try:
+            self.assertEqual(build.themes_meta()[-1]["id"], "aa-unordered")
+            extra.write_text("/* @theme id=aa-unordered name=无序 desc=测试 tone=dark order=第一 */\n", encoding="utf-8")
+            with self.assertRaises(build.FormatError) as e:
+                build.themes_meta()
+            self.assertIn("aa-unordered.css", str(e.exception))
+        finally:
+            extra.unlink()
+
     def test_orphan_theme_script_fails(self):
         orphan = build.SRC / "themes" / "zz-orphan.js"
         orphan.write_text("// orphan\n", encoding="utf-8")

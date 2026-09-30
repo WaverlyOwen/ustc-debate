@@ -1,4 +1,4 @@
-/* @theme id=construct name=构成 desc=构成主义几何海报，巨大的扇形表盘从本方席位一侧转回，适合暗场投影 tone=dark */
+/* @theme id=construct name=构成 desc=构成主义几何海报，巨大的扇形表盘从本方席位一侧转回，适合暗场投影 tone=dark order=4 */
 /* 构成: a constructivist poster. The time left is a sector of a giant dial whose centre lies just outside the speaking
    side's seat edge, level with the digits; the half of the dial that shows is the whole time, so the sector's angle
    is the time left × 180° (spec §2.5). It is a fan about the clock's axis that closes onto that axis as the time

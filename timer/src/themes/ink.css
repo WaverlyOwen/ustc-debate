@@ -1,4 +1,4 @@
-/* @theme id=ink name=墨 desc=宣纸上的一道水墨笔触，朱砂对花青，适合亮场投影 tone=light */
+/* @theme id=ink name=墨 desc=宣纸上的一道水墨笔触，朱砂对花青，适合亮场投影 tone=light order=6 */
 /* 墨: the floor is a stroke of ink laid across cool xuan paper from the speaking side's seat; as the time is used
    the stroke draws back toward that seat (spec §2.1). The brush filters are in themes/ink.js. */
 [data-theme="ink"] {

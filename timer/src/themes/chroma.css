@@ -1,4 +1,4 @@
-/* @theme id=chroma name=绿幕 desc=纯绿底，数字放在本方色底板上，供直播抠像 tone=dark */
+/* @theme id=chroma name=绿幕 desc=纯绿底，数字放在本方色底板上，供直播抠像 tone=dark order=8 */
 /* 绿幕: for keying. Flat #00B140 everywhere, no field and no background motion; content sits on plates. */
 [data-theme="chroma"] {
   --pro: #B8322A;

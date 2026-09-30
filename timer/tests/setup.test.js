@@ -165,17 +165,40 @@
   const cell = (t, id) => t.box.querySelector('[role="radio"][data-theme-id="' + id + '"]');
   const checkedTheme = t => t.box.querySelector('[role="radio"][aria-checked="true"]').dataset.themeId;
 
-  DT.test('setup: the thumbnail is the opening speech, running, 40% used', () => {
+  // 15% used: the field's edge (and ink's dry brush tip) lies clear of the digits, so no thumbnail shows a digit caught
+  // half way through its change of colour.
+  DT.test('setup: the thumbnail is the opening speech, running, 15% used', () => {
     const t = mount();
     const stage = cell(t, 'daylight').querySelector('.dt-stage');
     assert.equal(stage.dataset.kind, 'single');
     assert.equal(stage.dataset.side, 'pro');
     assert.equal(stage.dataset.running, 'true');
     assert.equal(stage.querySelector('.dt-title').textContent, '正方一辩开篇立论');
-    assert.equal(parseFloat(stage.style.getPropertyValue('--used')).toFixed(2), '0.40');
+    assert.equal(parseFloat(stage.style.getPropertyValue('--used')).toFixed(2), '0.15');
     assert.equal(cell(t, 'daylight').querySelector('.dt-stage-host').getAttribute('aria-hidden'), 'true', 'read by its name only');
     assert.ok(cell(t, 'daylight').textContent.indexOf('昼') >= 0);
     t.h.destroy();
+  });
+
+  // A build made with other formats (build.py --formats-dir) may not have the sample stage, or the sample format.
+  DT.test('setup: the thumbnails still show a speaking stage when the built-in formats have no sample', () => {
+    const saved = DT.BUILTIN_FORMATS;
+    const renamed = JSON.parse(JSON.stringify(saved.find(f => f.id === 'ustc-freshman-cup')));
+    renamed.id = 'other-cup';
+    renamed.stages.forEach(x => { x.name = x.name.replace('正方一辩开篇立论', '正方一辩立论'); });
+    try {
+      [[renamed], [], [{ id: 'broken', stages: [] }]].forEach((list, n) => {
+        DT.BUILTIN_FORMATS = list;
+        const t = mount({ formats: saved });
+        try {
+          const stage = cell(t, 'daylight').querySelector('.dt-stage');
+          assert.equal(stage.dataset.kind, 'single', 'case ' + n);
+          assert.equal(stage.dataset.running, 'true', 'case ' + n);
+          assert.ok(stage.querySelector('.dt-title').textContent, 'case ' + n + ': a stage name');
+          assert.equal(parseFloat(stage.style.getPropertyValue('--used')).toFixed(2), '0.15', 'case ' + n);
+        } finally { t.h.destroy(); }
+      });
+    } finally { DT.BUILTIN_FORMATS = saved; }
   });
 
   DT.test('setup: the theme grid is one tab stop, moves by rows and wraps along a row', () => {

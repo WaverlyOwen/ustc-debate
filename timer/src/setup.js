@@ -4,8 +4,15 @@
   const TEXT_FIELDS = ['title', 'proMotion', 'conMotion', 'proTeam', 'conTeam'];
   const PREFILL = ['proMotion', 'conMotion', 'proTeam', 'conTeam'];   // the match title is new every time
   const ENTER = ['Enter', 'NumpadEnter'];
-  // What every theme thumbnail shows (spec §3.1): this stage of this format, running with this much used.
-  const SAMPLE = { format: 'ustc-freshman-cup', stage: '正方一辩开篇立论', used: 0.4 };
+  // What every theme thumbnail shows (spec §3.1): this stage of this format, running with this much used. At 15% the
+  // field's edge (and ink's dry brush tip) lies clear of the digits, so no thumbnail catches a digit half changed.
+  const SAMPLE = { format: 'ustc-freshman-cup', stage: '正方一辩开篇立论', used: 0.15 };
+  // When the build carries other formats (build.py --formats-dir) the sample stage may not be there: a one-stage
+  // format of its own stands in, so the setup page never fails to open over a thumbnail.
+  const SAMPLE_FORMAT = {
+    id: 'dt-sample', name: '示例', builtin: true, theme: 'hall', bells: { warn: [30], countdown: 0, end: 'double' }, extras: [],
+    stages: [{ id: 'dt-sample-1', name: SAMPLE.stage, type: 'single', side: 'pro', secs: 180, speaker: '正一' }],
+  };
   const NOTICE_MS = 6000;   // how long a notice stays up
   const NO_EXPORT = '在构建好的 debate-timer.html 里才能导出';
   let mounts = 0;   // keeps option ids unique if the page is mounted again
@@ -91,13 +98,27 @@
     return ['上一场还没打完：', String(r.title || ''), '，' + where + '。'];
   }
 
-  // The sample stage played out from a fixed moment, so every thumbnail and every screenshot shows one frame.
+  // The sample stage played out from a fixed moment, so every thumbnail and every screenshot shows one frame: the
+  // sample stage of the sample format, else the first speaking stage of the first built-in format, else a format
+  // of its own.
   function sampleView() {
     const E = DT.engine;
-    let s = E.createSession(DT.BUILTIN_FORMATS.find(f => f.id === SAMPLE.format), {}, 0);
-    const i = s.timeline.findIndex(x => x.name === SAMPLE.stage);
-    s = E.toggle(E.goto(s, i, 0), 0);
-    return E.view(s, s.timeline[i].secs * 1000 * SAMPLE.used);
+    const builtin = Array.isArray(DT.BUILTIN_FORMATS) ? DT.BUILTIN_FORMATS : [];
+    const single = f => f && Array.isArray(f.stages) ? f.stages.findIndex(x => x.type === 'single') : -1;
+    const own = builtin.find(f => f.id === SAMPLE.format);
+    const format = own && own.stages.some(x => x.name === SAMPLE.stage) ? own : builtin.find(f => single(f) >= 0) || SAMPLE_FORMAT;
+    try {
+      let s = E.createSession(format, {}, 0);
+      const named = s.timeline.findIndex(x => x.name === SAMPLE.stage);
+      const i = named >= 0 ? named : s.timeline.findIndex(x => x.type === 'single');
+      s = E.toggle(E.goto(s, i, 0), 0);
+      return E.view(s, s.timeline[i].secs * 1000 * SAMPLE.used);
+    } catch (e) {
+      if (format === SAMPLE_FORMAT) throw e;
+      let s = E.createSession(SAMPLE_FORMAT, {}, 0);
+      s = E.toggle(E.goto(s, 0, 0), 0);
+      return E.view(s, s.timeline[0].secs * 1000 * SAMPLE.used);
+    }
   }
 
   function mount(root, opts) {

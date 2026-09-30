@@ -217,9 +217,10 @@
 .dt-setup-row > legend { margin-bottom: .5em; padding: 0; }
 .dt-setup .dt-input { padding-block: .45em; }   /* a little slimmer than the editor's, for the theme grid's sake */
 /* Wide screens: each row's label in a column on its left. The panel has the width to spare and not the height,
-   and the rows it saves let two rows of large theme thumbnails fit at 1920×1080. A floated legend is not the
-   fieldset's rendered legend, so it is laid out as a grid item like the rest. */
-@media (min-width: 1600px) {
+   and the rows it saves let two rows of theme thumbnails large enough to tell apart fit at 1920×1080 and at
+   1366×768 alike. A floated legend is not the fieldset's rendered legend, so it is laid out as a grid item like
+   the rest. */
+@media (min-width: 1200px) {
   .dt-setup-match .dt-setup-row { display: grid; grid-template-columns: 5.4em minmax(0, 1fr); align-items: start; gap: .5em 1.2em; }
   .dt-setup-match .dt-setup-row > .dt-setup-label { float: left; grid-column: 1; margin: 0; padding-top: .9em; }
   .dt-setup-match .dt-setup-row > :not(.dt-setup-label) { grid-column: 2; }
@@ -266,12 +267,13 @@
 }
 .dt-setup-side[data-side="con"] > span::before { background: var(--con); }
 
-/* Theme thumbnails (spec §3.1): each is the real stage in that theme, four to a row, the name under it.
-   The chosen one wears a gold ring; keyboard focus adds the page's focus outline around the whole cell.
-   On a short, wide screen (1366×768) all eight go in one row, so the grid fits above the footer. */
+/* Theme thumbnails (spec §3.1): each is the real stage in that theme, four to a row, the name under it, at every
+   size (at 1366×768 too, where eight in a row came out 88px wide, too small to see the ink, the chalk or the
+   dots), so ↑↓ always move between the two rows. The chosen one wears a gold ring; keyboard focus adds the page's
+   focus outline around the whole cell. */
 .dt-setup-themes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75em .7em; }
 @media (max-height: 860px) and (min-width: 1200px) {
-  .dt-setup-themes { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: .6em .55em; }
+  .dt-setup-themes { gap: .45em .7em; }
 }
 .dt-setup-theme {
   display: flex;

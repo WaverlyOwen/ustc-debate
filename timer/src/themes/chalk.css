@@ -1,4 +1,4 @@
-/* @theme id=chalk name=黑板 desc=教室黑板上的粉笔排线，时间用掉就被板擦擦去，适合暗场投影 tone=dark */
+/* @theme id=chalk name=黑板 desc=教室黑板上的粉笔排线，时间用掉就被板擦擦去，适合暗场投影 tone=dark order=3 */
 /* 黑板: university debates are often held in a classroom. The floor is chalk hatching across the board from the speaking
    side's seat, wiped off toward that seat as the time is used; the stage name is written in 楷体 as a teacher writes
    on the board (spec §2.3). The chalk filters are in themes/chalk.js. */

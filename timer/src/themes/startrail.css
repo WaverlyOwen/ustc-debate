@@ -1,4 +1,4 @@
-/* @theme id=startrail name=星轨 desc=长曝光的夜空，发言越久星轨越长，适合暗场投影 tone=dark */
+/* @theme id=startrail name=星轨 desc=长曝光的夜空，发言越久星轨越长，适合暗场投影 tone=dark order=2 */
 /* 星轨: a long exposure of the night sky. The stars circle a pole off the speaking side's upper corner and the time
    used is the length of their trails (the painter is themes/startrail.js); the speaking side's field is a nebula's
    glow at its seat that fades as its time runs out (spec §2.2). */

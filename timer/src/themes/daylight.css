@@ -1,4 +1,4 @@
-/* @theme id=daylight name=昼 desc=浅色底，色场收成数字后的一条横带，适合亮场投影 tone=light */
+/* @theme id=daylight name=昼 desc=浅色底，色场收成数字后的一条横带，适合亮场投影 tone=light order=5 */
 /* 昼: for lit rooms. The field is a 34cqh band behind the digits instead of the whole screen (spec §5.6). */
 [data-theme="daylight"] {
   --pro: #B3261E;
