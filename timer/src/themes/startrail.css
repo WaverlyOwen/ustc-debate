@@ -73,12 +73,18 @@
 .dt-stage[data-theme="startrail"] .dt-digits-on { display: none; }
 /* The attribute selectors only rank this above stage.css's per-seat clips, which it removes. */
 .dt-stage[data-theme="startrail"][data-kind][data-pro-seat][data-side] .dt-clock .dt-digits:not(.dt-digits-on) { clip-path: none; }
-/* The zenith is the darkest sky, so the top bar and the stage name sit on quiet night; and a little night is kept
-   clear behind the digits, so the trails pass behind them without eating their edges. */
-.dt-stage[data-theme="startrail"] .dt-deco { background: linear-gradient(rgb(7 10 34 / .5), transparent 30cqh); }
+/* The zenith is the darkest sky, so the top bar and the stage name sit on quiet night: the trails are dimmed well down
+   over the band the head takes (the trails are densest there, near the pole) and fade back in below it; and a little
+   night is kept clear behind the digits, so the trails pass behind them without eating their edges. */
+.dt-stage[data-theme="startrail"] { --zenith: linear-gradient(rgb(7 10 34 / .74), rgb(7 10 34 / .7) 22cqh, transparent 36cqh); }
+.dt-stage[data-theme="startrail"] .dt-deco { background: var(--zenith); }
 .dt-stage[data-theme="startrail"][data-mode="stage"]:not([data-kind="dual"]) .dt-deco {
-  background: radial-gradient(44% 34% at 50% var(--clock-y), rgb(8 11 36 / .6), transparent),
-    linear-gradient(rgb(7 10 34 / .5), transparent 30cqh);
+  background: radial-gradient(44% 34% at 50% var(--clock-y), rgb(8 11 36 / .6), transparent), var(--zenith);
+}
+/* And the head's type carries a soft halo of night, as the digits carry their bloom, for a trail that still crosses a
+   stroke. */
+.dt-stage[data-theme="startrail"] :is(.dt-title, .dt-speaker, .dt-top, .dt-team) {
+  text-shadow: 0 0 .3em rgb(7 10 34 / .9), 0 0 .8em rgb(7 10 34 / .6);
 }
 /* The end card's table is read line by line: the whole match's exposure stays, dimmed behind it. */
 .dt-stage[data-theme="startrail"][data-mode="end"] .dt-canvas { opacity: .5; }

@@ -34,20 +34,28 @@
   }
   const px = s => parseFloat(s);
 
-  // Every arc the painter strokes while `fn` runs: its centre, radius and the angle it turns through.
+  // Every arc the painter strokes while `fn` runs: its centre, radius and the angle it turns through, and whether it
+  // went onto the stage's canvas or onto one of free debate's per-side layers; and the stage canvas's clears and
+  // drawImage copies.
   function spyArcs(fn) {
     const P = CanvasRenderingContext2D.prototype;
-    const arc = P.arc, clear = P.clearRect;
-    const out = { arcs: [], clears: 0 };
+    const arc = P.arc, clear = P.clearRect, copy = P.drawImage;
+    const out = { arcs: [], clears: 0, copies: 0, stageArcs: 0 };
+    const mine = c => c.classList.contains('dt-canvas') || c.classList.contains('dt-canvas-layer');
     P.arc = function (x, y, r, a, b, ccw) {
-      if (this.canvas.classList.contains('dt-canvas')) out.arcs.push({ x, y, r, span: Math.abs(b - a) });
+      if (mine(this.canvas)) out.arcs.push({ x, y, r, span: Math.abs(b - a), layer: this.canvas.classList.contains('dt-canvas-layer') });
+      if (this.canvas.classList.contains('dt-canvas')) out.stageArcs++;
       return arc.apply(this, arguments);
     };
     P.clearRect = function () {
       if (this.canvas.classList.contains('dt-canvas')) out.clears++;
       return clear.apply(this, arguments);
     };
-    try { fn(); } finally { P.arc = arc; P.clearRect = clear; }
+    P.drawImage = function () {
+      if (this.canvas.classList.contains('dt-canvas')) out.copies++;
+      return copy.apply(this, arguments);
+    };
+    try { fn(); } finally { P.arc = arc; P.clearRect = clear; P.drawImage = copy; }
     return out;
   }
   const maxSpan = arcs => arcs.reduce((m, a) => Math.max(m, a.span), 0);
@@ -148,19 +156,43 @@
     } finally { DT.clock.reset(); }
   });
 
-  DT.test('theme startrail: no more than 600 stars on a projector, fewer on a small stage', () => {
-    const count = (view, w, h) => {
+  // Spec §2.2: no more than 600 stars. Spec §1.2: the projector and the console's preview show one picture, so a
+  // stage of any size has the same stars in the same places (in stage proportions); only a thumbnail, a small still,
+  // has fewer.
+  DT.test('theme startrail: the same stars on the projector and the console preview, fewer on a thumbnail', () => {
+    const sky = (view, w, h, opts) => {
       let s;
-      const spy = spyArcs(() => { s = mountSky(view, w, h); });
+      const spy = spyArcs(() => { s = mountSky(view, w, h, opts); });
       s.stage.destroy();
-      return radii(spy.arcs);
+      const rs = Array.from(new Set(spy.arcs.map(a => a.r / w))).sort((a, b) => a - b);
+      return rs;
     };
-    const big = count(singleAt(OPENING, 60), 1920, 1080);
-    assert.ok(big >= 300 && big <= 600, 'single stage at 1920×1080: ' + big);
-    const dual = count(dualAt(30), 1920, 1080);
-    assert.ok(dual >= 300 && dual <= 600, 'free debate at 1920×1080: ' + dual);
-    const small = count(singleAt(OPENING, 60), 240, 135);
-    assert.ok(small > 20 && small < big / 3, 'a thumbnail: ' + small);
+    const big = sky(singleAt(OPENING, 60), 1920, 1080);
+    assert.ok(big.length >= 300 && big.length <= 600, 'single stage at 1920×1080: ' + big.length);
+    const preview = sky(singleAt(OPENING, 60), 704, 396);
+    assert.equal(preview.length, big.length, 'the console preview has the same stars');
+    assert.ok(preview.every((r, i) => Math.abs(r - big[i]) < 1e-6), 'at the same places in the stage');
+    const laptop = sky(singleAt(OPENING, 60), 1366, 768);
+    assert.equal(laptop.length, big.length, 'and so does a 1366×768 projector');
+    const dual = sky(dualAt(30), 1920, 1080);
+    assert.ok(dual.length >= 300 && dual.length <= 600, 'free debate at 1920×1080: ' + dual.length);
+    const thumb = sky(singleAt(OPENING, 60), 240, 135, { thumbnail: true });
+    assert.ok(thumb.length > 20 && thumb.length < big.length / 3, 'a thumbnail: ' + thumb.length);
+  });
+
+  // The same stars on a smaller stage would add up to more light per pixel; they are dimmed to match, so the preview
+  // looks like the projector rather than a brighter, denser sky.
+  DT.test('theme startrail: a smaller stage with the same stars is no brighter for it', () => {
+    const glow = (w, h) => {
+      const { stage, root } = mountSky(singleAt(OPENING, 120), w, h);
+      const { data } = pixels(root);
+      let sum = 0;
+      for (let i = 3; i < data.length; i += 4) sum += data[i];
+      stage.destroy();
+      return sum / (data.length / 4);
+    };
+    const big = glow(1920, 1080), small = glow(704, 396);
+    assert.ok(small < big * 1.5 && small > big * 0.6, 'mean light per pixel: ' + big.toFixed(2) + ' on the projector, ' + small.toFixed(2) + ' on the preview');
   });
 
   // Spec §2.2: the pole is off screen at a corner: the speaking side's upper corner.
@@ -229,10 +261,67 @@
         now += 40;
         const grow = spyArcs(() => s.stage.update(dualAt(44, seat)));
         const conPole = seat === 'left' ? xs[1] : xs[0];   // con, who holds the floor, sits opposite pro
-        assert.ok(grow.arcs.length > 50, seat + ': the speaking side\'s trails grow');
+        assert.ok(grow.stageArcs > 50, seat + ': the speaking side\'s trails grow on the stage');
         assert.ok(grow.arcs.every(a => a.x === conPole), seat + ': only around con\'s pole');
+        assert.equal(grow.clears + grow.copies, 0, seat + ': by their growth alone');
         s.stage.destroy();
       });
+    } finally { DT.clock.reset(); }
+  });
+
+  // New spec §5.6: a frame under 8 ms. A change of floor moves the two columns; painting every trail again would cost
+  // more the longer the free debate has run. Each side's trails are kept on a canvas of their own, so only the strip
+  // the edge between the columns crossed is copied from them, and no trail is drawn on the stage again, early or late.
+  DT.test('theme startrail: a change of floor copies each side\'s sky from its own layer, not every trail again', () => {
+    let now = 90000;
+    DT.clock.set(() => now);
+    const E2 = DT.engine;
+    try {
+      [20, 200].forEach(late => {
+        let s = E2.floor(session('自由辩论'), 'pro', T0);
+        s = E2.floor(s, 'con', T0 + 10000);
+        const at = T0 + late * 1000;
+        let m;
+        spyArcs(() => { m = mountSky(E2.view(s, at), 1920, 1080); });
+        now += 40;
+        const switched = E2.floor(s, 'pro', at);
+        const spy = spyArcs(() => m.stage.update(E2.view(switched, at)));
+        assert.equal(spy.stageArcs, 0, late + ' s: nothing drawn again on the stage');
+        assert.ok(spy.copies >= 1 && spy.copies <= 2, late + ' s: the strip the edge crossed is copied from the layers: ' + spy.copies);
+        assert.equal(spy.clears, 0, late + ' s: the rest of the stage stays as it is');
+        assert.ok(spy.arcs.every(a => a.layer), late + ' s: only the layers grow');
+        assert.ok(maxSpan(spy.arcs) < 0.05, late + ' s: by their growth: ' + maxSpan(spy.arcs));
+        now += 40;
+        const after = spyArcs(() => m.stage.update(E2.view(switched, at + 2000)));
+        assert.ok(after.stageArcs > 20 && after.copies === 0, late + ' s: then the speaker\'s trails grow on the stage again');
+        m.stage.destroy();
+      });
+    } finally { DT.clock.reset(); }
+  });
+
+  // What the stage shows after a change of floor is what painting the whole sky from nothing would show.
+  DT.test('theme startrail: the sky after a change of floor matches the sky painted afresh', () => {
+    let now = 90000;
+    DT.clock.set(() => now);
+    const E2 = DT.engine;
+    try {
+      let s = E2.floor(session('自由辩论'), 'pro', T0);
+      s = E2.floor(s, 'con', T0 + 30000);
+      const at = T0 + 60000;
+      const m = mountSky(E2.view(s, at), 960, 540);
+      now += 40;
+      const switched = E2.floor(s, 'pro', at);
+      m.stage.update(E2.view(switched, at));
+      const a = pixels(m.root);
+      m.stage.destroy();
+      const f = mountSky(E2.view(switched, at), 960, 540);
+      const b = pixels(f.root);
+      f.stage.destroy();
+      let diff = 0;
+      for (let i = 0; i < a.data.length; i++) diff = Math.max(diff, Math.abs(a.data[i] - b.data[i]));
+      let off = 0;
+      for (let i = 0; i < a.data.length; i += 4) if (Math.abs(a.data[i + 3] - b.data[i + 3]) > 24) off++;
+      assert.ok(off < a.data.length / 4 * 0.002, 'pixels that differ: ' + off + ' (largest step ' + diff + ')');
     } finally { DT.clock.reset(); }
   });
 
@@ -329,6 +418,29 @@
   });
 
   // Spec §1.5: overtime shows: the digits turn a bright star's gold (stage.css), on the sky and on the glow alike.
+  // The trails are densest near the pole, just where the top bar and the stage name are. The zenith is darkened well
+  // down over that band, and the head's type carries a halo of night, so a trail crossing a stroke does not break it.
+  DT.test('theme startrail: the head sits on a darkened zenith, its type haloed in night', () => {
+    [singleAt(OPENING, 60), dualAt(30)].forEach(view => {
+      const { stage, root } = mountSky(view, 1920, 1080);
+      const where = root.dataset.kind;
+      const deco = getComputedStyle(root.querySelector('.dt-deco')).backgroundImage;
+      const zenith = /linear-gradient\(([^()]*(\([^()]*\))?)*\)\s*$/.exec(deco);
+      assert.ok(zenith, where + ': a zenith gradient: ' + deco);
+      const stops = zenith[0].match(/rgba?\([^)]*\)\s*[\d.]*(px|%)?/g) || [];
+      const alpha = c => { const m = /,\s*([\d.]+)\)/.exec(c); return m ? Number(m[1]) : 1; };
+      assert.ok(alpha(stops[0]) >= 0.7, where + ': dark at the top: ' + stops[0]);
+      const held = stops.find(c => /px/.test(c) && alpha(c) >= 0.65);
+      assert.ok(held && parseFloat(/([\d.]+)px/.exec(held)[1]) >= 0.2 * 1080, where + ': and still dark 20% of the way down: ' + stops.join(' | '));
+      const head = root.querySelector('.dt-head').getBoundingClientRect();
+      assert.ok(head.bottom <= 0.36 * 1080 + 1 || where === 'dual', where + ': the head is within the darkened band');
+      ['.dt-title', '.dt-speaker', '.dt-top'].forEach(sel => {
+        assert.ok(/rgba?\(7, 10, 34/.test(getComputedStyle(root.querySelector(sel)).textShadow), where + ' ' + sel + ': ' + getComputedStyle(root.querySelector(sel)).textShadow);
+      });
+      stage.destroy();
+    });
+  });
+
   DT.test('theme startrail: in overtime the digits turn gold', () => {
     const { stage, root } = mountSky(singleAt(OPENING, 200));
     assert.equal(root.dataset.phase, 'over');
