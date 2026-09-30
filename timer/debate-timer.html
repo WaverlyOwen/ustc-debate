@@ -2123,21 +2123,25 @@ body {
 
 /* ---- the warn bell point: a tick in yellow chalk on the hatching, below the digits ---- */
 
+/* A heavy tick in a patch of board wiped clear of the hatching, so the chalk's broken edge cannot lose it among the
+   lines from the back of the room. */
 .dt-stage[data-theme="chalk"] .dt-warnline {
-  top: calc(var(--hatch-bottom) - 10.5cqh);
+  top: calc(var(--hatch-bottom) - 12.5cqh);
   bottom: auto;
-  left: clamp(4.5cqh, calc(var(--warn-at) * 100%), calc(100% - 4.5cqh));
-  width: 9cqh;
-  height: 9cqh;
-  margin-left: -4.5cqh;
-  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M14 52 C22 58 30 68 38 82 C50 58 66 34 88 14' fill='none' stroke='%23F0D477' stroke-width='12' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / contain no-repeat;
+  left: clamp(5.5cqh, calc(var(--warn-at) * 100%), calc(100% - 5.5cqh));
+  width: 11cqh;
+  height: 11cqh;
+  margin-left: -5.5cqh;
+  background:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M16 52 C24 58 31 68 39 81 C51 58 66 35 86 16' fill='none' stroke='%23F0D477' stroke-width='17' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / contain no-repeat,
+    radial-gradient(closest-side, var(--ground) 62%, transparent);
   -webkit-mask-image: none;
   mask-image: none;
   filter: var(--chalk-stroke);
 }
 .dt-stage[data-theme="chalk"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
 .dt-stage[data-theme="chalk"][data-pro-seat="left"][data-side="con"] .dt-warnline {
-  left: clamp(4.5cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 4.5cqh));
+  left: clamp(5.5cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 5.5cqh));
 }
 
 /* ---- overtime: the digits turn yellow chalk (stage.css), and a teacher's loop rings them ---- */

@@ -312,8 +312,13 @@
       assert.ok(!tick.hidden && cs.display !== 'none', where);
       assert.near(px(cs.width), px(cs.height), 1, where + ': a mark, not a line');
       const box = root.getBoundingClientRect();
-      assert.ok(px(cs.height) < 0.1 * box.height, where + ': small: ' + cs.height);
+      // A mark rather than a figure, but big and heavy enough to find from the back of the room through the chalk's
+      // broken edge: about 11cqh across, strokes 17 units of 100, in a patch wiped clear of the hatching.
+      assert.ok(px(cs.height) < 0.12 * box.height && px(cs.height) >= 0.1 * box.height, where + ': ' + cs.height);
       assert.ok(/svg/.test(cs.backgroundImage) && /path/.test(cs.backgroundImage), where + ': a drawn tick');
+      const sw = /stroke-width='([\d.]+)'/.exec(cs.backgroundImage);
+      assert.ok(sw && Number(sw[1]) >= 15, where + ': a heavy stroke: ' + (sw && sw[1]));
+      assert.ok(/radial-gradient/.test(cs.backgroundImage), where + ': on a wiped patch');
       assert.ok(/#dt-chalk-stroke/.test(cs.filter), where + ': in chalk');
       const t = tick.getBoundingClientRect(), f = root.querySelector('.dt-field').getBoundingClientRect();
       assert.ok(t.top >= f.top && t.bottom <= f.bottom, where + ': on the field');
