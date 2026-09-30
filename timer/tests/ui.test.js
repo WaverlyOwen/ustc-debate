@@ -474,4 +474,17 @@
       assert.equal(document.querySelector('.dt-clock[data-clock="main"] .dt-sec').textContent, '55');
     } finally { t.done(); }
   });
+  DT.test('ui: the current row of the stage list shows its time behind a dot of its own', () => {
+    const t = boot();
+    press('Space');
+    t.c.openOverlay('stages');
+    const row = i => document.querySelector('.dt-overlay[data-name="stages"] button[data-index="' + i + '"]');
+    assert.equal(row(0).querySelector('.dt-row-dot').textContent, '● ');
+    assert.equal(row(0).querySelector('.dt-row-state').textContent, '● 3:00');
+    press('ArrowRight');
+    t.c.openOverlay('stages');
+    assert.equal(row(0).querySelector('.dt-row-dot').textContent, '');
+    assert.equal(row(1).querySelector('.dt-row-dot').textContent, '● ');
+    t.done();
+  });
 })();
