@@ -2,7 +2,7 @@
 """Count the spoken length of each speech in a 文稿 file and check it against the format's band.
 
 Usage:
-    python3 check_speeches.py prep/v<版本>/<赛制>/<题>/文稿-*.tex [--format ustc-freshman-cup] [--json]
+    python3 check_speeches.py prep/v<版本>/<赛制>/<题>/文稿-*.tex [--format ustc-freshman-cup] [--json] [--parts]
     python3 check_speeches.py --list-formats
 
 The file is LaTeX written against assets/latex/debate.cls. There are two kinds
@@ -187,6 +187,19 @@ def load_bands(fmt):
     return bands, chains or BUILTIN_CHAINS, "format file"
 
 
+def pinned_headings(fmt):
+    """Patterns for the 「各持方文稿标题」 table of a format file; NNN stands for any number."""
+    try:
+        text = open(os.path.join(FORMATS_DIR, fmt + ".md"), encoding="utf-8").read()
+    except OSError:
+        return []
+    sec = re.search(r"##\s*各持方文稿标题(.*?)(?=\n##\s|\Z)", text, re.S)
+    if not sec:
+        return []
+    return [re.compile(re.escape(h.strip()).replace("NNN", r"\d+"))
+            for h in re.findall(r"`##\s*([^`]+)`", sec.group(1))]
+
+
 def detect_format(files):
     """Fallback when the folder name says nothing. The recruit formats have 申论 (3v3 has a 三辩申论)
     or, for 1v1, only 对辩 and 结辩; the school cup gives 质询 to 二辩, 对辩 to 四辩, and has 奇袭."""
@@ -307,7 +320,8 @@ def questions_of(body):
     for qt in qs:
         qt = re.sub(r"^\s*问[正反][一二三四]\s*[：:]\s*", "", qt)   # 「问反二：」是舞台提示
         n = spoken_len(qt)
-        closed = any(c in qt for c in CLOSED) or bool(re.search(r"([一-鿿]{1,2})不\1", qt))   # 会不会、承认不承认
+        closed = (any(c in qt for c in CLOSED) or bool(re.search(r"([一-鿿]{1,2})不\1", qt))   # 会不会、承认不承认
+                  or bool(re.search(r"吧\s*[？?]\s*$", qt)))                                   # 您方同意吧？
         out.append((qt, n, closed))
     return chains, out
 
@@ -319,6 +333,8 @@ def main():
                     help="format key (a file in references/formats/); omit to read it from the folder name, then from the headings")
     ap.add_argument("--list-formats", action="store_true", help="list the formats that have a file")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
+    ap.add_argument("--parts", action="store_true",
+                    help="print every kit's per-part lengths, not only for kits out of band (use while tuning)")
     args = ap.parse_args()
 
     if args.list_formats:
@@ -341,14 +357,19 @@ def main():
     bad = 0
     warn = 0
     report = []
+    pinned = pinned_headings(fmt)
     for path in args.files:
         text = _tex.read(path)
         rows = []
         qrows = []
+        off_table = []
+        check_heads = bool(pinned) and _version.applies("pinned-headings", path)
         for kind, title, meta, body in _tex.sections(text):
             if kind not in ("speech", "kit", "stage"):
                 continue
             heading = _tex.heading(title, meta)
+            if check_heads and re.match(r"\d+\.", title) and not any(p.fullmatch(heading) for p in pinned):
+                off_table.append(heading)
             key = classify(heading, kind == "kit") if kind in ("speech", "kit") else None
             if key:
                 err = None
@@ -371,7 +392,7 @@ def main():
                 rows.append({"heading": heading, "kind": key, "kit": kind == "kit", "seconds": secs,
                              "count": nmin, "max": nmax, "low": lo, "high": hi, "ok": ok,
                              "declared": dec, "mismatch": mismatch, "error": err,
-                             "parts": kit_breakdown(body) if kind == "kit" and err is None and not ok else []})
+                             "parts": kit_breakdown(body) if kind == "kit" and err is None and (args.parts or not ok) else []})
                 continue
             qk = question_kind(heading)
             if qk == "奇袭质询" and "预案" in heading:
@@ -398,11 +419,14 @@ def main():
                 warn += len(open_qs) + (0 if counts_ok else 1)
                 qrows.append({"heading": heading, "kind": qk, "chains": chains, "questions": len(qs),
                               "long": long_qs, "open": open_qs, "counts_ok": counts_ok, "band": cb})
-        report.append({"file": path, "speeches": rows, "questions": qrows})
+        bad += len(off_table)
+        report.append({"file": path, "speeches": rows, "questions": qrows, "off_table": off_table})
         if not args.json:
             print("== %s" % path)
             if not rows:
                 print("   (no \\begin{speech} found — check the headings against the format file)")
+            for h in off_table:
+                print("   标题 %s  不在赛制文件「各持方文稿标题」表里，照表原样写" % h[:60])
             for r in rows:
                 mark = "OK  " if (r["ok"] and not r["mismatch"]) else ("OUT " if not r["ok"] else "标题 ")
                 n = ("%d–%d" % (r["count"], r["max"])) if r["kit"] else "%d" % r["count"]

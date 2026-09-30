@@ -35,7 +35,8 @@ ARABIC = re.compile(
     r"(%|％|倍|万人|亿人|万元|亿元|万|亿|千米|公里|千|百|年|人|个|次|元|美元|小时|分钟|天|岁|名|篇|项|例|份|家|所|米|分|件|条|位|场|次|款|种|部|本|集|秒|字)?")
 
 PERCENT_OF = re.compile(r"百分之([零〇一二三四五六七八九两十百千点]{1,12})")
-CHENG = re.compile(r"(?<![一-鿿])?(约|大约|近|将近|不到|超过|逾|接近|不足)?([一二三四五六七八九两])成([一二三四五六七八九半])?(?!绩|果|本|员|立|长|熟|功|为|就|人|年|交|效|型|分|家|语|品|片|绩|名)")
+# the exclusion sits right after 成 (成分、成绩 are words), so "九成七分不出来" still reads as 97
+CHENG = re.compile(r"(?<![一-鿿])?(约|大约|近|将近|不到|超过|逾|接近|不足)?([一二三四五六七八九两])成(?!绩|果|本|员|立|长|熟|功|为|就|人|年|交|效|型|分|家|语|品|片|名)([一二三四五六七八九半])?")
 SPOKEN = re.compile(
     r"(约|大约|近|将近|不到|超过|逾|至少|多达|高达|接近|不足|上|数|几|好几)?"
     r"([零〇一二三四五六七八九两十百千万亿]{1,14}(?:点[零〇一二三四五六七八九两]{1,4})?)"
@@ -103,8 +104,15 @@ def _percent_tokens(scan, ln, text):
     return out
 
 
+# Idioms built from numeral characters that are not quantities.
+IDIOMS = re.compile(r"千千万万|成千上万|万万|千万(?=[不别要记得])|万一|万能|万物|万事|万分|万众|亿万|千方百计|千奇百怪|"
+                    r"百般|百分百|三三两两|一五一十|一一|九九|"
+                    r"一千个读者|(?:每)?一[百千]个(?=[^。？！]{0,12}(?:里|中|有几|只有))")   # 一百个崇拜者里有几个: a ratio frame, not a datum
+
+
 def _spoken_tokens(scan, ln, text):
     out = []
+    scan = IDIOMS.sub(lambda m: " " * len(m.group(0)), scan)
     # blank out the percent forms first so their digits are not re-read as plain numerals
     scan = PERCENT_OF.sub(" ", scan)
     scan = CHENG.sub(" ", scan)
@@ -115,6 +123,8 @@ def _spoken_tokens(scan, ln, text):
             continue          # 第一、星期三
         if prefix in VAGUE_PREFIX:
             continue          # 上百位、数百家、几千人: rhetorical scale, not a datum
+        if len(num) == 1 and num in "十百千万亿":
+            continue          # 千里之外、百年、万人空巷: a lone unit character is never a datum
         v = cn_to_num(num)
         if v is None:
             continue
@@ -163,6 +173,8 @@ def canon_values(text):
     vals = set()
     for ln, line in enumerate(text.split("\n"), 1):
         for t in arabic_tokens(line, ln, line):
+            if t["unit"] in ("秒", "字"):
+                continue      # "90 秒" describes the format; it must not vouch for a spoken 九成
             vals.add(t["value"])
             if t.get("abs") is not None:
                 vals.add(t["abs"])

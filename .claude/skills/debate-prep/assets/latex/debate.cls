@@ -104,7 +104,7 @@
 \newcommand{\stance}[2]{\gdef\debate@sidename{#1}\gdef\debate@stance{#2}}
 \newcommand{\meta}[2]{\g@addto@macro\debate@metalist{{\color{inkc}\scriptsize\bfseries #1}\hspace{5pt}#2\hspace{18pt}}}
 \newcommand{\debatetitle}{%
-  \begingroup\needspace{8\baselineskip}%
+  \begingroup\Needspace*{8\baselineskip}%
   {\scriptsize\color{inkc}\sffamily\bfseries\debate@kindname}\par\vspace{4pt}
   {\ifdebate@quick\fontsize{15}{19}\else\fontsize{21}{27}\fi\selectfont\bfseries\debate@motion\par}
   \ifdefempty{\debate@stance}{}{\vspace{6pt}{\small\bfseries\color{accent}\fboxsep=3pt\fcolorbox{accent}{white}{\debate@sidename\ · \debate@stance}}\par}
@@ -196,7 +196,7 @@
 \newcommand{\thesis}[2]{\ifstrequal{#1}{正方}{\debate@thesisx{pro}{#1}{#2}}{\ifstrequal{#1}{反方}{\debate@thesisx{con}{#1}{#2}}{\debate@thesisx{both}{#1}{#2}}}}
 \newcommand{\debate@thesisx}[3]{\item[{\scriptsize\sffamily\bfseries\color{#1}#2一句话立论}]%
   \begin{tcolorbox}[enhanced,frame hidden,boxrule=0pt,colback=#1tint,borderline west={4pt}{0pt}{#1},
-    left=10pt,right=8pt,top=6pt,bottom=6pt,boxsep=0pt,arc=0pt,before skip=2pt,after skip=4pt]#3\end{tcolorbox}}
+    left=10pt,right=8pt,top=6pt,bottom=6pt,boxsep=0pt,arc=0pt,nobeforeafter,box align=top,width=\linewidth]#3\end{tcolorbox}\par\vspace{4pt}}% 顶端与左侧标签对齐
 %% 时间表与清单
 \newenvironment{timeline}[1][时间表]{\item[{#1}]\par\vspace{-\parskip}\vspace{2pt}}{}
 \newcommand{\when}[2]{\par\hangindent=6em\hangafter=1{\bfseries\color{accent}\makebox[5.4em][l]{#1}}#2}
@@ -235,7 +235,7 @@
 \newcommand{\canonrow}[5]{{\bfseries #1}&#2&#3&{\color{forbid}\ifblank{#4}{—}{{\sffamily\bfseries ×}\,#4}}&{\scriptsize #5}\\}
 %% 出处清单：\begin{sourcelist} \source{#}{论据}{出处}{原文引句}{核实日期}{状态}{用在}{查证方向} \end{sourcelist}
 \newenvironment{sourcelist}{\par{\color{ink}\hrule height 1.2pt}\vspace{2pt}}{}
-\newcommand{\source}[8]{\par\needspace{4\baselineskip}\noindent\begin{minipage}{\linewidth}\small
+\newcommand{\source}[8]{\par\Needspace*{4\baselineskip}\noindent\begin{minipage}{\linewidth}\small
   \makebox[1.8em][l]{\color{inkc}\scriptsize #1}\parbox[t]{\dimexpr\linewidth-1.8em-5em}{#2}\hfill\parbox[t]{4.6em}{\raggedleft\status{#6}}\par
   \vspace{2pt}\hspace{1.8em}\parbox{\dimexpr\linewidth-1.8em}{\scriptsize\color{inkb}\debate@srcbit{出处}{#3}\debate@srcbit{原文引句}{#4}\debate@srcbit{核实日期}{#5}\debate@srcbit{用在}{#7}\debate@srcbit{查证方向}{#8}}
   \end{minipage}\par\vspace{2pt}{\color{rulesoft}\hrule}\vspace{2pt}}
@@ -252,7 +252,7 @@
 %% ---------------------------------------------------------------- scripts
 %% \begin{speech}{1. 正一开篇立论稿}{正文 813 字 / 180 秒} … \end{speech}
 %% \begin{stage}{2. 正一被质询防守预案}{反四质询，120 秒双边计时} … \end{stage}
-\newcommand{\stagehead}[2]{\par\needspace{6\baselineskip}\vspace{18pt}{\color{rule}\hrule}\vspace{8pt}
+\newcommand{\stagehead}[2]{\par\Needspace*{6\baselineskip}\vspace{18pt}{\color{rule}\hrule}\vspace{8pt}
   {\fontsize{14.5}{18}\selectfont\sffamily\bfseries\debate@stagenum{#1}\hfill\ifblank{#2}{}{\fboxsep=3pt\fboxrule=0.5pt\fcolorbox{rule}{white}{\scriptsize\sffamily\mdseries\color{inkc}#2}}}\par\vspace{8pt}}
 \newcommand{\debate@stagenum}[1]{\in@{.}{#1}\ifin@\debate@splitnum#1\@nil\else#1\fi}% 奇袭申论 这类内嵌套件没有序号
 \def\debate@splitnum#1.#2\@nil{\textcolor{accent}{#1.}\hspace{8pt}#2}
@@ -279,15 +279,15 @@
 \newenvironment{kit}[2]{\stagehead{#1}{#2}}{\par}
 \newcommand{\assembly}[1]{\par\noindent{\fboxsep=4pt\colorbox{panel}{\parbox{\dimexpr\linewidth-8pt}{\scriptsize\sffamily
   {\bfseries\color{inkc}组装}\hspace{8pt}{\color{inkb}#1}}}}\par\vspace{8pt}}
-\newenvironment{fixed}[1]{\par\needspace{4\baselineskip}\vspace{4pt}{\scriptsize\sffamily\bfseries\color{inkc}#1}\par\vspace{2pt}
+\newenvironment{fixed}[1]{\par\Needspace*{4\baselineskip}\vspace{4pt}{\scriptsize\sffamily\bfseries\color{inkc}#1}\par\vspace{2pt}
   \begingroup\fontsize{12}{22}\selectfont\setlength{\parskip}{10pt}}{\endgroup\par\vspace{6pt}}
 \newtcolorbox{pick}[2]{enhanced,breakable,frame hidden,boxrule=0pt,colback=white,borderline={0.5pt}{0pt}{rule},
   borderline north={2pt}{0pt}{accent},left=10pt,right=8pt,top=4pt,bottom=4pt,arc=0pt,before skip=8pt,after skip=12pt,
   title={\scriptsize\sffamily\bfseries\color{inkc}#1\hspace{8pt}{\color{accent}任选 #2}},colbacktitle=white,toptitle=5pt,
   bottomtitle=0pt,attach title to upper=\par}
-\newenvironment{module}[1]{\par\needspace{3\baselineskip}\vspace{5pt}{\small\sffamily\bfseries\color{accent}#1}\par\vspace{3pt}
+\newenvironment{module}[1]{\par\Needspace*{3\baselineskip}\vspace{5pt}{\small\sffamily\bfseries\color{accent}#1}\par\vspace{3pt}
   \begingroup\fontsize{11}{19}\selectfont\setlength{\parskip}{6pt}}{\endgroup\par\vspace{4pt}{\color{rulesoft}\hrule}}
-\newenvironment{fallback}[1]{\par\needspace{3\baselineskip}\vspace{5pt}{\small\sffamily\bfseries\color{inkb}{\fboxsep=1.5pt\fboxrule=0.5pt
+\newenvironment{fallback}[1]{\par\Needspace*{3\baselineskip}\vspace{5pt}{\small\sffamily\bfseries\color{inkb}{\fboxsep=1.5pt\fboxrule=0.5pt
   \fcolorbox{rule}{white}{\scriptsize\mdseries\color{inkc}兜底}}\hspace{6pt}#1}\par\vspace{3pt}
   \begingroup\fontsize{11}{19}\selectfont\setlength{\parskip}{6pt}}{\endgroup\par\vspace{2pt}}
 \newcommand{\live}[1]{\begin{tcolorbox}[enhanced,frame hidden,boxrule=0pt,colback=white,borderline={0.6pt}{0pt}{rule,dashed},
@@ -303,7 +303,7 @@
 \newcommand{\opt}[1]{\par\hangindent=1.1em\hangafter=1\makebox[1.1em][l]{□}#1}% 记录卡里的一个选项，一行一个
 %% 问题链：\begin{chain}{链一：归因链}{目标：…} \q{问题}{答"是"→…；答"否"→…} \cut{打断用语} \close{收束语} \end{chain}
 \newcounter{debateq}
-\newenvironment{chain}[2]{\par\needspace{4\baselineskip}\vspace{6pt}{\bfseries\color{accent}#1}\ifblank{#2}{}{\hspace{8pt}{\small\color{inkb}（#2）}}\par\setcounter{debateq}{0}}{\par\vspace{4pt}}
+\newenvironment{chain}[2]{\par\Needspace*{4\baselineskip}\vspace{6pt}{\bfseries\color{accent}#1}\ifblank{#2}{}{\hspace{8pt}{\small\color{inkb}（#2）}}\par\setcounter{debateq}{0}}{\par\vspace{4pt}}
 \newcommand{\q}[2]{\par\stepcounter{debateq}\hangindent=1.8em\hangafter=1\makebox[1.8em][l]{\bfseries\thedebateq.}{\bfseries「#1」}\ifblank{#2}{}{\par\hspace{1.8em}{\small\color{inkb}→ #2}}}
 \newcommand{\cut}[1]{\par{\small{\sffamily\bfseries\color{inkc}打断用语}\hspace{6pt}#1}}
 \newcommand{\close}[1]{\par{\small{\sffamily\bfseries\color{inkc}收束语}\hspace{6pt}#1}}

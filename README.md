@@ -21,6 +21,7 @@
 │   ├── formats/
 │   │   ├── ustc-freshman-cup.md     # 中科大新生辩论赛赛制（默认）
 │   │   ├── ustc-school-cup-2025.md  # 2025 中科大校赛赛制（二辩质询、四辩对辩、小结 120 秒、含奇袭、论据只许已核实）
+│   │   ├── recruit-3v3.md / recruit-2v2.md / recruit-1v1.md  # 招新赛制：申论与对辩代替驳论、小结、自由辩；结辩 90 秒
 │   │   └── _template.md             # 新增赛制的模板（换算表按固定格式写，脚本直接读）
 │   ├── case-building.md             # 定义三分法、判准与论证义务、论点三件套、对抗迭代、反驳库、优劣评估、口径表
 │   ├── speech-voice.md              # 讲稿语感：怎么写得像人在说话而不是念稿
@@ -32,13 +33,15 @@
 │   ├── latex/debate.cls             # 文档类：prep / quick / script 三种版式，pro / con / both 三种配色，全部语义宏
 │   ├── prep-doc-template.tex        # 备赛文档模板
 │   ├── quickref-template.tex        # 正赛速查模板
-│   ├── script-doc-template.tex      # 正赛文稿模板
+│   ├── script-doc-template.tex      # 正赛文稿模板（新生赛、校赛）
+│   ├── script-doc-template-recruit.tex  # 正赛文稿模板（招新赛）
 │   └── agent-prompts.md             # 对抗迭代用的建构 / 攻击子代理提示词，两方共用只换持方
 ├── scripts/
 │   ├── build_pdf.py                 # .tex → PDF（latexmk / xelatex；打印页数，速查正文超两页报 WARN；没有 TeX 时打印安装说明）
 │   ├── check_speeches.py            # 口播字数是否落在赛制区间（区间从赛制文件读，套件算最短与最长组装）；问题链每问 ≤25 字、封闭式、链数
 │   ├── check_voice.py               # 检出念稿腔：破折号、金句、等长句、书面连接词、黏合剂种类与重复、未口语化的数字；套件逐个组装查
 │   ├── check_consistency.py         # 速查与文稿中的数字（阿拉伯与口语形式）是否都在口径表内
+│   ├── check_recordcard.py          # 速查末页的场上记录卡与文稿套件的条件逐字一致
 │   ├── check_evidence.py            # 出处清单：已核实必须有日期、出处、引句；【待核实】不得进稿件；--strict 为校赛红线
 │   ├── _numerals.py                 # 中文数字解析（一致性与论据检查共用）
 │   ├── _tex.py                      # LaTeX 读取：按 debate.cls 的宏切分节、抽稿件正文、套件组装、问题链、出处行
@@ -76,7 +79,7 @@ prep/v3/新生赛/宠物之爱/
 
 封路也按这个办法写：按“对方全场主打哪条路”分条件，预先驳这条路，不写“他们待会儿会说什么”。速查最后一页是场上记录卡，选手边听边勾，勾到哪条念哪个模块。`check_speeches.py` 同时算最短和最长的组装，两头都要落在字数区间内；`check_voice.py` 把每一种组装都查一遍。
 
-交付前六条检查都要跑：`check_speeches.py`（字数、问题链）、`check_voice.py`（语感；`--desk` 查备赛文档和速查里会被念出来的句子）、`check_consistency.py`（数字口径）、`check_evidence.py`（论据状态；校赛加 `--strict`）、`build_pdf.py`（PDF 与页数）。
+交付前七条检查都要跑：`check_speeches.py`（字数、问题链、标题照赛制表）、`check_recordcard.py`（场上记录卡与文稿套件逐字对应）、`check_voice.py`（语感；`--desk` 查备赛文档和速查里会被念出来的句子）、`check_consistency.py`（数字口径）、`check_evidence.py`（论据状态；校赛加 `--strict`）、`build_pdf.py`（PDF 与页数）。
 
 **在 Claude.ai 中**：把 `.claude/skills/debate-prep` 目录打包为 `.skill` 文件上传。Claude.ai 环境没有文件工具时会在对话中分段输出。
 
@@ -111,8 +114,8 @@ python3 .claude/skills/debate-prep/scripts/build_pdf.py prep/v3/新生赛/<辩�
 
 ```
 prep/
-├── v2/新生赛/…            # LaTeX，成段讲稿都是定稿（现有七道题）
-└── v3/新生赛/…、v3/校赛2025/…   # 当前版本：回应型发言是套件
+├── v2/新生赛/…            # LaTeX，成段讲稿都是定稿（七道题）
+└── v3/招新3v3/…           # 当前版本：回应型发言是套件（三道题）；新题按赛制放 v3/新生赛、v3/校赛2025、v3/招新2v2 …
 ```
 
 新辩题直接用当前版本；旧辩题不用跟着升级。检查脚本从路径认出版本，某个版本新加的规则只管这个版本以后的辩题；`debate.cls` 只加宏不删宏，旧辩题照样能编译。想让旧辩题用上新写法，就复制到新版本目录重做。每个主版本对应的 git 提交记在 `CHANGELOG.md` 里，可以取回当时的完整技能。

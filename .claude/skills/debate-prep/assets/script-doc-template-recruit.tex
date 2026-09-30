@@ -1,0 +1,136 @@
+% 招新赛正赛文稿模板（3v3，每方一份）。环节标题按 references/formats/recruit-3v3.md「各持方文稿标题」原样使用，共十三节；
+% 2v2 用 recruit-2v2.md 的九节（删掉三辩的对辩、申论、质询、被质询，其余编号照表），1v1 用 recruit-1v1.md 的五节。
+% 成段讲稿分两类，见 references/stage-playbooks.md 第 0 节：只有正方一辩立论是定稿，其余是套件。
+% 申论写法见第 13 节，90 秒结辩的字数分配见第 10 节「短结辩」。调套件长度用 check_speeches.py --parts。
+% 套件铁律：模块标题写使用条件；模块只断言条件保证为真的事；每组有一个不断言场上事实的 fallback；
+%          封路是预先驳论点，不是预言对方台词。
+% 下面按正方写；反方把「正」「反」对调，第 1 节换成反一立论套件（见 script-doc-template.tex 第 1 节的注释），
+% 第 5 节去掉「回应先申论方」组，第 9 节加上「回应正三申论」组，第 13 节把「回应反一结辩」组换成「封路」、去掉临场位。
+\documentclass[script,pro]{debate}   % 正方 pro，反方 con
+\motion{<辩题>}
+\stance{正方}{<持方表述>}
+\meta{赛制}{招新赛 3v3}
+\meta{口径来源}{备赛文档 第十节 <正方 / 反方> 口径表}
+\begin{document}
+\debatetitle
+\begin{thesisbox}[全场一句话立论]<…>\end{thesisbox}
+
+\begin{speech}{1. 正一开篇立论稿}{正文 NNN 字 / 180 秒}
+谢谢主席。<定义 → 中立判准与双方义务 → 论点一 → 论点二 → 抛出后场问题 → 价值一句 → 收束>
+\end{speech}
+\begin{contingency}
+\ifthen{<对方定义与我方不同>}{<30 秒定义之争口径>}
+\end{contingency}
+
+\begin{stage}{2. 正一被质询防守预案}{反二质询，90 秒双边计时}
+\textbf{原则}：先给是或否，再用一句话守住前提；故意不答会扣分。
+\begin{qa}
+\qarow{<对方会问>}{<我方回答（简短，守住前提）>}
+\end{qa}
+\end{stage}
+
+\begin{stage}{3. 正二质询反一问题链}{90 秒，双边计时}
+\textbf{总目标}：<拿到什么承认>。两条链，每条不超过三问；打断会扣分，问题短到一句话能答完。
+\begin{chain}{链一：<名称>}{<目标>}
+\q{<问题，25 字内>}{答“是”：<下一问>；答“否”：<下一问>}
+\close{<收束语>}
+\end{chain}
+\end{stage}
+
+\begin{stage}{4. 正三对辩要点}{双方各 90 秒}
+\begin{points}{进攻点（4–5 个，每个 15–20 秒）}
+\item <…>
+\end{points}
+\begin{qa}[对方可能的进攻][我方回应]
+\qarow{<…>}{<…>}
+\end{qa}
+\end{stage}
+
+\begin{kit}{5. 正二申论}{套件 · 组装后 NNN–NNN 字 / 90 秒}
+\assembly{开头 → 回应反二申论（任选 1） → 拆对方立论（任选 1） → 推进论点一 → 收尾}
+\begin{fixed}{开头}<一句话说这篇要做什么>\end{fixed}
+% 后申论的一方才有这一组
+\begin{pick}{回应反二申论}{1}
+\begin{module}{如果反二申论主打 <…>}<回应>\end{module}
+\begin{fallback}{反二申论的主打不在以上几条时}<一句带过>\end{fallback}
+\end{pick}
+\begin{pick}{拆对方立论}{1}
+\begin{module}{如果对方立论建立在 <主干一> 上}<问题在哪 → 在判准下怎么看>\end{module}
+\begin{fallback}{对方立论的主干不在以上几条时}<打对方的判准>\end{fallback}
+\end{pick}
+\begin{fixed}{推进论点一}<立论没展开的一层：新机制、新数据或新案例，只用口径表里已核实的>\end{fixed}
+\begin{fixed}{收尾}<回到判准，留一个对方必须回答的问题>\end{fixed}
+\end{kit}
+
+\begin{stage}{6. 正二被质询防守预案}{反三质询，90 秒双边计时}
+\textbf{原则}：申论里说出口的每个数字和例子都会被追问，逐条写好回答。
+\begin{qa}
+\qarow{<…>}{<…>}
+\end{qa}
+\end{stage}
+
+\begin{stage}{7. 正三质询反二问题链}{90 秒，双边计时}
+\textbf{总目标}：<…>
+\begin{chain}{链一：<名称>}{<目标>}
+\q{<…>}{<…>}
+\end{chain}
+\end{stage}
+
+\begin{stage}{8. 正一对辩要点}{双方各 90 秒}
+\begin{points}{进攻点（4–5 个）}
+\item <…>
+\end{points}
+\end{stage}
+
+\begin{kit}{9. 正三申论}{套件 · 组装后 NNN–NNN 字 / 90 秒}
+\assembly{开头 → 处理对方最强点（任选 1） → 推进论点二 → 收尾}
+\begin{fixed}{开头}<…>\end{fixed}
+\begin{pick}{处理对方最强点}{1}
+\begin{module}{如果对方全场最有力的是 <…>}<正面回应，内容取自反驳库>\end{module}
+\begin{fallback}{对方最有力的一点不在以上几条时}<重申我方最硬的一条论据>\end{fallback}
+\end{pick}
+\begin{fixed}{推进论点二}<…>\end{fixed}
+\begin{fixed}{收尾}<为结辩定战场>\end{fixed}
+\end{kit}
+
+\begin{stage}{10. 正三被质询防守预案}{反一质询，90 秒双边计时}
+\begin{qa}
+\qarow{<…>}{<…>}
+\end{qa}
+\end{stage}
+
+\begin{stage}{11. 正一质询反三问题链}{90 秒，双边计时}
+\textbf{总目标}：<为结辩取材>
+\begin{chain}{链一：<名称>}{<目标>}
+\q{<…>}{<…>}
+\end{chain}
+\end{stage}
+
+\begin{stage}{12. 正二对辩要点}{双方各 90 秒}
+\begin{points}{进攻点（4–5 个）}
+\item <…>
+\end{points}
+\end{stage}
+
+\begin{kit}{13. 正一结辩}{套件 · 组装后 NNN–NNN 字 / 90 秒}
+\assembly{归纳分歧（任选 1） → 处理最强点（任选 1） → 回应反一结辩（任选 1） → 临场 → 论点收束 → 价值升华 → 结尾}
+\begin{pick}{归纳分歧}{1}
+\begin{module}{如果全场主战场落在 <…>}<…>\end{module}
+\begin{fallback}{主战场不在以上几条时}<用我方判准重新框定分歧>\end{fallback}
+\end{pick}
+\begin{pick}{处理对方最强点}{1}
+\begin{module}{如果对方全场最有力的是 <…>}<…>\end{module}
+\begin{fallback}{对方最有力的一点不在以上几条时}<…>\end{fallback}
+\end{pick}
+% 反方把这一组换成「封路」：条件是「如果正方全场主打……」，写这条路的问题和检验标准；反方不留临场位
+\begin{pick}{回应反一结辩}{1}
+\begin{module}{如果反一结辩收在 <…>}<…>\end{module}
+\begin{fallback}{反一的收束不在以上几条时}<重申判准，交给临场位>\end{fallback}
+\end{pick}
+\live{40}
+\begin{fixed}{论点收束}<不引用台上具体交锋>\end{fixed}
+\begin{fixed}{价值升华}<约一百字，一个具体的人或时刻>\end{fixed}
+\begin{fixed}{结尾}<一句能被记住的短句>\end{fixed}
+\end{kit}
+
+\end{document}

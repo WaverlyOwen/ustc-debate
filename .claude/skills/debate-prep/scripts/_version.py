@@ -16,6 +16,8 @@ FORMATS_DIR = os.path.join(SKILL, "references", "formats")
 # check name -> first major version that applies it
 RULES = {
     "desk-dash": 3,      # check_voice --desk: no dashes in spoken lines of 备赛文档 / 速查
+    "pinned-headings": 3,  # check_speeches: every numbered section heading is one row of the format table
+    "record-card": 3,    # check_recordcard: 场上记录卡 options equal the kit conditions word for word
 }
 
 
