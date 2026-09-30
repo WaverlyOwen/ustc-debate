@@ -4,7 +4,8 @@
 Usage:
     python timer/tests/run_js_tests.py [--filter 子串] [--keep]
 
-A throwaway page loads every src script in build.ORDER, then
+A throwaway page gets the build's DT.THEMES and every stylesheet, loads every src script in
+build.script_files() (build.ORDER with the theme scripts after render.js), then
 tests/harness.js and tests/*.test.js, runs them, and writes the JSON result
 into <pre id="results">. The browser dumps the DOM and this script parses it.
 A script that throws while it loads (a syntax error, say) counts as a failure.
@@ -55,7 +56,10 @@ def missing_sources():
 
 
 def test_page(filter_text):
-    tags = [LOAD_ERRORS]
+    # The theme list the build injects, and every stylesheet, so theme tests can read computed styles.
+    themes = json.dumps(build.themes_meta(), ensure_ascii=False).replace("</", "<\\/")
+    tags = [LOAD_ERRORS, f"<script>window.DT = window.DT || {{}}; DT.THEMES = {themes};</script>"]
+    tags += [f'<link rel="stylesheet" href="{p.as_uri()}">' for p in build.style_files()]
     tags += [f'<script src="{p.as_uri()}"></script>' for p in build.script_files()]
     tags.append(f'<script src="{(HERE / "harness.js").as_uri()}"></script>')
     tags += [f'<script src="{p.as_uri()}"></script>' for p in sorted(HERE.glob("*.test.js"))]

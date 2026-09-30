@@ -1,10 +1,10 @@
-/* @theme id=chroma name=绿幕 desc=纯绿底，数字放在本方色底板上，供直播抠像 */
+/* @theme id=chroma name=绿幕 desc=纯绿底，数字放在本方色底板上，供直播抠像 tone=dark */
 /* 绿幕: for keying. Flat #00B140 everywhere, no field and no background motion; content sits on plates. */
 [data-theme="chroma"] {
   --pro: #B8322A;
-  --pro-deep: #00B140;
+  --pro-deep: #2A2D33;      /* the plate: what the digits sit on where their side's plate is taken back */
   --con: #1D4E89;
-  --con-deep: #00B140;
+  --con-deep: #2A2D33;
   --ground: #00B140;
   --ink: #F4EFE4;
   --ink-dim: #D8D2C6;       /* solid: translucent text would pick up the key colour */
@@ -17,6 +17,9 @@
   --plate-radius: 2cqh;
 }
 .dt-stage[data-theme="chroma"][data-side="none"] { --side-color: var(--plate); }
+/* The deep colours are the plate's, so the key green is laid on the stage and the halves by hand. */
+.dt-stage[data-theme="chroma"],
+.dt-stage[data-theme="chroma"] .dt-half { background: var(--ground); }
 
 .dt-stage[data-theme="chroma"] .dt-field,
 .dt-stage[data-theme="chroma"] .dt-warnline,

@@ -49,7 +49,9 @@ body {
   position: absolute;
   inset: 0;
   /* Optional contract extras with derived defaults; a theme may override them. */
-  --on-side: var(--ink);        /* text drawn on a side colour (digits, team names) */
+  --on-side: var(--ink);        /* text drawn on a side colour (team names, 「暂停」) */
+  --digits-on-field: var(--ink);    /* the digits where they sit on the speaking side's field */
+  --digits-off-field: var(--ink);   /* the digits where the field has been taken back (spec §1.5) */
   --used: 0;
   --tension: 0;
   --warn-at: 0;

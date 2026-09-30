@@ -161,7 +161,9 @@
   function routeOf(loc) {
     const params = new URLSearchParams(loc.search || '');
     const demo = params.get('demo');
-    if (demo && DT.demo.names.indexOf(demo) >= 0) return { name: 'demo', demo, frozen: params.get('frozen') === '1' };
+    if (demo && DT.demo.names.indexOf(demo) >= 0) {
+      return { name: 'demo', demo, frozen: params.get('frozen') === '1', theme: params.get('theme') };
+    }
     if (loc.hash === '#projector') return { name: 'projector' };
     return { name: 'setup' };
   }
@@ -969,7 +971,7 @@
       DT.store.useStorage(memoryStorage());
       const now = DT.clock.now();
       if (route.frozen) DT.clock.set(() => now);
-      demo = DT.demo.build(route.demo, now);
+      demo = DT.demo.build(route.demo, now, { theme: route.theme });
       if (demo.formats) DT.store.saveFormats(demo.formats);
     } else if (o.storage) {
       DT.store.useStorage(o.storage);

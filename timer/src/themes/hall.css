@@ -1,4 +1,4 @@
-/* @theme id=hall name=堂 desc=全屏色场，适合暗场投影 */
+/* @theme id=hall name=堂 desc=全屏色场，适合暗场投影 tone=dark */
 /* 堂: the default. The whole room takes the speaking side's colour (spec §5.2). */
 [data-theme="hall"] {
   --pro: #B8322A;

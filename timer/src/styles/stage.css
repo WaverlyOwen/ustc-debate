@@ -22,14 +22,16 @@
 .dt-stage[data-side="pro"] { --side-color: var(--pro); --side-deep: var(--pro-deep); }
 .dt-stage[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
 
-/* ---- layers, bottom to top: backdrop, deco, field / halves, warn line, content, rings, toast ---- */
+/* ---- layers, bottom to top: backdrop, canvas, deco, field / halves, warn line, content, rings, toast ---- */
 
-.dt-backdrop, .dt-deco, .dt-field, .dt-warnline, .dt-halves, .dt-rings {
+.dt-backdrop, .dt-canvas, .dt-deco, .dt-field, .dt-warnline, .dt-halves, .dt-rings {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
 .dt-backdrop { z-index: 0; background: var(--backdrop); }
+/* A theme painter's canvas (only when the theme has one); it comes before the deco, so the deco paints over it. */
+.dt-canvas { z-index: 1; width: 100%; height: 100%; }
 .dt-deco { z-index: 1; }
 .dt-field, .dt-halves { z-index: 2; }
 .dt-warnline { z-index: 3; }
@@ -132,6 +134,7 @@
 
 .dt-digits {
   display: flex;
+  color: var(--digits-off-field);
   align-items: baseline;
   justify-content: center;
   white-space: nowrap;
@@ -154,6 +157,36 @@
 .dt-sign:empty { display: none; }
 .dt-clock[data-phase="over"] .dt-sign { animation: dt-breathe 2000ms ease-in-out infinite; }
 .dt-clock.is-bump .dt-digits { animation: dt-bump 240ms ease-out; }
+
+/* Two layers of the same digits (spec §1.5): .dt-digits in --digits-off-field, and over it .dt-digits-on in
+   --digits-on-field, each clipped to its own side of the field's edge, so the digits read on both. --cut is
+   where that edge falls in the digits' own box: from its left on a single stage (the clock is centred on the
+   stage), from its top in a dual half (the clock is centred at 52% of the half, the glyphs dropped .07em). */
+.dt-digits-on { display: none; position: absolute; inset: 0; color: var(--digits-on-field); }
+.dt-stage[data-kind="single"] .dt-digits-on,
+.dt-half .dt-digits-on { display: flex; }
+
+.dt-stage[data-kind="single"] .dt-clock { --cut: calc((1 - var(--used)) * 100cqw - 50cqw + 50%); }
+.dt-stage[data-kind="single"] .dt-digits-on { clip-path: inset(-50% calc(100% - var(--cut)) -50% -50%); }
+.dt-stage[data-kind="single"] .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% -50% var(--cut)); }
+/* The field taken back toward the right-hand seat: it lies to the right of the edge. */
+.dt-stage[data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-clock,
+.dt-stage[data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-clock {
+  --cut: calc(var(--used) * 100cqw - 50cqw + 50%);
+}
+.dt-stage[data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-digits-on,
+.dt-stage[data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-digits-on {
+  clip-path: inset(-50% -50% -50% var(--cut));
+}
+.dt-stage[data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-digits:not(.dt-digits-on),
+.dt-stage[data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-digits:not(.dt-digits-on) {
+  clip-path: inset(-50% calc(100% - var(--cut)) -50% -50%);
+}
+
+.dt-half { --field-top: calc((1 - var(--remain, 1)) * 100cqh); }   /* a theme with another field geometry sets it */
+.dt-half .dt-clock { --cut: calc(var(--field-top) - 52cqh + 50% - .07em); }
+.dt-half .dt-digits-on { clip-path: inset(var(--cut) -50% -50% -50%); }
+.dt-half .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% calc(100% - var(--cut)) -50%); }
 
 /* 「暂停」 hangs below the digits without moving them. */
 .dt-state {

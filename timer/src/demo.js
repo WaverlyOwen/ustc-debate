@@ -86,11 +86,12 @@
   };
 
   // Play the scene so that its last moment is `now`; the loop ticks before each action, as the UI does.
-  function play(scene, now) {
+  // `theme` (from ?theme=) replaces the scene's own theme.
+  function play(scene, now, theme) {
     const E = DT.engine;
     const t0 = now - scene.at * S;
     const match = Object.assign({}, MATCH, scene.seat ? { proSeat: scene.seat } : {});
-    let s = E.createSession((scene.format || freshman)(), match, t0, { theme: scene.theme });
+    let s = E.createSession((scene.format || freshman)(), match, t0, { theme: theme || scene.theme });
     scene.steps.forEach(([sec, act, arg]) => {
       const t = t0 + sec * S;
       s = E.tick(s, t).session;
@@ -101,17 +102,19 @@
     return E.tick(s, now).session;
   }
 
-  function build(name, now) {
+  // opts.theme: show the scene in this theme instead (?theme=<id>, for reviewing a theme in every scene).
+  function build(name, now, opts) {
+    const theme = (opts && opts.theme) || null;
     if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
     const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
     if (!scene.setup) {
-      const out = { route: 'timer', session: play(scene, now), dock: !!scene.dock, console: !!scene.console };
+      const out = { route: 'timer', session: play(scene, now, theme), dock: !!scene.dock, console: !!scene.console };
       if (scene.editor) Object.assign(out, { editor: scene.editor, formats: DT.BUILTIN_FORMATS.concat([weekend()]) });
       return out;
     }
     const lastMatch = { formatId: FORMAT_ID };
     ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'].forEach(k => { lastMatch[k] = MATCH[k]; });
-    return { route: 'setup', session: scene.steps.length ? play(scene, now) : null, lastMatch, dock: false };
+    return { route: 'setup', session: scene.steps.length ? play(scene, now, theme) : null, lastMatch, dock: false };
   }
 
   DT.demo = { names: Object.keys(SCENES), build };
