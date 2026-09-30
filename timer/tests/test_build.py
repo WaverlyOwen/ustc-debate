@@ -119,7 +119,42 @@ class CheckTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(build.main(["--check"]), 1)
         finally:
-            build.BUILTIN_JS.write_text(original, encoding="utf-8")
+            build.BUILTIN_JS.write_text(original, encoding="utf-8", newline="\n")
+
+
+class InlineTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.html = build.inline_html(build.parse_all(FORMATS))
+
+    def test_no_external_references(self):
+        import re
+        self.assertIsNone(re.search(r'<script[^>]+src=', self.html))
+        self.assertIsNone(re.search(r'<link[^>]+href=', self.html))
+        self.assertNotIn("http://", self.html.replace("http://www.w3.org", ""))
+        self.assertNotIn("https://", self.html)
+
+    def test_every_source_is_inlined_in_order(self):
+        positions = [self.html.index(f"=== {name} ===") for name in build.ORDER]
+        self.assertEqual(positions, sorted(positions))
+        for p in build.style_files():
+            self.assertIn(f"=== {p.relative_to(build.SRC).as_posix()} ===", self.html)
+
+    def test_themes_are_declared(self):
+        ids = [t["id"] for t in build.themes_meta()]
+        self.assertEqual(sorted(ids), ["chroma", "daylight", "hall"])
+        self.assertIn('DT.THEMES = ', self.html)
+
+    def test_generated_banner(self):
+        self.assertIn("由 timer/build.py 生成", self.html[:400])
+
+    def test_demo_names_match_screenshots(self):
+        import re
+        demo_js = (build.SRC / "demo.js").read_text(encoding="utf-8")
+        sys.path.insert(0, str(HERE))
+        import screenshots
+        for name in screenshots.DEMOS:
+            self.assertIn(f"'{name}'", demo_js)
 
 
 if __name__ == "__main__":

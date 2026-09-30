@@ -176,6 +176,50 @@ def builtin_js(formats):
             "})(window.DT = window.DT || {});\n")
 
 
+THEME_LINE = re.compile(r"/\*\s*@theme\s+(.*?)\s*\*/")
+THEME_FIELD = re.compile(r"(\w+)=(.*?)(?=\s+\w+=|$)")
+
+
+def themes_meta():
+    """Read each theme's first line, /* @theme id=… name=… desc=… */, into [{id, name, desc}]."""
+    out = []
+    for p in sorted((SRC / "themes").glob("*.css")):
+        lines = p.read_text(encoding="utf-8").splitlines()
+        m = THEME_LINE.fullmatch(lines[0].strip()) if lines else None
+        fields = dict(THEME_FIELD.findall(m.group(1))) if m else {}
+        if not all(fields.get(k) for k in ("id", "name", "desc")):
+            raise FormatError(f"themes/{p.name}:1: 第一行要写成 /* @theme id=… name=… desc=… */")
+        out.append({k: fields[k] for k in ("id", "name", "desc")})
+    return out
+
+
+def _script_text(name, formats):
+    if name == "builtin-formats.js":
+        return builtin_js(formats)  # from the parsed formats, not the disk copy, so --check sees one truth
+    path = SRC / name
+    return path.read_text(encoding="utf-8") if path.exists() else "/* not written yet */\n"
+
+
+def inline_html(formats):
+    """src/index.html with every stylesheet and script inlined, in STYLES and ORDER."""
+    page = (SRC / "index.html").read_text(encoding="utf-8")
+    page = re.sub(r'[ \t]*<link rel="stylesheet"[^>]*>\n?', "", page)
+    page = re.sub(r'[ \t]*<script src=[^>]*></script>\n?', "", page)
+    page = re.sub(r"[ \t]*<!-- build\.py [^>]*-->\n?", "", page)
+    sources = ", ".join(f["source"] for f in formats)
+    page = re.sub(r"^<!doctype html>\n", lambda m: m.group() + (
+        "<!-- 由 timer/build.py 生成。改源码请改 timer/src/，改完运行 python timer/build.py。"
+        f"赛制来源：{sources} -->\n"), page, count=1, flags=re.I)
+    css = "".join(f"/* === {p.relative_to(SRC).as_posix()} === */\n{p.read_text(encoding='utf-8')}\n"
+                  for p in style_files())
+    js = "window.DT = window.DT || {};\nDT.THEMES = " + json.dumps(themes_meta(), ensure_ascii=False) + ";\n"
+    js += "".join(f"/* === {name} === */\n{_script_text(name, formats)}\n" for name in ORDER)
+    js = re.sub(r"</script", r"<\/script", js, flags=re.I)
+    head, _, rest = page.partition("</head>")
+    body, _, tail = rest.rpartition("</body>")
+    return f"{head}<style>\n{css}</style>\n</head>{body}<script>\n{js}</script>\n</body>{tail}"
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Build the debate timer.")
     ap.add_argument("--check", action="store_true")
@@ -188,8 +232,11 @@ def main(argv=None):
     except FormatError as e:
         print("赛制解析失败：", e)
         return 1
-    outputs = {BUILTIN_JS: builtin_js(formats)}
-    # Task 7 adds: outputs[OUT] = inline_html(...)
+    try:
+        outputs = {BUILTIN_JS: builtin_js(formats), OUT: inline_html(formats)}
+    except FormatError as e:
+        print("构建失败：", e)
+        return 1
     stale = [p for p, text in outputs.items()
              if not p.exists() or p.read_text(encoding="utf-8") != text]
     if args.check:

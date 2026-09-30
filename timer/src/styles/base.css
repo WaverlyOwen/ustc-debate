@@ -46,3 +46,6 @@ body {
 }
 
 .dt-stage [hidden] { display: none !important; }
+
+/* The page shell ui.js mounts into fills the window. */
+.dt-app { height: 100%; }

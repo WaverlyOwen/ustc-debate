@@ -94,7 +94,7 @@
   font-family: var(--font-title);
   font-size: 5.6cqh;
   font-weight: 600;
-  line-height: 1.22;
+  line-height: 1.2;
   letter-spacing: .04em;
   overflow-wrap: anywhere;
 }
@@ -135,6 +135,8 @@
   /* Tension: light and wide when the clock is full, heavy and narrow at zero (spec §5.3). */
   font-variation-settings: "wght" calc(300 + 400 * var(--tension)), "wdth" calc(100 - 22 * var(--tension));
   letter-spacing: -.01em;
+  /* Numerals have no descenders: drop them a little so the glyphs, not the line box, sit on the centre line. */
+  translate: 0 .07em;
   transition: color 300ms ease;
 }
 .dt-colon { padding: 0 .03em; opacity: .55; transition: color 300ms ease; }
@@ -298,8 +300,9 @@
 .dt-stage[data-mode="end"] .dt-motions { display: none; }
 .dt-stage[data-mode="end"] .dt-record { display: table; }
 
-/* Title card: motions in the upper half, the two teams by seat in the lower half. */
+/* Title card: motions in the upper half, the two teams by seat in the lower half, both on the centre axis. */
 .dt-stage[data-mode="title"] .dt-card { flex: 1; justify-content: center; gap: 11cqh; padding: 0 3cqw; }
+.dt-stage[data-mode="title"] .dt-motions { align-self: center; }
 .dt-stage[data-mode="title"] .dt-motion { max-width: 84cqw; font-size: 6cqh; }
 .dt-stage[data-mode="title"] .dt-teams {
   position: relative;
@@ -345,14 +348,16 @@
 .dt-stage[data-mode="stage"][data-kind="break"] .dt-motion { font-size: 3.4cqh; }
 .dt-stage[data-mode="stage"][data-kind="break"] .dt-bottom { margin-top: 0; }
 
-/* End card: the match record, sized so every row fits. */
+/* End card: the match record, sized so every row fits; like the title card it sits on the centre axis. */
+.dt-stage[data-mode="end"] .dt-head { align-self: center; text-align: center; }
 .dt-stage[data-mode="end"] .dt-card { margin-top: 3.6cqh; min-height: 0; }
 .dt-record {
+  align-self: center;
   border-collapse: collapse;
   font-size: min(2cqh, calc(62cqh / var(--rows, 20) / 1.5));
   line-height: 1.5;
 }
-.dt-record th, .dt-record td { padding: 0 3em 0 0; text-align: left; white-space: nowrap; }
+.dt-record th, .dt-record td { padding: 0 4em 0 0; text-align: left; white-space: nowrap; }
 .dt-record th {
   padding-bottom: .35em;
   border-bottom: 1px solid color-mix(in oklab, var(--ink) 22%, transparent);

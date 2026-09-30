@@ -25,7 +25,8 @@
 .dt-stage[data-theme="chroma"] .dt-half { box-shadow: none; }
 .dt-stage[data-theme="chroma"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: none; }
 
-/* Plates: the head and the cards are solid; the digits' plate narrows with the time left. */
+/* Plates: the head and the cards are solid; the digits' plate narrows with the time left over a dark track,
+   so the digits always sit on something solid. */
 .dt-stage[data-theme="chroma"] .dt-head,
 .dt-stage[data-theme="chroma"] .dt-card,
 .dt-stage[data-theme="chroma"] .dt-top,
@@ -34,12 +35,13 @@
   background: var(--plate);
 }
 .dt-stage[data-theme="chroma"] .dt-head { align-self: flex-start; padding: 1.6cqh 2.6cqh; background: var(--side-color); }
-.dt-stage[data-theme="chroma"][data-kind="dual"] .dt-head { background: var(--plate); }
+.dt-stage[data-theme="chroma"][data-kind="dual"] .dt-head { margin-top: 8.5cqh; background: var(--plate); }
 .dt-stage[data-theme="chroma"] .dt-card { padding: 3cqh 4cqh; }
 .dt-stage[data-theme="chroma"] .dt-top { align-self: stretch; padding: .8cqh 2cqh; }
 .dt-stage[data-theme="chroma"] .dt-bottom { padding: 1.4cqh 2cqh; }
 
-.dt-stage[data-theme="chroma"] .dt-clock::before {
+.dt-stage[data-theme="chroma"] .dt-clock::before,
+.dt-stage[data-theme="chroma"] .dt-clock::after {
   content: "";
   position: absolute;
   z-index: -1;
@@ -48,6 +50,7 @@
   background: var(--side-color);
   clip-path: inset(0 calc(var(--used) * 100%) 0 0 round var(--plate-radius));
 }
+.dt-stage[data-theme="chroma"] .dt-clock::after { z-index: -2; background: var(--plate); clip-path: none; }
 .dt-stage[data-theme="chroma"][data-pro-seat="right"][data-side="pro"] .dt-clock[data-clock="main"]::before,
 .dt-stage[data-theme="chroma"][data-pro-seat="left"][data-side="con"] .dt-clock[data-clock="main"]::before {
   clip-path: inset(0 0 0 calc(var(--used) * 100%) round var(--plate-radius));
@@ -62,4 +65,14 @@
   background: color-mix(in oklab, var(--side-color) 55%, var(--plate));
 }
 .dt-stage[data-theme="chroma"] .dt-half[data-locked] .dt-clock::before { clip-path: none; background: var(--plate); }
-.dt-stage[data-theme="chroma"] .dt-team { color: var(--ink); }
+.dt-stage[data-theme="chroma"] .dt-team {
+  right: auto;
+  max-width: calc(100% - 10cqw);
+  padding: .9cqh 2cqh;
+  border-radius: var(--plate-radius);
+  background: var(--plate);
+  color: var(--ink);
+}
+.dt-stage[data-theme="chroma"] .dt-half:last-child .dt-team { left: auto; right: 5cqw; }
+/* Neutral segments mix with the plate, not the green ground, so nothing on screen carries the key colour. */
+.dt-stage[data-theme="chroma"] .dt-seg[data-side="none"] { --seg: color-mix(in oklab, var(--plate) 45%, var(--ink)); }

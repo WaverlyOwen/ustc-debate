@@ -1,0 +1,2981 @@
+<!doctype html>
+<!-- 由 timer/build.py 生成。改源码请改 timer/src/，改完运行 python timer/build.py。赛制来源：recruit-1v1.md, recruit-2v2.md, recruit-3v3.md, ustc-freshman-cup.md, ustc-school-cup-2025.md -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>辩论计时器</title>
+<style>
+/* === styles/base.css === */
+/* base.css: the theme variable contract with 堂 (hall) defaults, a small reset, and the stage's size basis. */
+
+/* The contract every theme defines (spec §5.6). These defaults are hall's values. */
+:root {
+  --pro: #B8322A;
+  --pro-deep: #521511;
+  --con: #1D4E89;
+  --con-deep: #0C2340;
+  --ground: #2A2D33;
+  --ink: #F4EFE4;
+  --ink-dim: rgb(244 239 228 / .6);
+  --accent: #E4B04A;
+  --font-digits: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  --backdrop: none;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-ui);
+}
+
+/* The host decides the size; everything on the stage is sized in container units (cqh / cqw),
+   so a shrunken preview on the console and the full-screen projection keep the same proportions. */
+.dt-stage-host {
+  container-type: size;
+  position: relative;
+  overflow: hidden;
+}
+
+.dt-stage {
+  position: absolute;
+  inset: 0;
+  /* Optional contract extras with derived defaults; a theme may override them. */
+  --on-side: var(--ink);        /* text drawn on a side colour (digits, team names) */
+  --used: 0;
+  --tension: 0;
+  --warn-at: 0;
+}
+
+.dt-stage [hidden] { display: none !important; }
+
+/* The page shell ui.js mounts into fills the window. */
+.dt-app { height: 100%; }
+
+/* === styles/stage.css === */
+/* stage.css: the projected stage (spec §5.3–5.5). Colours and fonts come only from the theme variables. */
+
+/* ---- frame ---- */
+
+.dt-stage {
+  --side-color: color-mix(in oklab, var(--ground) 90%, var(--ink));
+  --side-deep: var(--ground);
+  --clock-y: 55%;                 /* vertical centre of the main digits */
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.36, .64, 1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 4.2cqh 5cqw 3.6cqh;
+  background: var(--side-deep);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+.dt-stage[data-side="pro"] { --side-color: var(--pro); --side-deep: var(--pro-deep); }
+.dt-stage[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
+
+/* ---- layers, bottom to top: backdrop, deco, field / halves, warn line, content, rings, toast ---- */
+
+.dt-backdrop, .dt-deco, .dt-field, .dt-warnline, .dt-halves, .dt-rings {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.dt-backdrop { z-index: 0; background: var(--backdrop); }
+.dt-deco { z-index: 1; }
+.dt-field, .dt-halves { z-index: 2; }
+.dt-warnline { z-index: 3; }
+.dt-top, .dt-head, .dt-clock, .dt-card, .dt-bottom { position: relative; z-index: 4; }
+.dt-rings { z-index: 5; overflow: hidden; }
+.dt-toast { z-index: 6; }
+
+/* The colour field: time is taken back toward the speaking side's own seat. */
+.dt-field {
+  background: var(--side-color);
+  clip-path: inset(0 calc(var(--used) * 100%) 0 0);
+}
+.dt-stage[data-pro-seat="right"][data-side="pro"] .dt-field,
+.dt-stage[data-pro-seat="left"][data-side="con"] .dt-field {
+  clip-path: inset(0 0 0 calc(var(--used) * 100%));
+}
+.dt-stage:not([data-mode="stage"]) .dt-field,
+.dt-stage[data-kind="dual"] .dt-field { display: none; }
+
+/* A gold hairline where the warn bell sits, visible until the field has been taken back past it. */
+.dt-warnline {
+  right: auto;
+  left: calc(var(--warn-at) * 100%);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  /* Faint behind the title and digits, full strength near the floor where the eye reads the field's edge. */
+  -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / .2) 0 45%, #000 85% 100%);
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / .2) 0 45%, #000 85% 100%);
+  transition: opacity 400ms ease;
+}
+.dt-stage[data-pro-seat="right"][data-side="pro"] .dt-warnline,
+.dt-stage[data-pro-seat="left"][data-side="con"] .dt-warnline {
+  left: calc((1 - var(--warn-at)) * 100%);
+}
+.dt-stage:not([data-mode="stage"]) .dt-warnline,
+.dt-stage:not([data-kind="single"]) .dt-warnline { display: none; }
+.dt-stage:not([data-phase="calm"]) .dt-warnline { opacity: 0; }
+
+/* ---- top bar ---- */
+
+.dt-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 4cqw;
+  min-height: 1.4em;
+  font-size: 2cqh;
+  letter-spacing: .08em;
+  color: var(--ink-dim);
+}
+.dt-top span { max-width: 48%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* ---- stage name and speaker ---- */
+
+.dt-head { margin-top: 4.5cqh; max-width: 82cqw; }
+.dt-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 5.6cqh;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .04em;
+  overflow-wrap: anywhere;
+}
+.dt-stage[data-long="true"] .dt-title { font-size: 4.2cqh; }
+.dt-speaker {
+  margin: 1.3cqh 0 0;
+  overflow: hidden;
+  font-size: 2.8cqh;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink-dim);
+}
+.dt-speaker:empty { display: none; }
+.dt-stage[data-mode="title"] .dt-head { display: none; }
+
+/* ---- digits ---- */
+
+.dt-clock { line-height: 1; }
+.dt-clock[data-clock="main"] {
+  position: absolute;
+  left: 50%;
+  top: var(--clock-y);
+  translate: -50% -50%;
+}
+.dt-stage:not([data-mode="stage"]) .dt-clock[data-clock="main"],
+.dt-stage[data-kind="dual"] .dt-clock[data-clock="main"] { display: none; }
+.dt-stage[data-kind="single"] .dt-clock { color: var(--on-side); }
+
+.dt-digits {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  white-space: nowrap;
+  font-family: var(--font-digits);
+  font-size: min(38cqh, 30cqw);
+  font-variant-numeric: tabular-nums;
+  /* Tension: light and wide when the clock is full, heavy and narrow at zero (spec §5.3). */
+  font-variation-settings: "wght" calc(300 + 400 * var(--tension)), "wdth" calc(100 - 22 * var(--tension));
+  letter-spacing: -.01em;
+  /* Numerals have no descenders: drop them a little so the glyphs, not the line box, sit on the centre line. */
+  translate: 0 .07em;
+  transition: color 300ms ease;
+}
+.dt-colon { padding: 0 .03em; opacity: .55; transition: color 300ms ease; }
+.dt-clock[data-running="true"] .dt-colon { animation: dt-breathe 1000ms ease-in-out infinite; }
+.dt-clock[data-phase="warn"] .dt-colon,
+.dt-clock[data-phase="count"] .dt-colon { color: var(--accent); }
+.dt-clock[data-phase="over"] .dt-digits { color: var(--accent); }
+.dt-sign { margin-right: .04em; }
+.dt-sign:empty { display: none; }
+.dt-clock[data-phase="over"] .dt-sign { animation: dt-breathe 2000ms ease-in-out infinite; }
+.dt-clock.is-bump .dt-digits { animation: dt-bump 240ms ease-out; }
+
+/* 「暂停」 hangs below the digits without moving them. */
+.dt-state {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  translate: -50% 0;
+  margin-top: 1.4cqh;
+  font-size: 2.8cqh;
+  letter-spacing: .5em;
+  text-indent: .5em;
+  white-space: nowrap;
+  opacity: .72;
+  transition: opacity 200ms ease;
+}
+.dt-state:empty { opacity: 0; }
+
+/* ---- dual: two halves by seat, the speaking side widens to 58% ---- */
+
+.dt-halves {
+  display: none;
+  grid-template-columns: var(--left-col, 50%) var(--right-col, 50%);
+  transition: grid-template-columns 520ms var(--ease-spring);
+}
+.dt-stage[data-mode="stage"][data-kind="dual"] .dt-halves { display: grid; }
+.dt-stage[data-kind="dual"] .dt-top,
+.dt-stage[data-kind="dual"] .dt-bottom::before { display: none; }
+.dt-stage[data-kind="dual"] .dt-head { margin-top: 6cqh; max-width: 36cqw; }
+
+.dt-half {
+  --side-color: var(--pro);
+  --side-deep: var(--pro-deep);
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--side-deep);
+  transition: filter 300ms ease;
+}
+.dt-half[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
+.dt-half + .dt-half { box-shadow: inset 1px 0 0 color-mix(in oklab, var(--ink) 16%, transparent); }
+.dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: saturate(.45) brightness(.78); }
+
+/* Each half is its side's field, drained from the top like a falling water level. */
+.dt-half-field {
+  position: absolute;
+  inset: auto 0 0;
+  height: calc(var(--remain, 1) * 100%);
+  background: var(--side-color);
+  clip-path: inset(0);
+}
+
+.dt-team {
+  position: absolute;
+  z-index: 1;
+  top: 4.2cqh;
+  left: 5cqw;
+  right: 5cqw;
+  display: flex;
+  align-items: baseline;
+  gap: .7em;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: var(--font-title);
+  font-size: 3.2cqh;
+  color: var(--on-side);
+}
+.dt-half:last-child .dt-team { flex-direction: row-reverse; }
+.dt-team:not([data-label=""])::before {
+  content: attr(data-label);
+  font-family: var(--font-ui);
+  font-size: .7em;
+  letter-spacing: .3em;
+  opacity: .75;
+}
+
+.dt-half .dt-clock {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 52%;
+  translate: -50% -50%;
+  color: var(--on-side);
+}
+.dt-half .dt-digits {
+  font-size: min(15cqh, 9cqw);
+  transition: font-size 520ms var(--ease-spring), color 300ms ease;
+}
+.dt-halves[data-idle] .dt-digits { font-size: min(24cqh, 14cqw); }
+.dt-half[data-active] .dt-digits { font-size: min(30cqh, 17cqw); }
+.dt-half[data-locked] .dt-digits { display: none; }
+.dt-half[data-locked] .dt-state {
+  position: static;
+  translate: none;
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 6cqh;
+  letter-spacing: .3em;
+  opacity: .92;
+}
+
+/* The speaker's gold floor line opens from the middle outward. */
+.dt-floorline {
+  position: absolute;
+  z-index: 1;
+  left: 14%;
+  right: 14%;
+  bottom: 18cqh;
+  height: .4cqh;
+  border-radius: .2cqh;
+  background: var(--accent);
+  transform: scaleX(0);
+  transition: transform 520ms var(--ease-out);
+}
+.dt-half[data-active] .dt-floorline { transform: scaleX(1); }
+
+/* ---- cards: title, break, end ---- */
+
+.dt-card { display: none; flex-direction: column; }
+.dt-stage[data-mode="title"] .dt-card,
+.dt-stage[data-mode="end"] .dt-card,
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-card { display: flex; }
+
+.dt-motions { display: flex; flex-direction: column; gap: 2.2cqh; }
+.dt-motion {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  padding-left: .85em;
+  font-family: var(--font-title);
+  line-height: 1.32;
+  letter-spacing: .03em;
+  overflow-wrap: anywhere;
+}
+.dt-motion::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .16em;
+  width: .2em;
+  height: 1em;
+  background: var(--pro);
+}
+.dt-motion[data-side="con"]::before { background: var(--con); }
+
+.dt-teams { display: none; }
+.dt-record { display: none; }
+.dt-stage[data-mode="end"] .dt-motions { display: none; }
+.dt-stage[data-mode="end"] .dt-record { display: table; }
+
+/* Title card: motions in the upper half, the two teams by seat in the lower half, both on the centre axis. */
+.dt-stage[data-mode="title"] .dt-card { flex: 1; justify-content: center; gap: 11cqh; padding: 0 3cqw; }
+.dt-stage[data-mode="title"] .dt-motions { align-self: center; }
+.dt-stage[data-mode="title"] .dt-motion { max-width: 84cqw; font-size: 6cqh; }
+.dt-stage[data-mode="title"] .dt-teams {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  font-family: var(--font-title);
+  font-size: 4.4cqh;
+  line-height: 1.25;
+}
+.dt-teams::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  bottom: 8%;
+  width: 1px;
+  background: var(--ink-dim);
+}
+.dt-teams span { min-width: 0; padding: 0 4cqw; overflow-wrap: anywhere; }
+.dt-teams span:first-child { text-align: right; }
+.dt-teams span:not([data-label=""])::before {
+  content: attr(data-label);
+  display: block;
+  margin-bottom: 1.2cqh;
+  font-family: var(--font-ui);
+  font-size: .5em;
+  letter-spacing: .4em;
+  color: color-mix(in oklab, var(--pro) 50%, var(--ink));
+}
+.dt-teams span[data-side="con"]::before { color: color-mix(in oklab, var(--con) 45%, var(--ink)); }
+
+/* Break: name, relaxed digits and the motions, centred as one group. */
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-head { margin: auto auto 0; max-width: 86cqw; text-align: center; }
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-clock[data-clock="main"] {
+  position: relative;
+  left: auto;
+  top: auto;
+  translate: none;
+  margin-top: 3cqh;
+}
+.dt-stage[data-kind="break"] .dt-digits { font-size: 22cqh; }
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-card { margin: 7cqh auto auto; max-width: 86cqw; }
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-motion { font-size: 3.4cqh; }
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-bottom { margin-top: 0; }
+
+/* End card: the match record, sized so every row fits; like the title card it sits on the centre axis. */
+.dt-stage[data-mode="end"] .dt-head { align-self: center; text-align: center; }
+.dt-stage[data-mode="end"] .dt-card { margin-top: 3.6cqh; min-height: 0; }
+.dt-record {
+  align-self: center;
+  border-collapse: collapse;
+  font-size: min(2cqh, calc(62cqh / var(--rows, 20) / 1.5));
+  line-height: 1.5;
+}
+.dt-record th, .dt-record td { padding: 0 4em 0 0; text-align: left; white-space: nowrap; }
+.dt-record th {
+  padding-bottom: .35em;
+  border-bottom: 1px solid color-mix(in oklab, var(--ink) 22%, transparent);
+  font-weight: normal;
+  letter-spacing: .2em;
+  color: var(--ink-dim);
+}
+.dt-record tr:nth-child(2) td { padding-top: .45em; }
+.dt-record td:first-child { max-width: 56cqw; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-title); }
+.dt-record td:first-child::before {
+  content: "";
+  display: inline-block;
+  width: .5em;
+  height: .5em;
+  margin-right: .8em;
+  vertical-align: .12em;
+  background: color-mix(in oklab, var(--ground) 50%, var(--ink));
+}
+.dt-record tr[data-side="pro"] td:first-child::before { background: var(--pro); }
+.dt-record tr[data-side="con"] td:first-child::before { background: var(--con); }
+.dt-record td:not(:first-child) { font-family: var(--font-digits); font-variant-numeric: tabular-nums; }
+.dt-record tr[data-over] td:nth-child(n+3) { color: var(--accent); }
+.dt-record tr[data-skipped] { opacity: .45; }
+
+/* ---- bottom bar: progress and what comes next ---- */
+
+.dt-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4cqw;
+  margin-top: auto;
+  font-size: 2cqh;
+  color: var(--ink-dim);
+}
+.dt-bottom::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -7cqh -5cqw -3.6cqh;
+  background: linear-gradient(to top, color-mix(in oklab, var(--side-deep) 55%, transparent), transparent);
+}
+
+.dt-progress { display: flex; align-items: flex-end; gap: .35cqh; min-width: 0; }
+.dt-seg {
+  --seg: color-mix(in oklab, var(--ground) 45%, var(--ink));
+  position: relative;
+  display: block;
+  flex: none;
+  width: 1.7cqh;
+  height: 1cqh;
+  border-radius: .2cqh;
+  background: var(--seg);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--ink) 22%, transparent);
+  opacity: .35;
+}
+.dt-seg[data-side="pro"] { --seg: var(--pro); }
+.dt-seg[data-side="con"] { --seg: var(--con); }
+.dt-seg[data-kind="dual"] { background: linear-gradient(90deg, var(--pro) 50%, var(--con) 50%); }
+.dt-seg[data-gap] { margin-left: 1.1cqh; }
+.dt-seg[data-state="done"], .dt-seg[data-state="current"] { opacity: 1; }
+.dt-seg[data-state="current"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -.75cqh;
+  height: .35cqh;
+  border-radius: .2cqh;
+  background: var(--accent);
+}
+
+.dt-next { display: flex; align-items: baseline; gap: 1.1em; min-width: 0; white-space: nowrap; }
+.dt-next span:empty { display: none; }
+.dt-next-label { letter-spacing: .2em; }
+.dt-next-name { overflow: hidden; text-overflow: ellipsis; font-family: var(--font-title); color: var(--ink); }
+.dt-next-time { font-family: var(--font-digits); font-variant-numeric: tabular-nums; color: var(--ink); }
+.dt-halves[data-idle] ~ .dt-bottom .dt-next-name { color: var(--accent); }
+
+/* ---- rings and toast ---- */
+
+.dt-ring {
+  position: absolute;
+  width: 34cqh;
+  height: 34cqh;
+  margin: -17cqh 0 0 -17cqh;
+  border: .45cqh solid var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+  animation: dt-ring 1100ms ease-out forwards;
+}
+
+.dt-toast {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  max-width: 70cqw;
+  padding: 1.3cqh 3.2cqh;
+  border-bottom: .3cqh solid var(--accent);
+  border-radius: 0 0 1.2cqh 1.2cqh;
+  background: color-mix(in oklab, var(--ground) 94%, var(--ink));
+  color: var(--ink);
+  font-size: 2.4cqh;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  translate: -50% -110%;
+  transition: translate 200ms var(--ease-out);
+}
+.dt-toast.is-shown { translate: -50% 0; }
+.dt-toast:empty { visibility: hidden; }
+
+/* ---- the one orchestrated moment: a new stage sweeps in from its side's seat ---- */
+
+.dt-stage.is-entering .dt-field { animation: dt-sweep-l 560ms var(--ease-out); }
+.dt-stage.is-entering[data-pro-seat="right"][data-side="pro"] .dt-field,
+.dt-stage.is-entering[data-pro-seat="left"][data-side="con"] .dt-field { animation-name: dt-sweep-r; }
+.dt-stage.is-entering .dt-half:first-child .dt-half-field { animation: dt-sweep-l 560ms var(--ease-out); }
+.dt-stage.is-entering .dt-half:last-child .dt-half-field { animation: dt-sweep-r 560ms var(--ease-out); }
+.dt-stage.is-entering .dt-title,
+.dt-stage.is-entering .dt-card { animation: dt-rise 420ms var(--ease-out) both; }
+.dt-stage.is-entering .dt-speaker,
+.dt-stage.is-entering .dt-team { animation: dt-rise 420ms var(--ease-out) 70ms both; }
+.dt-stage.is-entering .dt-clock { animation: dt-rise 420ms var(--ease-out) 140ms both; }
+
+/* No `to` frame: the sweep ends on the field's live clip-path. */
+@keyframes dt-sweep-l { from { clip-path: inset(0 100% 0 0); } }
+@keyframes dt-sweep-r { from { clip-path: inset(0 0 0 100%); } }
+@keyframes dt-rise { from { opacity: 0; transform: translateY(1.1cqh); } }
+@keyframes dt-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+@keyframes dt-bump { from { transform: scale(1.07); } }
+@keyframes dt-ring {
+  from { transform: scale(.6); opacity: .9; }
+  to { transform: scale(2.4); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-stage, .dt-stage *, .dt-stage *::before, .dt-stage *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* === themes/chroma.css === */
+/* @theme id=chroma name=绿幕 desc=纯绿底，数字放在本方色底板上，供直播抠像 */
+/* 绿幕: for keying. Flat #00B140 everywhere, no field and no background motion; content sits on plates. */
+[data-theme="chroma"] {
+  --pro: #B8322A;
+  --pro-deep: #00B140;
+  --con: #1D4E89;
+  --con-deep: #00B140;
+  --ground: #00B140;
+  --ink: #F4EFE4;
+  --ink-dim: #D8D2C6;       /* solid: translucent text would pick up the key colour */
+  --accent: #E4B04A;
+  --font-digits: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  --backdrop: none;
+  --plate: #2A2D33;
+  --plate-radius: 2cqh;
+}
+.dt-stage[data-theme="chroma"][data-side="none"] { --side-color: var(--plate); }
+
+.dt-stage[data-theme="chroma"] .dt-field,
+.dt-stage[data-theme="chroma"] .dt-warnline,
+.dt-stage[data-theme="chroma"] .dt-half-field,
+.dt-stage[data-theme="chroma"] .dt-bottom::before { display: none; }
+.dt-stage[data-theme="chroma"] .dt-half { box-shadow: none; }
+.dt-stage[data-theme="chroma"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: none; }
+
+/* Plates: the head and the cards are solid; the digits' plate narrows with the time left over a dark track,
+   so the digits always sit on something solid. */
+.dt-stage[data-theme="chroma"] .dt-head,
+.dt-stage[data-theme="chroma"] .dt-card,
+.dt-stage[data-theme="chroma"] .dt-top,
+.dt-stage[data-theme="chroma"] .dt-bottom {
+  border-radius: var(--plate-radius);
+  background: var(--plate);
+}
+.dt-stage[data-theme="chroma"] .dt-head { align-self: flex-start; padding: 1.6cqh 2.6cqh; background: var(--side-color); }
+.dt-stage[data-theme="chroma"][data-kind="dual"] .dt-head { margin-top: 8.5cqh; background: var(--plate); }
+.dt-stage[data-theme="chroma"] .dt-card { padding: 3cqh 4cqh; }
+.dt-stage[data-theme="chroma"] .dt-top { align-self: stretch; padding: .8cqh 2cqh; }
+.dt-stage[data-theme="chroma"] .dt-bottom { padding: 1.4cqh 2cqh; }
+
+.dt-stage[data-theme="chroma"] .dt-clock::before,
+.dt-stage[data-theme="chroma"] .dt-clock::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -2cqh -4cqh;
+  border-radius: var(--plate-radius);
+  background: var(--side-color);
+  clip-path: inset(0 calc(var(--used) * 100%) 0 0 round var(--plate-radius));
+}
+.dt-stage[data-theme="chroma"] .dt-clock::after { z-index: -2; background: var(--plate); clip-path: none; }
+.dt-stage[data-theme="chroma"][data-pro-seat="right"][data-side="pro"] .dt-clock[data-clock="main"]::before,
+.dt-stage[data-theme="chroma"][data-pro-seat="left"][data-side="con"] .dt-clock[data-clock="main"]::before {
+  clip-path: inset(0 0 0 calc(var(--used) * 100%) round var(--plate-radius));
+}
+.dt-stage[data-theme="chroma"] .dt-half .dt-clock::before {
+  clip-path: inset(0 calc((1 - var(--remain, 1)) * 100%) 0 0 round var(--plate-radius));
+}
+.dt-stage[data-theme="chroma"] .dt-half:last-child .dt-clock::before {
+  clip-path: inset(0 0 0 calc((1 - var(--remain, 1)) * 100%) round var(--plate-radius));
+}
+.dt-stage[data-theme="chroma"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-clock::before {
+  background: color-mix(in oklab, var(--side-color) 55%, var(--plate));
+}
+.dt-stage[data-theme="chroma"] .dt-half[data-locked] .dt-clock::before { clip-path: none; background: var(--plate); }
+.dt-stage[data-theme="chroma"] .dt-team {
+  right: auto;
+  max-width: calc(100% - 10cqw);
+  padding: .9cqh 2cqh;
+  border-radius: var(--plate-radius);
+  background: var(--plate);
+  color: var(--ink);
+}
+.dt-stage[data-theme="chroma"] .dt-half:last-child .dt-team { left: auto; right: 5cqw; }
+/* Neutral segments mix with the plate, not the green ground, so nothing on screen carries the key colour. */
+.dt-stage[data-theme="chroma"] .dt-seg[data-side="none"] { --seg: color-mix(in oklab, var(--plate) 45%, var(--ink)); }
+
+/* === themes/daylight.css === */
+/* @theme id=daylight name=昼 desc=浅色底，色场收成数字后的一条横带，适合亮场投影 */
+/* 昼: for lit rooms. The field is a 34cqh band behind the digits instead of the whole screen (spec §5.6). */
+[data-theme="daylight"] {
+  --pro: #B3261E;
+  --pro-deep: #6A1611;
+  --con: #1A4E8F;
+  --con-deep: #0F2E55;
+  --ground: #E7E9EC;
+  --ink: #15171B;
+  --ink-dim: rgb(21 23 27 / .58);
+  --accent: #B7791F;
+  --on-side: #F7F4EE;
+  --font-digits: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  --backdrop: none;
+  --band: 34cqh;
+}
+
+.dt-stage[data-theme="daylight"] { background: var(--ground); }
+.dt-stage[data-theme="daylight"] .dt-bottom::before { display: none; }
+
+/* The band and its deep track sit on the digits' centre line; the band is taken back the same way. */
+.dt-stage[data-theme="daylight"] .dt-field,
+.dt-stage[data-theme="daylight"] .dt-warnline,
+.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"] .dt-deco {
+  top: var(--clock-y);
+  bottom: auto;
+  height: var(--band);
+  translate: 0 -50%;
+}
+.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"] .dt-deco { background: var(--side-deep); }
+.dt-stage[data-theme="daylight"][data-kind="break"] .dt-field { display: none; }
+.dt-stage[data-theme="daylight"] .dt-warnline { -webkit-mask-image: none; mask-image: none; }
+
+/* Dual: each half keeps the light ground, with its band draining from the top inside the track. */
+.dt-stage[data-theme="daylight"] .dt-half { background: var(--ground); }
+.dt-stage[data-theme="daylight"] .dt-half::before {
+  content: "";
+  position: absolute;
+  inset: 52% 0 auto;
+  height: var(--band);
+  translate: 0 -50%;
+  background: var(--side-deep);
+}
+.dt-stage[data-theme="daylight"] .dt-half-field {
+  bottom: calc(48% - var(--band) / 2);
+  height: calc(var(--remain, 1) * var(--band));
+}
+.dt-stage[data-theme="daylight"] .dt-team { color: var(--ink); }
+/* Dim only the band and digits of the waiting side; a dimmed light ground would read as a grey slab. */
+.dt-stage[data-theme="daylight"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: none; }
+.dt-stage[data-theme="daylight"] .dt-halves:not([data-idle]) .dt-half:not([data-active])::before,
+.dt-stage[data-theme="daylight"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-half-field,
+.dt-stage[data-theme="daylight"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-clock {
+  filter: saturate(.45) brightness(.78);
+}
+.dt-stage[data-theme="daylight"] .dt-half + .dt-half { box-shadow: inset 1px 0 0 color-mix(in oklab, var(--ink) 14%, transparent); }
+
+/* === themes/hall.css === */
+/* @theme id=hall name=堂 desc=全屏色场，适合暗场投影 */
+/* 堂: the default. The whole room takes the speaking side's colour (spec §5.2). */
+[data-theme="hall"] {
+  --pro: #B8322A;
+  --pro-deep: #521511;
+  --con: #1D4E89;
+  --con-deep: #0C2340;
+  --ground: #2A2D33;
+  --ink: #F4EFE4;
+  --ink-dim: rgb(244 239 228 / .6);
+  --accent: #E4B04A;
+  --font-digits: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  --backdrop: none;
+}
+
+/* Light falls from above onto the field, so a projected flat colour still reads as a room. */
+.dt-stage[data-theme="hall"] .dt-field,
+.dt-stage[data-theme="hall"] .dt-half-field {
+  background-image: linear-gradient(to bottom, rgb(255 255 255 / .07), transparent 40%, rgb(0 0 0 / .16));
+}
+
+/* A soft vignette on the deep ground that the field gives back. */
+.dt-stage[data-theme="hall"] .dt-deco {
+  background: radial-gradient(130% 95% at 50% 42%, transparent 52%, rgb(0 0 0 / .3));
+}
+
+.dt-stage[data-theme="hall"] .dt-digits { text-shadow: 0 .015em .06em rgb(0 0 0 / .2); }
+
+</style>
+</head>
+<body data-dt-autoboot>
+  <div id="app"></div>
+<script>
+window.DT = window.DT || {};
+DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放在本方色底板上，供直播抠像"}, {"id": "daylight", "name": "昼", "desc": "浅色底，色场收成数字后的一条横带，适合亮场投影"}, {"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场投影"}];
+/* === builtin-formats.js === */
+/* Generated by timer/build.py from the debate-prep format library. Do not edit by hand. */
+/* Sources: recruit-1v1.md, recruit-2v2.md, recruit-3v3.md, ustc-freshman-cup.md, ustc-school-cup-2025.md */
+(function (DT) {
+  'use strict';
+  DT.BUILTIN_FORMATS = [
+  {
+    "id": "recruit-1v1",
+    "name": "招新赛 1v1",
+    "builtin": true,
+    "source": "recruit-1v1.md",
+    "theme": "hall",
+    "bells": {
+      "warn": [
+        30
+      ],
+      "countdown": 0,
+      "end": "double"
+    },
+    "stages": [
+      {
+        "id": "recruit-1v1-1",
+        "name": "正方一辩立论",
+        "secs": 180,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正一",
+        "block": "A"
+      },
+      {
+        "id": "recruit-1v1-2",
+        "name": "反方一辩质询正方一辩",
+        "secs": 120,
+        "type": "single",
+        "side": "con",
+        "speaker": "反一 问，正一 答",
+        "block": "A",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-1v1-3",
+        "name": "反方一辩立论",
+        "secs": 180,
+        "type": "single",
+        "side": "con",
+        "speaker": "反一",
+        "block": "A"
+      },
+      {
+        "id": "recruit-1v1-4",
+        "name": "正方一辩质询反方一辩",
+        "secs": 120,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正一 问，反一 答",
+        "block": "A",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-1v1-b1",
+        "name": "中场休息",
+        "secs": 60,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "recruit-1v1-5",
+        "name": "正反双方一辩对辩",
+        "secs": 120,
+        "type": "dual",
+        "side": null,
+        "first": "pro",
+        "speaker": "正一 与 反一",
+        "block": "B",
+        "note": "A 给正方、L 给反方；一方用完自动转给对方"
+      },
+      {
+        "id": "recruit-1v1-b2",
+        "name": "中场休息",
+        "secs": 60,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "recruit-1v1-6",
+        "name": "反方一辩结辩",
+        "secs": 120,
+        "type": "single",
+        "side": "con",
+        "speaker": "反一",
+        "block": "C"
+      },
+      {
+        "id": "recruit-1v1-7",
+        "name": "正方一辩结辩",
+        "secs": 120,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正一",
+        "block": "C"
+      }
+    ],
+    "extras": []
+  },
+  {
+    "id": "recruit-2v2",
+    "name": "招新赛 2v2",
+    "builtin": true,
+    "source": "recruit-2v2.md",
+    "theme": "hall",
+    "bells": {
+      "warn": [
+        30
+      ],
+      "countdown": 0,
+      "end": "double"
+    },
+    "stages": [
+      {
+        "id": "recruit-2v2-1",
+        "name": "正方一辩立论",
+        "secs": 180,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正一",
+        "block": "A"
+      },
+      {
+        "id": "recruit-2v2-2",
+        "name": "反方二辩质询正方一辩",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反二 问，正一 答",
+        "block": "A",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-2v2-3",
+        "name": "反方一辩立论",
+        "secs": 180,
+        "type": "single",
+        "side": "con",
+        "speaker": "反一",
+        "block": "A"
+      },
+      {
+        "id": "recruit-2v2-4",
+        "name": "正方二辩质询反方一辩",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正二 问，反一 答",
+        "block": "A",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-2v2-b1",
+        "name": "中场休息",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "recruit-2v2-5",
+        "name": "正反双方一辩对辩",
+        "secs": 90,
+        "type": "dual",
+        "side": null,
+        "first": "pro",
+        "speaker": "正一 与 反一",
+        "block": "B",
+        "note": "A 给正方、L 给反方；一方用完自动转给对方"
+      },
+      {
+        "id": "recruit-2v2-6",
+        "name": "反方二辩申论",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反二",
+        "block": "B"
+      },
+      {
+        "id": "recruit-2v2-7",
+        "name": "正方一辩质询反方二辩",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正一 问，反二 答",
+        "block": "B",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-2v2-8",
+        "name": "正方二辩申论",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正二",
+        "block": "B"
+      },
+      {
+        "id": "recruit-2v2-9",
+        "name": "反方一辩质询正方二辩",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反一 问，正二 答",
+        "block": "B",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-2v2-b2",
+        "name": "中场休息",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "recruit-2v2-10",
+        "name": "正反双方二辩对辩",
+        "secs": 90,
+        "type": "dual",
+        "side": null,
+        "first": "pro",
+        "speaker": "正二 与 反二",
+        "block": "C",
+        "note": "A 给正方、L 给反方；一方用完自动转给对方"
+      },
+      {
+        "id": "recruit-2v2-11",
+        "name": "反方一辩结辩",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反一",
+        "block": "C"
+      },
+      {
+        "id": "recruit-2v2-12",
+        "name": "正方一辩结辩",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正一",
+        "block": "C"
+      }
+    ],
+    "extras": []
+  },
+  {
+    "id": "recruit-3v3",
+    "name": "招新赛 3v3",
+    "builtin": true,
+    "source": "recruit-3v3.md",
+    "theme": "hall",
+    "bells": {
+      "warn": [
+        30
+      ],
+      "countdown": 0,
+      "end": "double"
+    },
+    "stages": [
+      {
+        "id": "recruit-3v3-1",
+        "name": "正方一辩立论",
+        "secs": 180,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正一",
+        "block": "A"
+      },
+      {
+        "id": "recruit-3v3-2",
+        "name": "反方二辩质询正方一辩",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反二 问，正一 答",
+        "block": "A",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-3v3-3",
+        "name": "反方一辩立论",
+        "secs": 180,
+        "type": "single",
+        "side": "con",
+        "speaker": "反一",
+        "block": "A"
+      },
+      {
+        "id": "recruit-3v3-4",
+        "name": "正方二辩质询反方一辩",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正二 问，反一 答",
+        "block": "A",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-3v3-b1",
+        "name": "中场休息",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "recruit-3v3-5",
+        "name": "正反双方三辩对辩",
+        "secs": 90,
+        "type": "dual",
+        "side": null,
+        "first": "pro",
+        "speaker": "正三 与 反三",
+        "block": "B",
+        "note": "A 给正方、L 给反方；一方用完自动转给对方"
+      },
+      {
+        "id": "recruit-3v3-6",
+        "name": "反方二辩申论",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反二",
+        "block": "B"
+      },
+      {
+        "id": "recruit-3v3-7",
+        "name": "正方三辩质询反方二辩",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正三 问，反二 答",
+        "block": "B",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-3v3-8",
+        "name": "正方二辩申论",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正二",
+        "block": "B"
+      },
+      {
+        "id": "recruit-3v3-9",
+        "name": "反方三辩质询正方二辩",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反三 问，正二 答",
+        "block": "B",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-3v3-b2",
+        "name": "中场休息",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "recruit-3v3-10",
+        "name": "正反双方一辩对辩",
+        "secs": 90,
+        "type": "dual",
+        "side": null,
+        "first": "pro",
+        "speaker": "正一 与 反一",
+        "block": "C",
+        "note": "A 给正方、L 给反方；一方用完自动转给对方"
+      },
+      {
+        "id": "recruit-3v3-11",
+        "name": "正方三辩申论",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正三",
+        "block": "C"
+      },
+      {
+        "id": "recruit-3v3-12",
+        "name": "反方一辩质询正方三辩",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反一 问，正三 答",
+        "block": "C",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-3v3-13",
+        "name": "反方三辩申论",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反三",
+        "block": "C"
+      },
+      {
+        "id": "recruit-3v3-14",
+        "name": "正方一辩质询反方三辩",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正一 问，反三 答",
+        "block": "C",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "recruit-3v3-b3",
+        "name": "中场休息",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "recruit-3v3-15",
+        "name": "正反双方二辩对辩",
+        "secs": 90,
+        "type": "dual",
+        "side": null,
+        "first": "pro",
+        "speaker": "正二 与 反二",
+        "block": "D",
+        "note": "A 给正方、L 给反方；一方用完自动转给对方"
+      },
+      {
+        "id": "recruit-3v3-16",
+        "name": "反方一辩结辩",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反一",
+        "block": "D"
+      },
+      {
+        "id": "recruit-3v3-17",
+        "name": "正方一辩结辩",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正一",
+        "block": "D"
+      }
+    ],
+    "extras": []
+  },
+  {
+    "id": "ustc-freshman-cup",
+    "name": "中国科学技术大学新生辩论赛",
+    "builtin": true,
+    "source": "ustc-freshman-cup.md",
+    "theme": "hall",
+    "bells": {
+      "warn": [
+        30
+      ],
+      "countdown": 0,
+      "end": "double"
+    },
+    "stages": [
+      {
+        "id": "ustc-freshman-cup-1",
+        "name": "正方一辩开篇立论",
+        "secs": 180,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正一",
+        "block": "A"
+      },
+      {
+        "id": "ustc-freshman-cup-2",
+        "name": "反方四辩质询正方一辩",
+        "secs": 120,
+        "type": "single",
+        "side": "con",
+        "speaker": "反四 问，正一 答",
+        "block": "A",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "ustc-freshman-cup-3",
+        "name": "反方一辩开篇立论",
+        "secs": 180,
+        "type": "single",
+        "side": "con",
+        "speaker": "反一",
+        "block": "A"
+      },
+      {
+        "id": "ustc-freshman-cup-4",
+        "name": "正方四辩质询反方一辩",
+        "secs": 120,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正四 问，反一 答",
+        "block": "A",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "ustc-freshman-cup-5",
+        "name": "评委打分",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "ustc-freshman-cup-6",
+        "name": "反方二辩驳论",
+        "secs": 120,
+        "type": "single",
+        "side": "con",
+        "speaker": "反二",
+        "block": "B"
+      },
+      {
+        "id": "ustc-freshman-cup-7",
+        "name": "正方二辩驳论",
+        "secs": 120,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正二",
+        "block": "B"
+      },
+      {
+        "id": "ustc-freshman-cup-8",
+        "name": "正反方二辩对辩",
+        "secs": 90,
+        "type": "dual",
+        "side": null,
+        "first": "pro",
+        "speaker": "正二 与 反二",
+        "block": "B",
+        "note": "A 给正方、L 给反方；一方用完自动转给对方"
+      },
+      {
+        "id": "ustc-freshman-cup-9",
+        "name": "评委打分",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "ustc-freshman-cup-10",
+        "name": "正方三辩盘问反方二辩、四辩",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正三 问，反二/反四 答",
+        "block": "C",
+        "note": "单边计时：只计盘问方，对方回答时按 P 暂停"
+      },
+      {
+        "id": "ustc-freshman-cup-11",
+        "name": "反方三辩盘问正方二辩、四辩",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反三 问，正二/正四 答",
+        "block": "C",
+        "note": "单边计时：只计盘问方，对方回答时按 P 暂停"
+      },
+      {
+        "id": "ustc-freshman-cup-12",
+        "name": "正方三辩盘问小结",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正三",
+        "block": "C"
+      },
+      {
+        "id": "ustc-freshman-cup-13",
+        "name": "反方三辩盘问小结",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反三",
+        "block": "C"
+      },
+      {
+        "id": "ustc-freshman-cup-14",
+        "name": "评委打分",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "ustc-freshman-cup-15",
+        "name": "自由辩论",
+        "secs": 240,
+        "type": "dual",
+        "side": null,
+        "first": "pro",
+        "speaker": "全员",
+        "block": "D",
+        "note": "A 给正方、L 给反方；一方用完自动转给对方"
+      },
+      {
+        "id": "ustc-freshman-cup-16",
+        "name": "评委打分",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "ustc-freshman-cup-17",
+        "name": "反方四辩结辩",
+        "secs": 210,
+        "type": "single",
+        "side": "con",
+        "speaker": "反四",
+        "block": "E"
+      },
+      {
+        "id": "ustc-freshman-cup-18",
+        "name": "正方四辩结辩",
+        "secs": 210,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正四",
+        "block": "E"
+      }
+    ],
+    "extras": []
+  },
+  {
+    "id": "ustc-school-cup-2025",
+    "name": "2025 年中国科学技术大学校赛",
+    "builtin": true,
+    "source": "ustc-school-cup-2025.md",
+    "theme": "hall",
+    "bells": {
+      "warn": [
+        30
+      ],
+      "countdown": 0,
+      "end": "double"
+    },
+    "stages": [
+      {
+        "id": "ustc-school-cup-2025-1",
+        "name": "正方一辩开篇立论",
+        "secs": 180,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正一",
+        "block": "A"
+      },
+      {
+        "id": "ustc-school-cup-2025-2",
+        "name": "反方二辩质询正方一辩",
+        "secs": 120,
+        "type": "single",
+        "side": "con",
+        "speaker": "反二 问，正一 答",
+        "block": "A",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "ustc-school-cup-2025-3",
+        "name": "反方一辩开篇立论",
+        "secs": 180,
+        "type": "single",
+        "side": "con",
+        "speaker": "反一",
+        "block": "A"
+      },
+      {
+        "id": "ustc-school-cup-2025-4",
+        "name": "正方二辩质询反方一辩",
+        "secs": 120,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正二 问，反一 答",
+        "block": "A",
+        "note": "双边计时：问答共用这一个表"
+      },
+      {
+        "id": "ustc-school-cup-2025-5",
+        "name": "评委打分",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "ustc-school-cup-2025-6",
+        "name": "反方二辩驳论",
+        "secs": 120,
+        "type": "single",
+        "side": "con",
+        "speaker": "反二",
+        "block": "B"
+      },
+      {
+        "id": "ustc-school-cup-2025-7",
+        "name": "正方二辩驳论",
+        "secs": 120,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正二",
+        "block": "B"
+      },
+      {
+        "id": "ustc-school-cup-2025-8",
+        "name": "正反方四辩对辩",
+        "secs": 90,
+        "type": "dual",
+        "side": null,
+        "first": "pro",
+        "speaker": "正四 与 反四",
+        "block": "B",
+        "note": "A 给正方、L 给反方；一方用完自动转给对方"
+      },
+      {
+        "id": "ustc-school-cup-2025-9",
+        "name": "评委打分",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "ustc-school-cup-2025-10",
+        "name": "正方三辩盘问反方二辩、四辩",
+        "secs": 90,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正三 问",
+        "block": "C",
+        "note": "单边计时：只计盘问方，对方回答时按 P 暂停"
+      },
+      {
+        "id": "ustc-school-cup-2025-11",
+        "name": "反方三辩盘问正方二辩、四辩",
+        "secs": 90,
+        "type": "single",
+        "side": "con",
+        "speaker": "反三 问",
+        "block": "C",
+        "note": "单边计时：只计盘问方，对方回答时按 P 暂停"
+      },
+      {
+        "id": "ustc-school-cup-2025-12",
+        "name": "正方三辩盘问小结",
+        "secs": 120,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正三",
+        "block": "C"
+      },
+      {
+        "id": "ustc-school-cup-2025-13",
+        "name": "反方三辩盘问小结",
+        "secs": 120,
+        "type": "single",
+        "side": "con",
+        "speaker": "反三",
+        "block": "C"
+      },
+      {
+        "id": "ustc-school-cup-2025-14",
+        "name": "评委打分",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "ustc-school-cup-2025-15",
+        "name": "自由辩论",
+        "secs": 240,
+        "type": "dual",
+        "side": null,
+        "first": "pro",
+        "speaker": "全员",
+        "block": "D",
+        "note": "A 给正方、L 给反方；一方用完自动转给对方"
+      },
+      {
+        "id": "ustc-school-cup-2025-16",
+        "name": "评委打分",
+        "secs": 30,
+        "type": "break",
+        "side": null
+      },
+      {
+        "id": "ustc-school-cup-2025-17",
+        "name": "反方四辩结辩",
+        "secs": 210,
+        "type": "single",
+        "side": "con",
+        "speaker": "反四",
+        "block": "E"
+      },
+      {
+        "id": "ustc-school-cup-2025-18",
+        "name": "正方四辩结辩",
+        "secs": 210,
+        "type": "single",
+        "side": "pro",
+        "speaker": "正四",
+        "block": "E"
+      }
+    ],
+    "extras": [
+      {
+        "group": "奇袭",
+        "perSide": 1,
+        "variants": [
+          {
+            "name": "奇袭质询",
+            "type": "single",
+            "secs": 150,
+            "note": "双边计时：问答共用这一个表"
+          },
+          {
+            "name": "奇袭申论",
+            "type": "single",
+            "secs": 120
+          }
+        ]
+      }
+    ]
+  }
+];
+})(window.DT = window.DT || {});
+
+/* === engine.js === */
+/* engine.js: pure timing engine for the debate timer. No DOM; never reads the clock itself. */
+(function (DT) {
+  'use strict';
+  const HISTORY_MAX = 100;
+  const STALE_MS = 1500;
+  const DEFAULT_BELLS = Object.freeze({ warn: Object.freeze([30]), countdown: 0, end: 'double' });
+  const BREAK_BELLS = Object.freeze({ warn: Object.freeze([]), countdown: 0, end: 'chime' });
+  const END_SOUND = { double: 'double', triple: 'triple', long: 'long', chime: 'chime', none: null };
+  const SIDE_NAME = { pro: '正方', con: '反方' };
+  const NOT_DUAL = '这个环节只有一个计时器';
+  const clone = v => JSON.parse(JSON.stringify(v));
+  const other = side => (side === 'pro' ? 'con' : 'pro');
+
+  // DT.clock: the single time source for callers (UI, bells). Engine functions take `now` instead.
+  const defaultNow = () => performance.timeOrigin + performance.now();
+  let nowFn = defaultNow;
+  DT.clock = { now: () => nowFn(), set(fn) { nowFn = fn; }, reset() { nowFn = defaultNow; } };
+
+  // ---- bells ----
+
+  function mergeBells(base, over) {
+    const b = { warn: base.warn.slice(), countdown: base.countdown, end: base.end };
+    if (!over) return b;
+    if (Array.isArray(over.warn)) b.warn = over.warn.slice();
+    if (typeof over.countdown === 'number') b.countdown = over.countdown;
+    if (typeof over.end === 'string') b.end = over.end;
+    return b;
+  }
+
+  // Built-in default <- format bells <- stage bells. Breaks ignore the format and start from BREAK_BELLS.
+  function effectiveBells(format, stage) {
+    const base = stage && stage.type === 'break' ? BREAK_BELLS : mergeBells(DEFAULT_BELLS, format && format.bells);
+    return mergeBells(base, stage && stage.bells);
+  }
+
+  // Every bell point of one clock, latest-remaining first: w<t>, c<n>…c1, end.
+  function bellPoints(bells) {
+    const pts = Array.from(new Set(bells.warn || [])).map(t => ({ key: 'w' + t, ms: t * 1000, type: 'warn' }));
+    for (let n = bells.countdown || 0; n >= 1; n--) pts.push({ key: 'c' + n, ms: n * 1000, type: 'count' });
+    pts.push({ key: 'end', ms: 0, type: 'end' });
+    return pts.sort((a, b) => b.ms - a.ms);
+  }
+
+  function soundOf(point, bells) {
+    if (point.type === 'warn') return 'ding';
+    if (point.type === 'count') return 'tick';
+    return Object.prototype.hasOwnProperty.call(END_SOUND, bells.end) ? END_SOUND[bells.end] : 'double';
+  }
+
+  // ---- runs and clocks ----
+
+  function newRun(stage) {
+    const ms = stage.secs * 1000;
+    const dual = stage.type === 'dual';
+    return {
+      kind: stage.type,
+      clocks: dual ? { pro: { total: ms, used: 0 }, con: { total: ms, used: 0 } } : { main: { total: ms, used: 0 } },
+      active: dual ? null : 'main',
+      running: false,
+      since: null,
+      locked: { pro: false, con: false },
+      yielded: { pro: 0, con: 0 },
+      fired: { main: [], pro: [], con: [] },
+      done: false,
+    };
+  }
+
+  // Only a single stage runs into overtime; a dual side or a break that ran out before the next tick reads 0.
+  function remaining(run, id, now) {
+    const c = run.clocks[id];
+    const left = c.total - c.used - (run.running && run.active === id ? now - run.since : 0);
+    return run.kind === 'single' ? left : Math.max(0, left);
+  }
+
+  // Settle the running clock's time into `used`; it keeps running from `now`.
+  function commit(run, now) {
+    if (!run.running || !run.active) return;
+    run.clocks[run.active].used += now - run.since;
+    run.since = now;
+  }
+
+  function stop(run, now) {
+    commit(run, now);
+    run.running = false;
+    run.since = null;
+  }
+
+  function start(run, id, now) {
+    commit(run, now);
+    run.active = id;
+    run.running = true;
+    run.since = now;
+  }
+
+  // ---- session plumbing ----
+
+  function createSession(format, match, now, opts) {
+    const f = clone(format);
+    const extrasUsed = {};
+    (f.extras || []).forEach(g => { extrasUsed[g.group] = { pro: 0, con: 0 }; });
+    return {
+      schema: 1,
+      id: 's-' + Math.floor(now).toString(36) + Math.random().toString(36).slice(2, 6),
+      createdAt: now,
+      match: clone(match || {}),
+      format: f,
+      theme: (opts && opts.theme) || f.theme || 'hall',
+      timeline: clone(f.stages),
+      cursor: -1,
+      runs: {},
+      extrasUsed,
+      history: [],
+      lastFeedback: null,
+    };
+  }
+
+  function currentStage(session) {
+    return session.timeline[session.cursor] || null;
+  }
+
+  function getRun(session, stageId) {
+    const st = stageId == null ? currentStage(session) : session.timeline.find(x => x.id === stageId);
+    if (!st) return null;
+    return session.runs[st.id] || newRun(st);
+  }
+
+  function strip(session) {
+    const o = Object.assign({}, session);
+    delete o.history;
+    return o;
+  }
+
+  // Start an undoable action: a fresh copy with the old session (minus history) pushed onto history.
+  function begin(session) {
+    const snap = clone(strip(session));
+    snap.lastFeedback = null;
+    const s = clone(snap);
+    s.history = (session.history || []).concat([snap]).slice(-HISTORY_MAX);
+    return s;
+  }
+
+  // An action that does not apply: a copy with only the feedback set, nothing pushed onto history.
+  function refuse(session, code, message) {
+    const s = clone(strip(session));
+    s.history = (session.history || []).slice();
+    s.lastFeedback = code ? { code, message } : null;
+    return s;
+  }
+
+  const noop = session => refuse(session, null);
+
+  function refuseLocked(session, run, side) {
+    return refuse(session, 'locked', SIDE_NAME[side] + (run.yielded[side] > 0 ? '已放弃剩余时间' : '时间已用完'));
+  }
+
+  // Apply fn to the current stage's run inside an undoable action.
+  function edit(session, fn) {
+    const s = begin(session);
+    const st = currentStage(s);
+    const run = s.runs[st.id] || newRun(st);
+    fn(run, s);
+    s.runs[st.id] = run;
+    return s;
+  }
+
+  // ---- actions ----
+
+  function toggle(session, now) {
+    if (session.cursor < 0) return next(session, now);
+    const st = currentStage(session);
+    if (!st) return noop(session);
+    const r0 = getRun(session);
+    if (r0.done) return refuse(session, 'done', '本环节已结束');
+    if (r0.kind !== 'dual') return edit(session, run => (run.running ? stop(run, now) : start(run, 'main', now)));
+    let target;
+    if (r0.active === null) target = st.first || 'pro';
+    else target = r0.running ? other(r0.active) : r0.active;
+    // Paused on a side that has no time left: resume with the side that still has some.
+    if (r0.locked[target] && !r0.running && !r0.locked[other(target)]) target = other(target);
+    if (r0.locked[target]) return refuseLocked(session, r0, target);
+    return edit(session, run => start(run, target, now));
+  }
+
+  function floor(session, side, now) {
+    const st = currentStage(session);
+    if (!st || st.type !== 'dual') return refuse(session, 'not-dual', NOT_DUAL);
+    const r0 = getRun(session);
+    if (r0.locked[side]) return refuseLocked(session, r0, side);
+    if (r0.running && r0.active === side) return noop(session);
+    return edit(session, run => start(run, side, now));
+  }
+
+  function pause(session, now) {
+    const st = currentStage(session);
+    if (!st) return noop(session);
+    if (getRun(session).running) return edit(session, run => stop(run, now));
+    return toggle(session, now);
+  }
+
+  function adjust(session, deltaMs, now, clockId) {
+    const st = currentStage(session);
+    if (!st) return noop(session);
+    const r0 = getRun(session);
+    const id = clockId || r0.active || st.first || 'pro';
+    if (!r0.clocks[id]) return noop(session);
+    return edit(session, (run, s) => {
+      commit(run, now);
+      const c = run.clocks[id];
+      c.used = Math.max(0, c.used - deltaMs);
+      if (run.kind !== 'single') c.used = Math.min(c.total, c.used);
+      const left = c.total - c.used;
+      if (left > 0) {
+        if (run.kind === 'dual' && run.locked[id]) {
+          run.locked[id] = false;
+          run.yielded[id] = 0;
+        }
+        run.done = false;
+      }
+      // Re-arm bell points now above the remaining time; silently spend those below it on a stopped clock.
+      const live = run.running && run.active === id;
+      const fired = run.fired[id];
+      bellPoints(effectiveBells(s.format, st)).forEach(p => {
+        const i = fired.indexOf(p.key);
+        if (left > p.ms) { if (i >= 0) fired.splice(i, 1); }
+        else if (!live && i < 0) fired.push(p.key);
+      });
+    });
+  }
+
+  function yieldTime(session, now) {
+    const st = currentStage(session);
+    if (!st || st.type !== 'dual') return refuse(session, 'not-dual', NOT_DUAL);
+    const r0 = getRun(session);
+    if (!r0.active) return noop(session);
+    if (r0.locked[r0.active]) return refuseLocked(session, r0, r0.active);
+    return edit(session, (run, s) => {
+      commit(run, now);
+      const side = run.active;
+      const c = run.clocks[side];
+      run.yielded[side] = Math.max(0, c.total - c.used);
+      c.used = c.total;
+      run.locked[side] = true;
+      run.fired[side] = bellPoints(effectiveBells(s.format, st)).map(p => p.key);
+      if (!run.locked[other(side)]) start(run, other(side), now);
+      else {
+        run.running = false;
+        run.since = null;
+        run.done = true;
+      }
+    });
+  }
+
+  function reset(session, now) {
+    const st = currentStage(session);
+    if (!st) return noop(session);
+    const s = begin(session);
+    delete s.runs[st.id];
+    return s;
+  }
+
+  function goto(session, index, now) {
+    const target = Math.max(-1, Math.min(session.timeline.length, index));
+    const st = currentStage(session);
+    const running = !!(st && getRun(session).running);
+    if (target === session.cursor && !running) return noop(session);
+    const s = begin(session);
+    if (st && s.runs[st.id]) stop(s.runs[st.id], now);
+    s.cursor = target;
+    return s;
+  }
+
+  function next(session, now) { return goto(session, session.cursor + 1, now); }
+  function prev(session, now) { return goto(session, session.cursor - 1, now); }
+
+  // Insert an extra stage right after the current one; the cursor stays where it is.
+  function insertExtra(session, group, variantIndex, side, now) {
+    const g = (session.format.extras || []).find(x => x.group === group);
+    const variant = g && g.variants[variantIndex];
+    if (!variant || !SIDE_NAME[side]) return noop(session);
+    const st = currentStage(session);
+    if (st && getRun(session).running) return refuse(session, 'running', '先暂停再插入');
+    const used = (session.extrasUsed[group] || {})[side] || 0;
+    if (used >= g.perSide) return refuse(session, 'extra-limit', SIDE_NAME[side] + '的' + group + '已经用过了');
+    const s = begin(session);
+    const ids = new Set(s.timeline.map(x => x.id));
+    let n = 1;
+    while (ids.has('x-' + n)) n++;
+    const stage = Object.assign(clone(variant), {
+      id: 'x-' + n,
+      name: SIDE_NAME[side] + variant.name,
+      side: variant.type === 'single' ? side : null,
+      extra: true,
+    });
+    s.timeline.splice(Math.min(s.cursor + 1, s.timeline.length), 0, stage);
+    s.extrasUsed[group] = s.extrasUsed[group] || { pro: 0, con: 0 };
+    s.extrasUsed[group][side] = used + 1;
+    return s;
+  }
+
+  function undo(session, now) {
+    const h = session.history || [];
+    if (!h.length) return refuse(session, 'nothing-to-undo', '没有可以撤销的操作');
+    const s = clone(h[h.length - 1]);
+    s.history = h.slice(0, -1);
+    s.lastFeedback = null;
+    return s;
+  }
+
+  // ---- automatic rules and bells ----
+
+  // Apply the automatic rules up to `now` and report visual events in time order.
+  // Returns the input session itself when nothing changed.
+  function tick(session, now) {
+    const st = currentStage(session);
+    const r0 = st && session.runs[st.id];
+    if (!r0 || !r0.running) return { session, events: [] };
+    const run = clone(r0);
+    const events = [];
+    const points = bellPoints(effectiveBells(session.format, st));
+    let changed = false;
+    // Loop because a dual stage can hand over and run the second side out within the same tick.
+    for (let guard = 0; guard < 3 && run.running; guard++) {
+      const id = run.active;
+      const c = run.clocks[id];
+      const endAt = run.since + (c.total - c.used);
+      points.forEach(p => {
+        const at = endAt - p.ms;
+        if (at > now || run.fired[id].indexOf(p.key) >= 0) return;
+        run.fired[id].push(p.key);
+        changed = true;
+        if (now - at <= STALE_MS) events.push({ type: p.type, clock: id, key: p.key, at });
+      });
+      if (endAt > now || run.kind === 'single') break;
+      changed = true;
+      c.used = c.total;
+      if (run.kind === 'dual') {
+        run.locked[id] = true;
+        const to = other(id);
+        if (!run.locked[to]) {
+          events.push({ type: 'switch', from: id, to, at: endAt });
+          run.active = to;
+          run.since = endAt;
+          continue;
+        }
+      }
+      run.running = false;
+      run.since = null;
+      run.done = true;
+    }
+    if (!changed) return { session, events };
+    const runs = Object.assign({}, session.runs, { [st.id]: run });
+    return { session: Object.assign({}, session, { runs }), events };
+  }
+
+  // Future bells of the running clock, plus the other side's after a dual handover.
+  function upcomingBells(session, now) {
+    const st = currentStage(session);
+    const run = st && session.runs[st.id];
+    if (!run || !run.running) return [];
+    const bells = effectiveBells(session.format, st);
+    const points = bellPoints(bells);
+    const out = [];
+    const list = (id, endAt) => points.forEach(p => {
+      const at = endAt - p.ms;
+      const sound = soundOf(p, bells);
+      if (sound && at > now && run.fired[id].indexOf(p.key) < 0) out.push({ at, sound, clock: id });
+    });
+    const c = run.clocks[run.active];
+    const endAt = run.since + c.total - c.used;
+    list(run.active, endAt);
+    const to = other(run.active);
+    if (run.kind === 'dual' && !run.locked[to]) list(to, endAt + run.clocks[to].total - run.clocks[to].used);
+    return out;
+  }
+
+  // ---- view and record ----
+
+  function clockView(run, id, st, bells, now) {
+    const c = run.clocks[id];
+    const rem = remaining(run, id, now);
+    const side = id === 'main' ? st.side || null : id;
+    const locked = run.kind === 'dual' ? run.locked[id] : run.done;
+    let phase = 'calm';
+    if (locked || run.done) phase = 'done';
+    else if (rem < 0) phase = 'over';
+    else if (bells.countdown > 0 && rem <= bells.countdown * 1000) phase = 'count';
+    else if (bells.warn.length && rem <= Math.max.apply(null, bells.warn) * 1000) phase = 'warn';
+    return {
+      id, side, label: SIDE_NAME[side] || '',
+      total: c.total, remaining: rem,
+      running: run.running && run.active === id, active: run.active === id,
+      locked, yielded: run.kind === 'dual' ? run.yielded[id] : 0,
+      fraction: Math.min(1, Math.max(0, rem / c.total)), overtime: Math.max(0, -rem),
+      phase, text: fmt(rem),
+    };
+  }
+
+  function view(session, now) {
+    const count = session.timeline.length;
+    const cur = session.cursor;
+    const match = session.match;
+    const st = currentStage(session);
+    const out = {
+      mode: cur < 0 ? 'title' : st ? 'stage' : 'end',
+      match, formatName: session.format.name || '', theme: session.theme, proSeat: (match && match.proSeat) || 'left',
+      stage: null, clocks: [], running: false, next: null, warnAt: null,
+      progress: session.timeline.map((x, i) => ({
+        index: i, side: x.side || null, type: x.type, block: x.block || '', extra: !!x.extra,
+        state: i < cur ? 'done' : i === cur ? 'current' : 'todo',
+      })),
+      extras: (session.format.extras || []).map(g => ({
+        group: g.group, perSide: g.perSide,
+        used: Object.assign({ pro: 0, con: 0 }, session.extrasUsed[g.group]),
+        variants: clone(g.variants),
+      })),
+      feedback: session.lastFeedback || null,
+    };
+    const nx = cur < count ? session.timeline[cur + 1] : null;
+    if (nx) out.next = { name: nx.name, type: nx.type, side: nx.side || null, secs: nx.secs };
+    if (!st) return out;
+    const run = getRun(session);
+    const bells = effectiveBells(session.format, st);
+    out.stage = {
+      id: st.id, index: cur, count, name: st.name, type: st.type, side: st.side || null,
+      speaker: st.speaker || '', block: st.block || '', note: st.note || '', extra: !!st.extra,
+      first: st.type === 'dual' ? st.first || 'pro' : null,
+    };
+    out.clocks = (run.kind === 'dual' ? ['pro', 'con'] : ['main']).map(id => clockView(run, id, st, bells, now));
+    out.running = run.running;
+    const total = st.secs * 1000;
+    const warnMs = bells.warn.length ? Math.max.apply(null, bells.warn) * 1000 : 0;
+    if (st.type === 'single' && warnMs > 0 && warnMs < total) out.warnAt = warnMs / total;
+    return out;
+  }
+
+  // Per-stage record: `used` is time actually spoken (yielded time excluded), live up to `now`.
+  function record(session, now) {
+    return session.timeline.map((st, i) => {
+      const run = session.runs[st.id];
+      const planned = st.secs * 1000 * (st.type === 'dual' ? 2 : 1);
+      let used = 0;
+      let yielded = 0;
+      if (run) Object.keys(run.clocks).forEach(id => {
+        const c = run.clocks[id];
+        let u = c.used + (run.running && run.active === id ? now - run.since : 0);
+        if (run.kind !== 'single') u = Math.min(u, c.total);
+        const y = run.kind === 'dual' ? run.yielded[id] : 0;
+        used += u - y;
+        yielded += y;
+      });
+      return { index: i, name: st.name, side: st.side || null, type: st.type, planned, used, over: Math.max(0, used - planned), yielded };
+    });
+  }
+
+  // m:ss, seconds rounded up while time remains; +m:ss rounded down in overtime.
+  function fmt(ms) {
+    const over = ms < 0;
+    const s = over ? Math.floor(-ms / 1000) : Math.ceil(ms / 1000);
+    return (over ? '+' : '') + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  DT.engine = {
+    DEFAULT_BELLS, createSession, currentStage, getRun, remaining, view, toggle, floor, pause, adjust,
+    yieldTime, reset, goto, next, prev, insertExtra, undo, tick, upcomingBells, record, fmt,
+    effectiveBells, bellPoints,
+  };
+})(window.DT = window.DT || {});
+
+/* === store.js === */
+/* store.js: format validation, import/export and localStorage persistence. */
+(function (DT) {
+  'use strict';
+
+  const KEYS = {
+    formats: 'dt.formats.v1', session: 'dt.session.v1', settings: 'dt.settings.v1', lastMatch: 'dt.lastMatch.v1',
+  };
+  const END_BELLS = ['double', 'triple', 'long', 'none', 'chime'];
+  const HISTORY_LIMIT = 20;
+
+  // ---- storage ----
+  function memoryStorage() {
+    const m = new Map();
+    return {
+      getItem: k => (m.has(k) ? m.get(k) : null),
+      setItem: (k, v) => { m.set(k, String(v)); },
+      removeItem: k => { m.delete(k); },
+    };
+  }
+  let storage = null;
+  function useStorage(obj) { storage = obj; }
+  function store() {
+    if (!storage) {
+      try { storage = window.localStorage || memoryStorage(); } catch (e) { storage = memoryStorage(); }
+    }
+    return storage;
+  }
+  function readJSON(key) {
+    try {
+      const text = store().getItem(key);
+      return text == null ? null : JSON.parse(text);
+    } catch (e) { return null; }
+  }
+  function writeJSON(key, value) {
+    try { store().setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
+  }
+  function isObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+  function clone(v) { return JSON.parse(JSON.stringify(v)); }
+
+  // ---- ids ----
+  let counter = 0;
+  function uid(prefix) {
+    counter += 1;
+    return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + counter.toString(36);
+  }
+
+  // ---- durations ----
+  function parseDuration(text) {
+    if (text == null) return null;
+    const t = String(text).trim().replace(/：/g, ':');
+    let m, secs = null;
+    if ((m = /^(\d+):(\d{2})$/.exec(t))) { if (+m[2] < 60) secs = +m[1] * 60 + +m[2]; }
+    else if ((m = /^(\d+)'(\d{1,2})$/.exec(t))) { if (+m[2] < 60) secs = +m[1] * 60 + +m[2]; }
+    else if ((m = /^(\d+)\s*(s|秒)?$/i.exec(t))) secs = +m[1];
+    else if ((m = /^(\d+)\s*分(钟)?(\s*(\d+)\s*秒)?$/.exec(t))) secs = +m[1] * 60 + (m[4] ? +m[4] : 0);
+    return secs !== null && secs >= 1 && secs <= 3600 ? secs : null;
+  }
+  function formatDuration(secs) {
+    const s = Math.max(0, Math.round(secs));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  // ---- validation ----
+  function isPosInt(n) { return typeof n === 'number' && Number.isInteger(n) && n > 0; }
+  function secsError(secs) {
+    if (!isPosInt(secs)) return '时长要大于 0 秒';
+    return secs > 3600 ? '时长不能超过 60 分钟' : null;
+  }
+  function bellsErrors(b) {
+    if (!isObj(b)) return ['铃声：格式不对'];
+    const errs = [];
+    if (b.warn !== undefined && !(Array.isArray(b.warn) && b.warn.every(isPosInt))) errs.push('铃声：提示铃点要写成正整数秒');
+    if (b.countdown !== undefined && !(Number.isInteger(b.countdown) && b.countdown >= 0 && b.countdown <= 10)) errs.push('铃声：逐秒倒数最多 10 秒');
+    if (b.end !== undefined && END_BELLS.indexOf(b.end) < 0) errs.push('铃声：终止铃只能是两声、三声、长鸣或不响');
+    return errs;
+  }
+  function stageErrors(s, i, firstIndexOfId) {
+    const p = '第 ' + (i + 1) + ' 个环节：';
+    if (!isObj(s)) return [p + '名称不能为空'];
+    const errs = [];
+    if (typeof s.name !== 'string' || !s.name.trim()) errs.push(p + '名称不能为空');
+    else if (s.name.length > 40) errs.push(p + '名称最多 40 个字');
+    if (s.type !== 'single' && s.type !== 'dual' && s.type !== 'break') errs.push(p + '计时方式只能是单方、双方或间隔');
+    const se = secsError(s.secs);
+    if (se) errs.push(p + se);
+    if (s.type === 'single' && s.side !== 'pro' && s.side !== 'con') errs.push(p + '单方环节要选正方或反方');
+    if (s.type === 'dual' && s.first !== 'pro' && s.first !== 'con') errs.push(p + '先发言的一方只能是正方或反方');
+    if (s.id !== undefined && firstIndexOfId[s.id] !== i) errs.push(p + '编号和第 ' + (firstIndexOfId[s.id] + 1) + ' 个环节重复');
+    if (s.bells !== undefined && s.bells !== null) bellsErrors(s.bells).forEach(e => errs.push(p + e));
+    return errs;
+  }
+  function extraErrors(g) {
+    if (!isObj(g)) return ['可插入环节的格式不对'];
+    if (typeof g.group !== 'string' || !g.group.trim()) return ['可插入环节的名称不能为空'];
+    const p = '可插入环节「' + g.group + '」';
+    const errs = [];
+    if (!(Number.isInteger(g.perSide) && g.perSide >= 1)) errs.push(p + '：每方次数至少 1 次');
+    if (!Array.isArray(g.variants) || !g.variants.length) {
+      errs.push(p + '：至少要有一种形式');
+    } else {
+      g.variants.forEach((v, k) => {
+        const q = p + '第 ' + (k + 1) + ' 种：';
+        if (!isObj(v) || v.type !== 'single') errs.push(q + '只能是单方环节');
+        if (!isObj(v) || secsError(v.secs)) errs.push(q + '时长要大于 0 秒');
+      });
+    }
+    return errs;
+  }
+  function validateFormat(f) {
+    if (!isObj(f)) return ['这不是一个赛制'];
+    const errs = [];
+    if (typeof f.name !== 'string' || !f.name.trim()) errs.push('赛制名称不能为空');
+    else if (f.name.length > 40) errs.push('赛制名称最多 40 个字');
+    if (!Array.isArray(f.stages) || !f.stages.length) {
+      errs.push('至少要有一个环节');
+    } else {
+      const first = {};
+      f.stages.forEach((s, i) => { if (isObj(s) && s.id !== undefined && !(s.id in first)) first[s.id] = i; });
+      f.stages.forEach((s, i) => stageErrors(s, i, first).forEach(e => errs.push(e)));
+    }
+    if (f.bells !== undefined && f.bells !== null) bellsErrors(f.bells).forEach(e => errs.push(e));
+    if (f.extras !== undefined) {
+      if (Array.isArray(f.extras)) f.extras.forEach(g => extraErrors(g).forEach(e => errs.push(e)));
+      else errs.push('可插入环节的格式不对');
+    }
+    return errs;
+  }
+
+  // ---- builtin comparison ----
+  function canon(v) {
+    if (Array.isArray(v)) return v.map(canon);
+    if (v && typeof v === 'object') {
+      const o = {};
+      Object.keys(v).sort().forEach(k => { o[k] = canon(v[k]); });
+      return o;
+    }
+    return v;
+  }
+  function builtinById(id) { return DT.BUILTIN_FORMATS.find(b => b.id === id) || null; }
+  function isPristine(f) {
+    const orig = f && f.builtin ? builtinById(f.id) : null;
+    return !!orig && JSON.stringify(canon(f)) === JSON.stringify(canon(orig));
+  }
+  function restoreBuiltin(list, id) {
+    const orig = builtinById(id);
+    if (!orig) return list;
+    return list.map(f => (f.id === id ? clone(orig) : f));
+  }
+
+  // ---- formats persistence ----
+  function loadFormats() {
+    const data = readJSON(KEYS.formats);
+    const seen = {};
+    // Drop invalid entries, entries without a usable id, and repeated ids (first one wins).
+    const stored = data && Array.isArray(data.formats) ? data.formats.filter(f => {
+      if (!isObj(f) || typeof f.id !== 'string' || !f.id || Object.prototype.hasOwnProperty.call(seen, f.id)) return false;
+      if (validateFormat(f).length) return false;
+      seen[f.id] = true;
+      return true;
+    }) : [];
+    const byId = {};
+    stored.forEach(f => { byId[f.id] = f; });
+    const out = DT.BUILTIN_FORMATS.map(b => clone(byId[b.id] || b));
+    stored.forEach(f => { if (!builtinById(f.id)) out.push(f); });
+    return out;
+  }
+  function saveFormats(list) {
+    writeJSON(KEYS.formats, { schema: 1, formats: list.filter(f => !isPristine(f)) });
+  }
+
+  // ---- constructors ----
+  function newStage(type) {
+    if (type === 'dual') return { id: uid('s'), name: '新环节', type: 'dual', side: null, secs: 90, first: 'pro' };
+    if (type === 'break') return { id: uid('s'), name: '休息', type: 'break', side: null, secs: 30 };
+    return { id: uid('s'), name: '新环节', type: 'single', side: 'pro', secs: 180 };
+  }
+  function newFormat() {
+    return {
+      id: uid('u'), name: '新赛制', theme: 'hall', builtin: false,
+      bells: clone(DT.engine.DEFAULT_BELLS), stages: [newStage('single')], extras: [],
+    };
+  }
+  function duplicateFormat(f) {
+    const d = clone(f);
+    d.id = uid('u');
+    d.name = f.name + '（副本）';
+    d.builtin = false;
+    delete d.source;
+    return d;
+  }
+
+  // ---- import / export ----
+  function exportFormats(list) {
+    return JSON.stringify({ kind: 'debate-timer-formats', schema: 1, formats: list }, null, 2);
+  }
+  function exportFileName(f) {
+    return String((f && f.name) || '赛制').replace(/[\\/:*?"<>|]/g, '_') + '.debate-timer.json';
+  }
+  function withDefaults(f) {
+    if (!isObj(f)) return f;
+    const o = clone(f);
+    if (!o.id) o.id = uid('u');
+    if (!o.theme) o.theme = 'hall';
+    if (!o.bells) o.bells = clone(DT.engine.DEFAULT_BELLS);
+    if (!o.extras) o.extras = [];
+    if (Array.isArray(o.stages)) o.stages.forEach(s => { if (isObj(s) && !s.id) s.id = uid('s'); });
+    return o;
+  }
+  function parseImport(text) {
+    let data;
+    try { data = JSON.parse(text); } catch (e) { return { formats: [], errors: ['文件不是有效的 JSON'] }; }
+    let raw = null;
+    if (isObj(data) && data.kind === 'debate-timer-formats') {
+      if (typeof data.schema === 'number' && data.schema > 1) {
+        return { formats: [], errors: ['这个文件来自更新版本的计时器，请先更新计时器'] };
+      }
+      raw = Array.isArray(data.formats) ? data.formats : null;
+    } else if (isObj(data) && 'stages' in data) {
+      raw = [data];
+    }
+    if (!raw) return { formats: [], errors: ['这不是计时器的赛制文件'] };
+    const formats = [], errors = [];
+    raw.forEach((item, k) => {
+      const f = withDefaults(item);
+      const errs = validateFormat(f);
+      if (errs.length) {
+        const label = isObj(f) && typeof f.name === 'string' && f.name.trim() ? f.name : '第 ' + (k + 1) + ' 个';
+        errors.push('「' + label + '」：' + errs[0]);
+      } else formats.push(f);
+    });
+    return { formats, errors };
+  }
+  function addImported(list, f, mode) {
+    const conflict = list.some(x => x.id === f.id);
+    if (conflict && mode === 'replace') {
+      const rep = Object.assign({}, f, { builtin: !!builtinById(f.id) });
+      return list.map(x => (x.id === f.id ? rep : x));
+    }
+    const add = Object.assign({}, f, { builtin: false });
+    if (conflict) { add.id = uid('u'); add.name = f.name + '（导入）'; }
+    return list.concat([add]);
+  }
+
+  // ---- session, settings, last match ----
+  function loadSession() { const s = readJSON(KEYS.session); return isObj(s) ? s : null; }
+  function saveSession(s) {
+    const copy = Object.assign({}, s);
+    if (Array.isArray(copy.history)) copy.history = copy.history.slice(-HISTORY_LIMIT);
+    writeJSON(KEYS.session, copy);
+  }
+  function clearSession() { try { store().removeItem(KEYS.session); } catch (e) { /* ignore */ } }
+  function loadSettings() {
+    const s = readJSON(KEYS.settings);
+    return Object.assign({ volume: 0.8, muted: false }, isObj(s) ? s : {});
+  }
+  function saveSettings(obj) { writeJSON(KEYS.settings, obj); }
+  function loadLastMatch() { const m = readJSON(KEYS.lastMatch); return isObj(m) ? m : null; }
+  function saveLastMatch(match) { writeJSON(KEYS.lastMatch, match); }
+
+  DT.store = {
+    useStorage, validateFormat, parseDuration, formatDuration, loadFormats, saveFormats, isPristine, restoreBuiltin,
+    newFormat, duplicateFormat, newStage, uid, exportFormats, exportFileName, parseImport, addImported,
+    loadSession, saveSession, clearSession, loadSettings, saveSettings, loadLastMatch, saveLastMatch,
+  };
+})(window.DT = window.DT || {});
+
+/* === bells.js === */
+/* bells.js: synthesized debate bells, scheduled on the audio clock so background throttling cannot delay them. */
+(function (DT) {
+  'use strict';
+  const defaultFactory = () => new (window.AudioContext || window.webkitAudioContext)();
+  let factory = defaultFactory;
+  let ctx = null, master = null, volume = 0.8, muted = false;
+  let pending = [];     // last list passed to schedule(), replayed after unlock
+  let live = [];        // {node, key} currently scheduled, stopped by cancelAll()
+
+  const SOUNDS = ['ding', 'double', 'triple', 'long', 'tick', 'chime'];
+  const PARTIALS = [[1, 1], [2.76, 0.35], [5.4, 0.15]];   // [frequency ratio, gain]
+
+  function masterGain() { return muted ? 0 : volume; }
+
+  // One gain envelope shared by several sources: 3 ms attack, exponential decay.
+  function envelope(t, peak, attack, decay) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    g.connect(master);
+    return g;
+  }
+
+  function osc(freq, t, dur, out) {
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    o.connect(out);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+    return o;
+  }
+
+  // A struck bell: three sine partials through one envelope.
+  function strike(t, f0, decay) {
+    const g = envelope(t, 0.5, 0.003, decay);
+    return PARTIALS.map(([ratio, gain]) => {
+      const pg = ctx.createGain();
+      pg.gain.value = gain;
+      pg.connect(g);
+      return osc(f0 * ratio, t, decay, pg);
+    });
+  }
+
+  function ding(t) { return strike(t, 1318, 1.4); }
+  function repeated(t, n, gap) {
+    let nodes = [];
+    for (let i = 0; i < n; i++) nodes = nodes.concat(ding(t + i * gap));
+    return nodes;
+  }
+
+  function tick(t) {
+    const dur = 0.045;
+    const g = envelope(t, 0.6, 0.002, dur);
+    const nodes = [osc(1760, t, dur, g)];
+    const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 2400;
+    bp.Q.value = 1.2;
+    src.connect(bp);
+    bp.connect(g);
+    src.start(t);
+    src.stop(t + dur);
+    nodes.push(src);
+    return nodes;
+  }
+
+  function chime(t) {
+    return [[1046.5, t], [1568, t + 0.35]].map(([f, at]) => osc(f, at, 0.7, envelope(at, 0.4, 0.01, 0.7)));
+  }
+
+  const VOICES = {
+    ding, tick, chime,
+    double: t => repeated(t, 2, 0.32),
+    triple: t => repeated(t, 3, 0.28),
+    long: t => strike(t, 1046, 3),
+  };
+
+  function unlock() {
+    if (!ctx) {
+      try {
+        ctx = factory();
+        master = ctx.createGain();
+        master.gain.value = masterGain();
+        master.connect(ctx.destination);
+      } catch (e) { ctx = null; master = null; return; }
+    }
+    try { const p = ctx.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* stays suspended */ }
+    schedule(pending, DT.clock.now());
+  }
+
+  function isUnlocked() { return !!ctx; }
+
+  function setVolume(v) {
+    volume = Math.min(1, Math.max(0, Number(v) || 0));
+    if (master) master.gain.value = masterGain();
+  }
+
+  function setMuted(b) {
+    muted = !!b;
+    if (master) master.gain.value = masterGain();
+  }
+
+  // Plays immediately; manual bells are short and are not cancelled by schedule().
+  function play(sound) {
+    if (!ctx || !VOICES[sound]) return;
+    VOICES[sound](ctx.currentTime);
+  }
+
+  function cancelAll() {
+    live.forEach(({ node }) => {
+      try { node.stop(0); } catch (e) { /* already stopped */ }
+      try { node.disconnect(); } catch (e) { /* already disconnected */ }
+    });
+    live = [];
+  }
+
+  function schedule(list, now) {
+    cancelAll();
+    pending = list || [];
+    if (!ctx) return;
+    const seen = {};
+    pending.forEach(item => {
+      if (!VOICES[item.sound] || item.at < now - 20) return;
+      const key = item.sound + '@' + item.at;
+      if (seen[key]) return;
+      seen[key] = true;
+      VOICES[item.sound](ctx.currentTime + Math.max(0, item.at - now) / 1000).forEach(node => live.push({ node, key }));
+    });
+  }
+
+  function resetForTests() {
+    cancelAll();
+    ctx = null; master = null; volume = 0.8; muted = false; pending = [];
+  }
+
+  DT.bells = {
+    unlock, isUnlocked, setVolume, setMuted, play, schedule, cancelAll, SOUNDS,
+    _setContextFactory(fn) { factory = fn || defaultFactory; },
+    _resetForTests: resetForTests,
+    _master: () => master,
+  };
+})(window.DT = window.DT || {});
+
+/* === render.js === */
+/* render.js: the projected stage. Reads a View (engine.view) and writes text, attributes and CSS variables. */
+(function (DT) {
+  'use strict';
+  const SIDE_NAME = { pro: '正方', con: '反方' };
+  const BUILTIN_THEMES = ['hall', 'daylight', 'chroma'];   // used when build.py has not injected DT.THEMES
+  const LONG_TITLE = 14;       // characters; longer stage names step the title down a size
+  const ENTER_MS = 600;        // the entrance class outlives the longest entrance animation (560 ms)
+  const TOAST_MS = 1500;
+  const RING_MS = 1500;        // fallback removal when no animationend arrives (no stylesheet, animation off)
+  const RING_GAP_MS = 320;     // the second ring of an end bell, in step with the double bell
+  const BUMP_MS = 240;
+  const ACTIVE_COL = 58;       // percent of the width the speaking half takes in a dual stage
+
+  const CLOCK = '<span class="dt-digits"><span class="dt-sign"></span><span class="dt-min"></span>' +
+    '<span class="dt-colon">:</span><span class="dt-sec"></span></span><span class="dt-state"></span>';
+  const HALF = side => '<div class="dt-half" data-side="' + side + '"><div class="dt-half-field"></div>' +
+    '<div class="dt-team"></div><div class="dt-clock" data-clock="' + side + '">' + CLOCK + '</div>' +
+    '<div class="dt-floorline"></div></div>';
+  // Static markup only; every piece of match or format text goes in through textContent.
+  const TEMPLATE =
+    '<div class="dt-backdrop"></div><div class="dt-deco stage-deco"></div><div class="dt-field"></div>' +
+    '<div class="dt-warnline" hidden></div>' +
+    '<header class="dt-top"><span class="dt-match"></span><span class="dt-format"></span></header>' +
+    '<section class="dt-head"><h1 class="dt-title"></h1><p class="dt-speaker"></p></section>' +
+    '<div class="dt-clock" data-clock="main">' + CLOCK + '</div>' +
+    '<div class="dt-halves">' + HALF('pro') + HALF('con') + '</div>' +
+    '<section class="dt-card"><div class="dt-motions"><p class="dt-motion" data-side="pro"></p>' +
+    '<p class="dt-motion" data-side="con"></p></div>' +
+    '<div class="dt-teams"><span data-side="pro"></span><span data-side="con"></span></div>' +
+    '<table class="dt-record" hidden></table></section>' +
+    '<div class="dt-rings"></div>' +
+    '<footer class="dt-bottom"><div class="dt-progress"></div><div class="dt-next">' +
+    '<span class="dt-next-label"></span><span class="dt-next-name"></span><span class="dt-next-time"></span></div></footer>' +
+    '<div class="dt-toast" role="status" aria-live="polite"></div>';
+
+  // ---- small DOM helpers: write only when the value changes, so a per-frame update stays cheap ----
+
+  function text(el, s) { if (el.textContent !== s) el.textContent = s; }
+
+  function attr(el, name, value) {
+    if (value === false || value === null || value === undefined) {
+      if (el.hasAttribute(name)) el.removeAttribute(name);
+    } else {
+      const s = value === true ? '' : String(value);
+      if (el.getAttribute(name) !== s) el.setAttribute(name, s);
+    }
+  }
+
+  function cssVar(el, name, value) {
+    const s = typeof value === 'number' ? String(Math.round(value * 10000) / 10000) : value;
+    if (el.style.getPropertyValue(name) !== s) el.style.setProperty(name, s);
+  }
+
+  const clamp01 = x => Math.min(1, Math.max(0, x));
+  const reducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  // An empty team name reads as the side itself.
+  function teamName(match, side) {
+    const name = String((match && match[side + 'Team']) || '').trim();
+    return name || SIDE_NAME[side];
+  }
+
+  function themeOf(id) {
+    const ids = Array.isArray(DT.THEMES) ? DT.THEMES.map(t => t.id) : BUILTIN_THEMES;
+    return ids.indexOf(id) >= 0 ? id : 'hall';
+  }
+
+  // Digits tighten as time runs out; overtime and finished clocks stay tight; breaks never tense up.
+  function tension(clock, kind) {
+    if (!clock || kind === 'break') return 0;
+    if (clock.phase === 'over' || clock.phase === 'done') return 1;
+    return clamp01(1 - clock.fraction);
+  }
+
+  function stateText(clock, kind) {
+    if (kind === 'dual' && clock.locked) return clock.yielded > 0 ? '已放弃' : '时间到';
+    if (clock.running || !clock.active || clock.phase === 'done') return '';
+    return clock.remaining !== clock.total ? '暂停' : '';
+  }
+
+  // Rounded to whole seconds for the record table.
+  function duration(ms) { return DT.engine.fmt(Math.round(ms / 1000) * 1000); }
+
+  function mount(host) {
+    host.classList.add('dt-stage-host');
+    const stage = document.createElement('div');
+    stage.className = 'dt-stage';
+    stage.innerHTML = TEMPLATE;
+    const $ = sel => stage.querySelector(sel);
+    const els = {
+      field: $('.dt-field'), warnline: $('.dt-warnline'),
+      match: $('.dt-match'), format: $('.dt-format'),
+      title: $('.dt-title'), speaker: $('.dt-speaker'),
+      halves: $('.dt-halves'),
+      motions: { pro: $('.dt-motion[data-side="pro"]'), con: $('.dt-motion[data-side="con"]') },
+      teams: $('.dt-teams'),
+      record: $('.dt-record'), rings: $('.dt-rings'), progress: $('.dt-progress'),
+      next: [$('.dt-next-label'), $('.dt-next-name'), $('.dt-next-time')],
+      toast: $('.dt-toast'),
+    };
+    const clockParts = el => ({
+      el, sign: el.querySelector('.dt-sign'), min: el.querySelector('.dt-min'),
+      sec: el.querySelector('.dt-sec'), state: el.querySelector('.dt-state'),
+    });
+    const clocks = { main: clockParts($('.dt-clock[data-clock="main"]')) };
+    const halves = {};
+    ['pro', 'con'].forEach(side => {
+      const el = els.halves.querySelector('.dt-half[data-side="' + side + '"]');
+      halves[side] = { el, team: el.querySelector('.dt-team') };
+      clocks[side] = clockParts(el.querySelector('.dt-clock'));
+    });
+    const teamSpans = { pro: els.teams.querySelector('[data-side="pro"]'), con: els.teams.querySelector('[data-side="con"]') };
+    host.appendChild(stage);
+
+    const timers = new Set();
+    let destroyed = false;
+    let lastKey = null, lastSeat = null, progressSig = null, recordSig = null;
+    let segs = [];
+    let enterTimer = null, toastTimer = null;
+
+    function later(fn, ms) {
+      const id = setTimeout(() => { timers.delete(id); fn(); }, ms);
+      timers.add(id);
+      return id;
+    }
+    function cancel(id) { if (id !== null) { clearTimeout(id); timers.delete(id); } }
+
+    // Restart a one-shot class animation: remove, force a reflow, add again.
+    function replay(el, cls) {
+      el.classList.remove(cls);
+      void el.offsetWidth;
+      el.classList.add(cls);
+    }
+
+    function enter() {
+      replay(stage, 'is-entering');
+      cancel(enterTimer);
+      enterTimer = later(() => { enterTimer = null; stage.classList.remove('is-entering'); }, ENTER_MS);
+    }
+
+    function paintClock(parts, clock, kind) {
+      const over = clock.text.charAt(0) === '+';
+      const hm = (over ? clock.text.slice(1) : clock.text).split(':');
+      text(parts.sign, over ? '+' : '');
+      text(parts.min, hm[0]);
+      text(parts.sec, hm[1] || '');
+      text(parts.state, stateText(clock, kind));
+      attr(parts.el, 'data-phase', clock.phase);
+      attr(parts.el, 'data-running', clock.running ? 'true' : 'false');
+    }
+
+    // Put the pro element first when the pro side sits on the left, last otherwise.
+    function seatOrder(parent, proEl, conEl, seat) {
+      const first = seat === 'right' ? conEl : proEl;
+      if (parent.firstElementChild !== first) parent.insertBefore(first, parent.firstElementChild);
+    }
+
+    function paintProgress(progress) {
+      const sig = progress.map(p => [p.side, p.type, p.block, p.extra].join(',')).join('|');
+      if (sig !== progressSig) {
+        progressSig = sig;
+        els.progress.textContent = '';
+        segs = progress.map((p, i) => {
+          const seg = document.createElement('i');
+          seg.className = 'dt-seg';
+          attr(seg, 'data-side', p.side || 'none');
+          attr(seg, 'data-block', p.block);
+          attr(seg, 'data-kind', p.type);
+          attr(seg, 'data-gap', i > 0 && p.block !== progress[i - 1].block);
+          attr(seg, 'data-extra', p.extra);
+          els.progress.appendChild(seg);
+          return seg;
+        });
+      }
+      progress.forEach((p, i) => attr(segs[i], 'data-state', p.state));
+    }
+
+    function paintRecord(record) {
+      const sig = record ? JSON.stringify(record) : '';
+      if (sig === recordSig) return;
+      recordSig = sig;
+      const table = els.record;
+      table.textContent = '';
+      attr(table, 'hidden', !record);
+      if (!record) return;
+      cssVar(table, '--rows', record.length + 1);
+      const row = (cells, tag) => {
+        const tr = document.createElement('tr');
+        cells.forEach(c => { const td = document.createElement(tag); td.textContent = c; tr.appendChild(td); });
+        table.appendChild(tr);
+        return tr;
+      };
+      row(['环节', '计划', '实际', ''], 'th');
+      record.forEach(r => {
+        let note = '';
+        if (r.over >= 1000) note = '超时 ' + duration(r.over);
+        else if (r.yielded >= 1000) note = '放弃 ' + duration(r.yielded);
+        const tr = row([r.name, DT.engine.fmt(r.planned), r.used > 0 ? duration(r.used) : '—', note], 'td');
+        attr(tr, 'data-side', r.side || 'none');
+        attr(tr, 'data-over', r.over >= 1000);
+        attr(tr, 'data-skipped', r.used <= 0);
+      });
+    }
+
+    function nextParts(v, idleSide) {
+      if (idleSide) return ['空格开始', '先由' + SIDE_NAME[idleSide] + '发言', ''];
+      if (!v.next) return ['', '', ''];
+      const time = (v.next.type === 'dual' ? '各 ' : '') + DT.engine.fmt(v.next.secs * 1000);
+      if (v.mode === 'title') return ['空格开始', '第一个环节：' + v.next.name, time];
+      return ['下一环节', v.next.name, time];
+    }
+
+    function update(v) {
+      if (destroyed || !v) return;
+      const st = v.mode === 'stage' ? v.stage : null;
+      const kind = st ? st.type : 'break';
+      const seat = v.proSeat === 'right' ? 'right' : 'left';
+      const match = v.match || {};
+
+      const key = v.mode + '|' + (st ? st.id : '');
+      if (key !== lastKey) { lastKey = key; enter(); }
+      if (seat !== lastSeat) {
+        lastSeat = seat;
+        seatOrder(els.halves, halves.pro.el, halves.con.el, seat);
+        seatOrder(els.teams, teamSpans.pro, teamSpans.con, seat);
+      }
+
+      const active = kind === 'dual' ? v.clocks.find(c => c.active) || null : v.clocks[0] || null;
+      const idle = kind === 'dual' && !active;
+      attr(stage, 'data-mode', v.mode);
+      attr(stage, 'data-kind', kind);
+      attr(stage, 'data-side', (active && kind !== 'break' && active.side) || 'none');
+      attr(stage, 'data-phase', active ? active.phase : 'calm');
+      attr(stage, 'data-running', v.running ? 'true' : 'false');
+      attr(stage, 'data-theme', themeOf(v.theme));
+      attr(stage, 'data-pro-seat', seat);
+      attr(stage, 'data-long', st && Array.from(st.name).length > LONG_TITLE ? 'true' : 'false');
+      cssVar(stage, '--used', kind !== 'dual' && active ? 1 - active.fraction : 0);
+      cssVar(stage, '--tension', tension(active, kind));
+      cssVar(stage, '--warn-at', v.warnAt || 0);
+      attr(els.warnline, 'hidden', !st || v.warnAt === null || v.warnAt === undefined);
+
+      text(els.match, match.title || '');
+      text(els.format, v.formatName || '');
+      text(els.title, st ? st.name : v.mode === 'end' ? '比赛结束' : '');
+      text(els.speaker, st ? st.speaker : '');
+
+      if (st && kind !== 'dual') paintClock(clocks.main, active, kind);
+      if (kind === 'dual') {
+        attr(els.halves, 'data-idle', idle);
+        const leftSide = seat === 'left' ? 'pro' : 'con';
+        const leftCol = idle ? 50 : active.side === leftSide ? ACTIVE_COL : 100 - ACTIVE_COL;
+        cssVar(els.halves, '--left-col', leftCol + '%');
+        cssVar(els.halves, '--right-col', (100 - leftCol) + '%');
+        v.clocks.forEach(c => {
+          const h = halves[c.id];
+          attr(h.el, 'data-active', !idle && c.active);
+          attr(h.el, 'data-locked', c.locked);
+          cssVar(h.el, '--remain', c.locked ? 0 : c.fraction);
+          cssVar(h.el, '--tension', tension(c, kind));
+          paintClock(clocks[c.id], c, kind);
+        });
+      }
+
+      ['pro', 'con'].forEach(side => {
+        const motion = String(match[side + 'Motion'] || '');
+        text(els.motions[side], motion);
+        attr(els.motions[side], 'hidden', !motion);
+        // The side label is drawn by CSS from data-label; it is left out when the name already is the side.
+        const name = teamName(match, side);
+        const label = name === SIDE_NAME[side] ? '' : SIDE_NAME[side];
+        text(teamSpans[side], name);
+        attr(teamSpans[side], 'data-label', label);
+        text(halves[side].team, name);
+        attr(halves[side].team, 'data-label', label);
+      });
+      paintRecord(v.mode === 'end' && Array.isArray(v.record) ? v.record : null);
+      paintProgress(v.progress || []);
+      nextParts(v, idle ? st.first || 'pro' : null).forEach((s, i) => text(els.next[i], s));
+    }
+
+    // A ring centred on the digits of the clock that rang.
+    function ring(clockId) {
+      if (destroyed) return;
+      const parts = clocks[clockId] || clocks.main;
+      const box = stage.getBoundingClientRect();
+      const r = parts.el.querySelector('.dt-digits').getBoundingClientRect();
+      const x = box.width && r.width ? (r.left + r.width / 2 - box.left) / box.width * 100 : 50;
+      const y = box.height && r.height ? (r.top + r.height / 2 - box.top) / box.height * 100 : 50;
+      const el = document.createElement('i');
+      el.className = 'dt-ring';
+      el.style.left = x + '%';
+      el.style.top = y + '%';
+      let fallback = null;
+      const done = () => { cancel(fallback); el.remove(); };
+      el.addEventListener('animationend', done);
+      fallback = later(done, RING_MS);
+      els.rings.appendChild(el);
+    }
+
+    function pulse(event) {
+      if (destroyed || !event || reducedMotion()) return;
+      if (event.type === 'count') {
+        const parts = clocks[event.clock] || clocks.main;
+        replay(parts.el, 'is-bump');
+        later(() => parts.el.classList.remove('is-bump'), BUMP_MS);
+      } else if (event.type === 'warn') {
+        ring(event.clock);
+      } else if (event.type === 'end') {
+        ring(event.clock);
+        later(() => ring(event.clock), RING_GAP_MS);
+      }
+      // 'switch' needs nothing extra: the halves' own transition is the animation.
+    }
+
+    function toast(message) {
+      if (destroyed) return;
+      cancel(toastTimer);
+      text(els.toast, message || '');
+      if (!message) { els.toast.classList.remove('is-shown'); return; }
+      els.toast.classList.add('is-shown');
+      toastTimer = later(() => { toastTimer = null; els.toast.classList.remove('is-shown'); }, TOAST_MS);
+    }
+
+    function destroy() {
+      destroyed = true;
+      timers.forEach(id => clearTimeout(id));
+      timers.clear();
+      stage.remove();
+    }
+
+    return { update, pulse, toast, destroy, el: stage };
+  }
+
+  DT.render = { mount };
+})(window.DT = window.DT || {});
+
+/* === setup.js === */
+/* not written yet */
+
+/* === editor.js === */
+/* not written yet */
+
+/* === sync.js === */
+/* not written yet */
+
+/* === demo.js === */
+/* demo.js: fixed scenes for ?demo=<name>, played out with engine actions; used for screenshots and visual review. */
+(function (DT) {
+  'use strict';
+  const S = 1000;
+  const FORMAT_ID = 'ustc-freshman-cup';
+  const MATCH = {
+    title: '新生赛 第 3 场', proMotion: '大学生应该优先发展兴趣', conMotion: '大学生不应该优先发展兴趣',
+    proTeam: '物理学院', conTeam: '化学院', proSeat: 'left',
+  };
+  const LONG_NAME = '正方一辩就大学生是否应当优先发展个人兴趣而非专业技能进行开篇立论并回应对方的质疑';  // 40 characters
+  const END_OVER = { '反方二辩驳论': 6, '正方四辩结辩': 9 };  // seconds of overtime on the end card
+
+  function freshman() { return DT.BUILTIN_FORMATS.find(f => f.id === FORMAT_ID); }
+
+  // The freshman cup with its first stage swapped for a 40-character, 60-minute one.
+  function longFormat() {
+    const f = JSON.parse(JSON.stringify(freshman()));
+    f.stages[0] = { id: 'demo-long', name: LONG_NAME, type: 'single', side: 'pro', secs: 3600,
+      speaker: '正一 陈述，反方四位辩手依次提问', block: 'A' };
+    return f;
+  }
+
+  // Every stage gets some time; two single stages run over.
+  function endScene() {
+    const steps = [];
+    let t = 0;
+    freshman().stages.forEach((st, i) => {
+      steps.push([t, 'goto', i]);
+      t += 2;
+      if (st.type === 'dual') {
+        steps.push([t, 'floor', 'pro'], [t + st.secs - 4, 'floor', 'con'], [t + 2 * st.secs - 13, 'pause']);
+        t += 2 * st.secs - 13;
+      } else if (st.type === 'break') {
+        steps.push([t, 'toggle']);
+        t += st.secs;
+      } else {
+        const spoke = st.secs + (END_OVER[st.name] || -((i * 7) % 12 + 1));
+        steps.push([t, 'toggle'], [t + spoke, 'toggle']);
+        t += spoke;
+      }
+    });
+    steps.push([t + 2, 'goto', freshman().stages.length]);
+    return { at: t + 2, steps };
+  }
+
+  // Each scene (or a function returning one): `at` is the frozen moment in seconds after the first step;
+  // steps are [second, action, arg?].
+  const SINGLE = { at: 73, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle']] };
+  const DUAL = { at: 137, steps: [[0, 'goto', '自由辩论'], [0, 'floor', 'pro'], [20, 'floor', 'con'], [68, 'floor', 'pro']] };
+  const SCENES = {
+    'title': { at: 0, steps: [] },
+    'single': SINGLE,
+    'cross': { at: 96, steps: [[0, 'goto', '反方四辩质询正方一辩'], [0, 'toggle']] },
+    'over': { at: 217, steps: [[0, 'goto', '反方四辩结辩'], [0, 'toggle']] },
+    'dual': DUAL,
+    'dual-locked': { at: 432, steps: [[0, 'goto', '自由辩论'], [0, 'floor', 'pro'], [100, 'floor', 'con']] },
+    'dual-idle': { at: 4, steps: [[0, 'goto', '自由辩论']] },
+    'break': { at: 12, steps: [[0, 'goto', '评委打分'], [0, 'toggle']] },
+    'end': endScene,
+    'daylight': Object.assign({ theme: 'daylight' }, SINGLE),
+    'chroma': Object.assign({ theme: 'chroma' }, DUAL),
+    'seat-right': Object.assign({ seat: 'right' }, DUAL),
+    'long': { at: 73, format: longFormat, steps: [[0, 'goto', LONG_NAME], [0, 'toggle']] },
+  };
+
+  // Play the scene so that its last moment is `now`; the loop ticks before each action, as the UI does.
+  function build(name, now) {
+    if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
+    const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
+    const E = DT.engine;
+    const t0 = now - scene.at * S;
+    const match = Object.assign({}, MATCH, scene.seat ? { proSeat: scene.seat } : {});
+    let s = E.createSession((scene.format || freshman)(), match, t0, { theme: scene.theme });
+    scene.steps.forEach(([sec, act, arg]) => {
+      const t = t0 + sec * S;
+      s = E.tick(s, t).session;
+      if (act === 'goto') s = E.goto(s, typeof arg === 'number' ? arg : s.timeline.findIndex(x => x.name === arg), t);
+      else if (act === 'floor') s = E.floor(s, arg, t);
+      else s = E[act](s, t);
+    });
+    return { route: 'timer', session: E.tick(s, now).session };
+  }
+
+  DT.demo = { names: Object.keys(SCENES), build };
+})(window.DT = window.DT || {});
+
+/* === ui.js === */
+/* ui.js: application assembly: boot, routing, demo scenes and the frame loop. */
+(function (DT) {
+  'use strict';
+
+  // Demos keep their writes in memory so they never touch the real saved match.
+  function memoryStorage() {
+    const m = new Map();
+    return {
+      getItem: k => (m.has(k) ? m.get(k) : null),
+      setItem: (k, v) => { m.set(k, String(v)); },
+      removeItem: k => { m.delete(k); },
+    };
+  }
+
+  function routeOf(loc) {
+    const params = new URLSearchParams(loc.search || '');
+    const demo = params.get('demo');
+    if (demo && DT.demo.names.indexOf(demo) >= 0) return { name: 'demo', demo, frozen: params.get('frozen') === '1' };
+    // '#projector' becomes the projector window in the sync task; until then it opens like any other page.
+    return { name: 'timer' };
+  }
+
+  function boot(opts) {
+    const o = opts || {};
+    const root = o.root;
+    if (o.clock) DT.clock.set(() => o.clock.now());
+    const route = routeOf(o.location || window.location);
+    let session;
+    if (route.name === 'demo') {
+      DT.store.useStorage(memoryStorage());
+      const now = DT.clock.now();
+      if (route.frozen) DT.clock.set(() => now);
+      session = DT.demo.build(route.demo, now).session;
+    } else {
+      if (o.storage) DT.store.useStorage(o.storage);
+      // Until the setup page exists: open a match in the first built-in format, on its title card.
+      session = DT.engine.createSession(DT.BUILTIN_FORMATS[0], {}, DT.clock.now());
+    }
+
+    root.classList.add('dt-app');
+    const stage = DT.render.mount(root);
+    let raf = null;
+
+    function viewAt(now) {
+      const v = DT.engine.view(session, now);
+      if (v.mode === 'end') v.record = DT.engine.record(session, now);
+      return v;
+    }
+
+    // One frame: apply the automatic rules, play their visual events, repaint.
+    function frame() {
+      const now = DT.clock.now();
+      const out = DT.engine.tick(session, now);
+      session = out.session;
+      out.events.forEach(e => stage.pulse(e));
+      stage.update(viewAt(now));
+      raf = requestAnimationFrame(frame);
+    }
+    frame();
+
+    return {
+      session: () => session,
+      view: () => viewAt(DT.clock.now()),
+      destroy() {
+        cancelAnimationFrame(raf);
+        stage.destroy();
+        root.classList.remove('dt-app');
+      },
+    };
+  }
+
+  function autoboot() {
+    if (document.body.hasAttribute('data-dt-autoboot')) boot({ root: document.getElementById('app') });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autoboot);
+  else autoboot();
+
+  DT.app = { boot };
+})(window.DT = window.DT || {});
+
+</script>
+</body>
+</html>
