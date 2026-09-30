@@ -237,6 +237,14 @@
       const box = root.getBoundingClientRect();
       assert.ok(px(cs.height) < 0.1 * box.height && px(cs.height) > 0.03 * box.height, where + ': ' + cs.height);
       assert.ok(/circle/.test(cs.backgroundImage) && /line|path/.test(cs.backgroundImage), where + ': a target');
+      // Heavy enough to find from the back of the hall, knocked out of the dots onto a disc of bare paper.
+      const sw = /stroke-width='([\d.]+)'/.exec(decodeURIComponent(cs.backgroundImage));
+      assert.ok(sw && Number(sw[1]) >= 2.2, where + ': strokes about a tenth of the mark: ' + (sw && sw[1]));
+      assert.ok(px(cs.height) >= 0.085 * box.height, where + ': about 9cqh across: ' + cs.height);
+      const disc = /<circle r='([\d.]+)' fill='%23EDF0EF'|<circle r='([\d.]+)' fill='#EDF0EF'/.exec(cs.backgroundImage) ||
+        /<circle r='([\d.]+)' fill='#EDF0EF'/.exec(decodeURIComponent(cs.backgroundImage));
+      assert.ok(disc, where + ': on a disc of paper');
+      assert.ok(isInk('#EDF0EF', rgba(resolve(root, '--ground')).slice(0, 3)), where + ': the disc is the paper');
       const t = mark.getBoundingClientRect(), f = root.querySelector('.dt-field').getBoundingClientRect();
       assert.ok(t.top >= f.top && t.bottom <= f.bottom, where + ': on the halftone');
       const x = (t.left + t.width / 2 - box.left) / box.width;
@@ -350,7 +358,7 @@
   });
 
   // The title card: each motion is marked with a block of its side's ink; the side labels over the team names are
-  // in the overprint, readable, with an edge of their side's ink.
+  // in the overprint, readable. They are small type, so they print in register: the drums' offset would smear them.
   DT.test('theme riso: on the title card the motions and teams carry their side\'s ink', () => {
     const { stage, root } = mountPoster(E.view(E.createSession(F(), MATCH, T0, { theme: 'riso' }), T0));
     assert.equal(root.dataset.mode, 'title');
@@ -360,9 +368,31 @@
       assert.ok(isInk(mark.backgroundColor, inkOf(side)), side + ': ' + mark.backgroundColor);
       const label = pseudo(root.querySelector('.dt-teams span[data-side="' + side + '"]'), '::before');
       assert.ok(contrast(label.color, paper) >= 4.5, side + ' label reads: ' + label.color);
-      assert.ok(shadows(label.textShadow).some(s => isInk(s.color, inkOf(side))), side + ': ' + label.textShadow);
+      assert.equal(label.textShadow, 'none', side + ': no misregistration on small type');
     });
     stage.destroy();
+  });
+
+  // Misregistration is for type of 4cqh and up: every piece of text on every scene that carries the two drums'
+  // offset is at least that large; the small labels (正方 / 反方 over the teams, about 2.2cqh) print in the overprint.
+  DT.test('theme riso: only large type is printed off register', () => {
+    const scenes = [E.view(E.createSession(F(), MATCH, T0, { theme: 'riso' }), T0), singleAt(OPENING, 60), dualAt(30)];
+    scenes.forEach(view => {
+      const { stage, root } = mountPoster(view, 1920, 1080);
+      const H = root.getBoundingClientRect().height;
+      const els = [root].concat(Array.from(root.querySelectorAll('*')));
+      els.forEach(el => ['', '::before', '::after'].forEach(which => {
+        const cs = which ? getComputedStyle(el, which) : getComputedStyle(el);
+        if (which && (cs.content === 'none' || cs.content === 'normal')) return;
+        if (el.closest('[hidden]') || cs.display === 'none') return;
+        const two = shadows(cs.textShadow).filter(sh => isInk(sh.color, inkOf('pro')) || isInk(sh.color, inkOf('con')));
+        if (two.length < 2) return;
+        const text = which ? cs.content : Array.from(el.childNodes).filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim();
+        if (!text || text === '""') return;
+        assert.ok(px(cs.fontSize) >= 0.04 * H - 0.5, root.dataset.mode + ' ' + (el.className || el.tagName) + which + ' "' + text + '" at ' + cs.fontSize);
+      }));
+      stage.destroy();
+    });
   });
 
   // The title card and the break are the poster's picture: a halftone disc of each ink rising from its side's seat,

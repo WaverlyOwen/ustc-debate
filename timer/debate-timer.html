@@ -3273,24 +3273,26 @@ body {
 
 /* ---- the warn bell point: a registration target on the halftone ---- */
 
+/* Large and heavy enough to find from the back of the hall: the target is knocked out of the dots, printed on a disc
+   of bare paper, its strokes about 2.4 units of 24 (a 3px hairline among dots of the same ink would vanish). */
 .dt-stage[data-theme="riso"] .dt-warnline {
-  top: calc(var(--band-bottom) - 8.4cqh);
+  top: calc(var(--band-bottom) - 10.1cqh);
   bottom: auto;
-  left: clamp(2.8cqh, calc(var(--warn-at) * 100%), calc(100% - 2.8cqh));
-  width: 5.6cqh;
-  height: 5.6cqh;
-  margin-left: -2.8cqh;
+  left: clamp(4.5cqh, calc(var(--warn-at) * 100%), calc(100% - 4.5cqh));
+  width: 9cqh;
+  height: 9cqh;
+  margin-left: -4.5cqh;
   background: var(--target) center / contain no-repeat;
   -webkit-mask-image: none;
   mask-image: none;
-  --target: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><g fill='none' stroke-width='1.3'><g stroke='%23F15060' transform='translate(-.5 -.3)'><circle r='6.5'/><path d='M-11.5 0H11.5M0-11.5V11.5'/></g><g stroke='%23002343' transform='translate(.2 .1)'><circle r='6.5'/><path d='M-11.5 0H11.5M0-11.5V11.5'/></g></g></svg>");
+  --target: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><circle r='11.6' fill='%23EDF0EF'/><g fill='none' stroke-width='2.4'><g stroke='%23F15060' transform='translate(-.6 -.4)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g><g stroke='%23002343' transform='translate(.3 .2)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g></g></svg>");
 }
 .dt-stage[data-theme="riso"][data-side="con"] .dt-warnline {
-  --target: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><g fill='none' stroke-width='1.3'><g stroke='%230078BF' transform='translate(-.5 -.3)'><circle r='6.5'/><path d='M-11.5 0H11.5M0-11.5V11.5'/></g><g stroke='%23002343' transform='translate(.2 .1)'><circle r='6.5'/><path d='M-11.5 0H11.5M0-11.5V11.5'/></g></g></svg>");
+  --target: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><circle r='11.6' fill='%23EDF0EF'/><g fill='none' stroke-width='2.4'><g stroke='%230078BF' transform='translate(-.6 -.4)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g><g stroke='%23002343' transform='translate(.3 .2)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g></g></svg>");
 }
 .dt-stage[data-theme="riso"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
 .dt-stage[data-theme="riso"][data-pro-seat="left"][data-side="con"] .dt-warnline {
-  left: clamp(2.8cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 2.8cqh));
+  left: clamp(4.5cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 4.5cqh));
 }
 
 /* ---- overtime: the second drum slips, and 超时 is knocked out of a block of the side's ink ---- */
@@ -3355,12 +3357,14 @@ body {
 }
 .dt-stage[data-theme="riso"] .dt-half .dt-clock { top: calc((var(--dual-top) + var(--band-bottom)) / 2); }
 .dt-stage[data-theme="riso"] .dt-team { font-weight: 700; }
+/* The side labels are small type (about 2.2cqh): the drums' misregistration, which gives the large type its edge,
+   would only smear them, so they print in the overprint alone. Misregistration is kept for type of 4cqh and up. */
 .dt-stage[data-theme="riso"] .dt-team::before,
 .dt-stage[data-theme="riso"] .dt-teams span::before {
   color: var(--ink);
   opacity: 1;
   font-weight: 700;
-  text-shadow: -.14cqh -.06cqh 0 var(--own-ink), .14cqh .06cqh 0 var(--other-ink);
+  text-shadow: none;
 }
 /* The speaker's floor line: a rule of the side's ink under its poster. */
 .dt-stage[data-theme="riso"] .dt-floorline {
