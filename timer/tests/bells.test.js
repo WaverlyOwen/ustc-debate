@@ -6,7 +6,7 @@
     function node(kind) {
       return { kind, frequency: param(), gain: param(), Q: param(), type: '', buffer: null,
         connect() { return this; }, disconnect() { this.disconnected = true; },
-        start(t) { this.startAt = t; started.push(this); }, stop(t) { this.stopAt = t; } };
+        start(t) { this.startAt = t; started.push(this); }, stop(t) { this.stopAt = t; (this.stopCalls = this.stopCalls || []).push(t); } };
     }
     return {
       currentTime: 10, state: 'running', destination: node('dest'), sampleRate: 48000, started,
@@ -30,11 +30,24 @@
 
   DT.test('bells: schedule dedupes, skips the past and replaces the previous plan', () => {
     fresh(); DT.clock.set(() => 0); B.unlock();
+    B.schedule([{ at: 1000, sound: 'ding' }], 0);
+    const oneDing = ctx.started.length;
+    assert.ok(oneDing >= 3);
+    B.cancelAll(); ctx.started.length = 0;
     B.schedule([{ at: 1000, sound: 'ding' }, { at: 1000, sound: 'ding' }, { at: -5000, sound: 'ding' }], 0);
     const first = ctx.started.length;
-    assert.ok(first >= 3);
+    assert.equal(first, oneDing, 'duplicate and past dings are dropped');
+    ctx.started.forEach(n => assert.near(n.startAt, 11, 0.01));
+    const firstBatch = ctx.started.slice();
+    assert.ok(!ctx.started.some(n => Math.abs(n.startAt - 12) < 0.01), 'no tick planned yet');
     B.schedule([{ at: 2000, sound: 'tick' }], 0);
-    ctx.started.slice(0, first).forEach(n => assert.ok(n.stopAt !== undefined, 'old nodes stopped'));
+    firstBatch.forEach(n => {
+      assert.ok(n.stopCalls.includes(0), 'old node stopped at 0');
+      assert.equal(n.disconnected, true, 'old node disconnected');
+    });
+    const fresh2 = ctx.started.slice(first);
+    assert.ok(fresh2.length > 0);
+    fresh2.forEach(n => assert.near(n.startAt, 12, 0.01));
     DT.clock.reset();
   });
 
