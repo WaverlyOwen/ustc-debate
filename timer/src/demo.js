@@ -44,7 +44,7 @@
   }
 
   // Each scene (or a function returning one): `at` is the frozen moment in seconds after the first step;
-  // steps are [second, action, arg?].
+  // steps are [second, action, arg?]; `dock: true` keeps the control dock open.
   const SINGLE = { at: 73, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle']] };
   const DUAL = { at: 137, steps: [[0, 'goto', '自由辩论'], [0, 'floor', 'pro'], [20, 'floor', 'con'], [68, 'floor', 'pro']] };
   const SCENES = {
@@ -61,6 +61,7 @@
     'chroma': Object.assign({ theme: 'chroma' }, DUAL),
     'seat-right': Object.assign({ seat: 'right' }, DUAL),
     'long': { at: 73, format: longFormat, steps: [[0, 'goto', LONG_NAME], [0, 'toggle']] },
+    'dock': Object.assign({ dock: true }, SINGLE),   // the control dock held open over a running stage
   };
 
   // Play the scene so that its last moment is `now`; the loop ticks before each action, as the UI does.
@@ -78,7 +79,7 @@
       else if (act === 'floor') s = E.floor(s, arg, t);
       else s = E[act](s, t);
     });
-    return { route: 'timer', session: E.tick(s, now).session };
+    return { route: 'timer', session: E.tick(s, now).session, dock: !!scene.dock };
   }
 
   DT.demo = { names: Object.keys(SCENES), build };
