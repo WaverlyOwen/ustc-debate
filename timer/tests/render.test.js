@@ -121,6 +121,46 @@
     h.destroy();
   });
 
+  // A frozen demo is a still for review: every transition lands at once and every animation at its end, so a still
+  // shows the state it is taken for, even where the browser would stall a transition part way (a painter's canvas).
+  DT.test('render: a frozen demo shows end states, with no transition or animation part way', () => {
+    const url = window.location.href;
+    const at = search => history.replaceState(null, '', window.location.pathname + search);
+    let h = null;
+    try {
+      h = R.mount(host());
+      h.update(E.view(E.toggle(session(0), T0), T0));
+      assert.ok(!document.querySelector('.dt-stage').hasAttribute('data-still'), 'a live page is not a still');
+      assert.ok(parseFloat(getComputedStyle(document.querySelector('.dt-digits')).transitionDuration) > 0, 'live digits ease');
+      h.destroy();
+      at('?demo=single&frozen=1');
+      h = R.mount(host());
+      h.update(E.view(E.toggle(session(stageIdx('自由辩论')), T0), T0));
+      const root = document.querySelector('.dt-stage');
+      assert.ok(root.hasAttribute('data-still'));
+      ['.dt-halves', '.dt-digits', '.dt-colon', '.dt-field'].forEach(sel => {
+        assert.equal(getComputedStyle(root.querySelector(sel)).transitionDuration, '0s', sel);
+      });
+      assert.equal(getComputedStyle(root.querySelector('.dt-deco'), '::before').transitionDuration, '0s', 'pseudo-elements too');
+      h.pulse({ type: 'warn', clock: 'pro' });
+      const ring = root.querySelector('.dt-ring');
+      assert.ok(ring, 'the ring is still added');
+      assert.equal(getComputedStyle(ring).animationDelay, '-10s', 'and is already over');
+      assert.equal(getComputedStyle(ring).animationPlayState, 'paused');
+      h.destroy();
+      // A breathing loop stands at its start, full strength, not wherever the clock of the browser happened to be.
+      h = R.mount(host());
+      h.update(E.view(E.toggle(session(0), T0), T0 + 187000));
+      const sign = document.querySelector('.dt-stage .dt-sign');
+      assert.equal(getComputedStyle(sign).animationName, 'dt-breathe', 'overtime breathes');
+      assert.equal(getComputedStyle(sign).animationPlayState, 'paused');
+      assert.equal(getComputedStyle(sign).opacity, '1');
+    } finally {
+      history.replaceState(null, '', url);
+      if (h) h.destroy();
+    }
+  });
+
   DT.test('render: end card lists the record when given', () => {
     const h = R.mount(host());
     let s = E.toggle(session(0), T0); s = E.goto(s, 99, T0 + 190000);

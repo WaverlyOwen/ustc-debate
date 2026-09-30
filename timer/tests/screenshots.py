@@ -66,7 +66,8 @@ def main(argv=None):
         for name in names:
             out = out_dir / f"{name}.png"
             out.unlink(missing_ok=True)
-            cmd = [browser, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1",
+            # No --disable-gpu: with it, a painter theme's canvas stalls the page's CSS transitions part way.
+            cmd = [browser, "--headless=new", "--hide-scrollbars", "--force-device-scale-factor=1",
                    "--no-first-run", "--no-default-browser-check", f"--user-data-dir={profile}",
                    f"--window-size={w},{h}", "--virtual-time-budget=3000", f"--screenshot={out}",
                    f"{page.as_uri()}?demo={name}&frozen=1" + (f"&theme={quote(args.theme)}" if args.theme else "")]

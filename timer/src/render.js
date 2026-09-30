@@ -141,6 +141,8 @@
     const stage = document.createElement('div');
     stage.className = 'dt-stage';
     stage.innerHTML = TEMPLATE;
+    // A frozen demo's stage is a still: stage.css lands its transitions and animations at their ends.
+    if (frozenPage()) stage.setAttribute('data-still', '');
     const $ = sel => stage.querySelector(sel);
     const els = {
       deco: $('.dt-deco'), field: $('.dt-field'), warnline: $('.dt-warnline'),

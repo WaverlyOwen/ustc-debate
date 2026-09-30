@@ -616,6 +616,16 @@ body {
   to { transform: scale(2.4); opacity: 0; }
 }
 
+/* A frozen demo (?demo=…&frozen=1) is a still for review: it shows each state at its end. A transition lands at
+   once; an animation stands 10 s in, so a one-shot is over (a ring gone, an entrance risen) and a loop is at its
+   start (a breathe at full strength), however long the browser took to take the picture. This also keeps a headless
+   browser from stalling a transition part way, as it does under a painter's canvas. */
+.dt-stage[data-still], .dt-stage[data-still] *, .dt-stage[data-still] *::before, .dt-stage[data-still] *::after {
+  transition: none !important;
+  animation-delay: -10s !important;
+  animation-play-state: paused !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dt-stage, .dt-stage *, .dt-stage *::before, .dt-stage *::after {
     animation: none !important;
@@ -2401,6 +2411,14 @@ body {
 /* --side-color is the glow at its strongest over the sky: what the digits and the head can sit on (spec §1.5). */
 .dt-stage[data-theme="startrail"][data-side="pro"] { --side-color: #5E3053; --glow: var(--pro-glow); }
 .dt-stage[data-theme="startrail"][data-side="con"] { --side-color: #204C72; --glow: var(--con-glow); }
+/* While a side holds the floor, the haze over the horizon is its colour rather than the town's: even with the clock
+   run out and the nebula at its faintest, the bottom third of the room says whose floor it is. */
+.dt-stage[data-theme="startrail"][data-side="pro"],
+.dt-stage[data-theme="startrail"][data-side="con"] {
+  --backdrop:
+    radial-gradient(110% 36% at 50% 100%, rgb(var(--glow) / .3), transparent),
+    linear-gradient(to bottom, #080C2A, #0E1438 38%, #18194A 70%, #2C2250 88%, #452C4E);
+}
 .dt-stage[data-theme="startrail"] { --glow: 150 170 230; --glow-x: 0%; }
 /* The speaking side sits on the right: its glow and its line of time start from the right edge. */
 .dt-stage[data-theme="startrail"][data-pro-seat="right"][data-side="pro"],
@@ -2421,7 +2439,8 @@ body {
   mask-composite: intersect;
   will-change: opacity;
 }
-.dt-stage[data-theme="startrail"] .dt-field { opacity: calc(.26 + .74 * (1 - var(--used))); }
+/* It fades with the time left, but never out: at its faintest it still says whose floor it is (spec §1.5). */
+.dt-stage[data-theme="startrail"] .dt-field { opacity: calc(.55 + .45 * (1 - var(--used))); }
 /* Not taken back: the glow fades instead. inset(0) rather than none, so the entrance sweep still animates; [data-mode]
    ranks this with stage.css's per-seat clip-path rules, which it replaces. */
 .dt-stage[data-theme="startrail"][data-mode] .dt-field,
@@ -2525,7 +2544,7 @@ body {
 .dt-stage[data-theme="startrail"] .dt-half-field {
   inset: 0;
   height: auto;
-  opacity: calc(.3 + .7 * var(--remain, 1));
+  opacity: calc(.5 + .5 * var(--remain, 1));
 }
 .dt-stage[data-theme="startrail"] .dt-half[data-locked] .dt-half-field { opacity: 0; }
 
@@ -4482,6 +4501,8 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     const stage = document.createElement('div');
     stage.className = 'dt-stage';
     stage.innerHTML = TEMPLATE;
+    // A frozen demo's stage is a still: stage.css lands its transitions and animations at their ends.
+    if (frozenPage()) stage.setAttribute('data-still', '');
     const $ = sel => stage.querySelector(sel);
     const els = {
       deco: $('.dt-deco'), field: $('.dt-field'), warnline: $('.dt-warnline'),
@@ -4884,13 +4905,15 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
   const TITLE_USED = 0.3;         // the title card shows an exposure already under way
   const ACTIVE_COL = 0.58;        // the speaking half's share of the width in free debate (as render.js)
   const HALF_SKY = 0.62;          // a pole's stars in free debate reach this far, so the wider half is covered too
+  const CAST_FLOOR = { whole: 0.45, half: 0.15 };   // the least cast a star takes, far from its pole: a single stage's
+                                  // whole sky leans to the speaker; two skies side by side keep to their own halves
   const STEP_PX = 2;              // a trail is drawn on only once it has grown this many pixels: pieces shorter than a
                                   // pixel would each be antialiased on their own and add up dimmer than one stroke
   const POLE = { x: -0.07, y: -0.42 };   // the pole, off the upper corner, in stage widths and heights
 
   // Starlight from hot to cool, and each side's cast: 正方 warm, 反方 cold.
   const TEMPS = [[170, 198, 255], [212, 225, 255], [246, 246, 255], [255, 238, 212], [255, 210, 160]];
-  const CAST = { pro: [255, 176, 118], con: [128, 190, 255] };
+  const CAST = { pro: [255, 176, 118], con: [104, 204, 240] };   // 反方 leans to the nebula's teal, not the blue-white of hot stars
 
   const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
   const quant = (x, step) => Math.round(x / step) * step;
@@ -4926,9 +4949,10 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
   }
 
   // One stroke style per group of stars, so a frame strokes a few dozen paths rather than hundreds. `cast` tints
-  // the stars toward a side, the most at the pole's own edge; `spread` is how far across the stage that reaches.
-  function groupsOf(sky, cast, spread, k) {
-    const key = (cast || '') + '|' + spread;   // a sky is made again whenever the stage (and so k) changes size
+  // the stars toward a side, the most at the pole's own edge; `spread` is how far across the stage that falls off,
+  // and `floor` the least cast any star keeps.
+  function groupsOf(sky, cast, spread, floor, k) {
+    const key = (cast || '') + '|' + spread + '|' + floor;   // a sky is made again whenever the stage (and so k) changes size
     if (sky.groups[key]) return sky.groups[key];
     const halos = {}, cores = {};
     const add = (into, style, width, star) => {
@@ -4939,7 +4963,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       const bright = Math.pow(s.m, 4);
       const i = s.t * (TEMPS.length - 1), lo = Math.floor(i), hi = Math.min(TEMPS.length - 1, lo + 1);
       let c = mix(TEMPS[lo], TEMPS[hi], i - lo);
-      if (cast) c = mix(c, CAST[cast], 0.85 * Math.max(0.15, 1 - s.x / spread));
+      if (cast) c = mix(c, CAST[cast], 0.85 * Math.max(floor, 1 - s.x / spread));
       const rgb = c.map(v => Math.min(255, quant(v, 8))).join(' ');
       const alpha = quant(0.14 + 0.8 * Math.pow(s.m, 2.4), 0.04);
       const width = quant((0.6 + 2 * bright) * k, 0.2);
@@ -4995,7 +5019,8 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     function arcs(pole, ends, to, cap) {
       const sky = skyOf(pole.sky);
       const k = Math.max(0.75, Math.sqrt(Math.min(1, W / 1920)));   // thinner on a small stage, never hairlines
-      const groups = groupsOf(sky, pole.cast, pole.width < 1 ? HALF_SKY : 1, k);
+      const whole = pole.width === 1;
+      const groups = groupsOf(sky, pole.cast, whole ? 1 : HALF_SKY, whole ? CAST_FLOOR.whole : CAST_FLOOR.half, k);
       const mirror = pole.edge === 'right';
       const cx = mirror ? W - POLE.x * W : POLE.x * W, cy = POLE.y * H;
       const due = sky.stars.map(s => (to - ends[s.i]) * s.r >= STEP_PX || ends[s.i] === 0);

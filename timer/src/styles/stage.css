@@ -539,6 +539,16 @@
   to { transform: scale(2.4); opacity: 0; }
 }
 
+/* A frozen demo (?demo=…&frozen=1) is a still for review: it shows each state at its end. A transition lands at
+   once; an animation stands 10 s in, so a one-shot is over (a ring gone, an entrance risen) and a loop is at its
+   start (a breathe at full strength), however long the browser took to take the picture. This also keeps a headless
+   browser from stalling a transition part way, as it does under a painter's canvas. */
+.dt-stage[data-still], .dt-stage[data-still] *, .dt-stage[data-still] *::before, .dt-stage[data-still] *::after {
+  transition: none !important;
+  animation-delay: -10s !important;
+  animation-play-state: paused !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dt-stage, .dt-stage *, .dt-stage *::before, .dt-stage *::after {
     animation: none !important;

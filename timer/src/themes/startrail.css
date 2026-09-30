@@ -28,6 +28,14 @@
 /* --side-color is the glow at its strongest over the sky: what the digits and the head can sit on (spec §1.5). */
 .dt-stage[data-theme="startrail"][data-side="pro"] { --side-color: #5E3053; --glow: var(--pro-glow); }
 .dt-stage[data-theme="startrail"][data-side="con"] { --side-color: #204C72; --glow: var(--con-glow); }
+/* While a side holds the floor, the haze over the horizon is its colour rather than the town's: even with the clock
+   run out and the nebula at its faintest, the bottom third of the room says whose floor it is. */
+.dt-stage[data-theme="startrail"][data-side="pro"],
+.dt-stage[data-theme="startrail"][data-side="con"] {
+  --backdrop:
+    radial-gradient(110% 36% at 50% 100%, rgb(var(--glow) / .3), transparent),
+    linear-gradient(to bottom, #080C2A, #0E1438 38%, #18194A 70%, #2C2250 88%, #452C4E);
+}
 .dt-stage[data-theme="startrail"] { --glow: 150 170 230; --glow-x: 0%; }
 /* The speaking side sits on the right: its glow and its line of time start from the right edge. */
 .dt-stage[data-theme="startrail"][data-pro-seat="right"][data-side="pro"],
@@ -48,7 +56,8 @@
   mask-composite: intersect;
   will-change: opacity;
 }
-.dt-stage[data-theme="startrail"] .dt-field { opacity: calc(.26 + .74 * (1 - var(--used))); }
+/* It fades with the time left, but never out: at its faintest it still says whose floor it is (spec §1.5). */
+.dt-stage[data-theme="startrail"] .dt-field { opacity: calc(.55 + .45 * (1 - var(--used))); }
 /* Not taken back: the glow fades instead. inset(0) rather than none, so the entrance sweep still animates; [data-mode]
    ranks this with stage.css's per-seat clip-path rules, which it replaces. */
 .dt-stage[data-theme="startrail"][data-mode] .dt-field,
@@ -152,7 +161,7 @@
 .dt-stage[data-theme="startrail"] .dt-half-field {
   inset: 0;
   height: auto;
-  opacity: calc(.3 + .7 * var(--remain, 1));
+  opacity: calc(.5 + .5 * var(--remain, 1));
 }
 .dt-stage[data-theme="startrail"] .dt-half[data-locked] .dt-half-field { opacity: 0; }
 

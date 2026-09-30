@@ -11,13 +11,15 @@
   const TITLE_USED = 0.3;         // the title card shows an exposure already under way
   const ACTIVE_COL = 0.58;        // the speaking half's share of the width in free debate (as render.js)
   const HALF_SKY = 0.62;          // a pole's stars in free debate reach this far, so the wider half is covered too
+  const CAST_FLOOR = { whole: 0.45, half: 0.15 };   // the least cast a star takes, far from its pole: a single stage's
+                                  // whole sky leans to the speaker; two skies side by side keep to their own halves
   const STEP_PX = 2;              // a trail is drawn on only once it has grown this many pixels: pieces shorter than a
                                   // pixel would each be antialiased on their own and add up dimmer than one stroke
   const POLE = { x: -0.07, y: -0.42 };   // the pole, off the upper corner, in stage widths and heights
 
   // Starlight from hot to cool, and each side's cast: 正方 warm, 反方 cold.
   const TEMPS = [[170, 198, 255], [212, 225, 255], [246, 246, 255], [255, 238, 212], [255, 210, 160]];
-  const CAST = { pro: [255, 176, 118], con: [128, 190, 255] };
+  const CAST = { pro: [255, 176, 118], con: [104, 204, 240] };   // 反方 leans to the nebula's teal, not the blue-white of hot stars
 
   const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
   const quant = (x, step) => Math.round(x / step) * step;
@@ -53,9 +55,10 @@
   }
 
   // One stroke style per group of stars, so a frame strokes a few dozen paths rather than hundreds. `cast` tints
-  // the stars toward a side, the most at the pole's own edge; `spread` is how far across the stage that reaches.
-  function groupsOf(sky, cast, spread, k) {
-    const key = (cast || '') + '|' + spread;   // a sky is made again whenever the stage (and so k) changes size
+  // the stars toward a side, the most at the pole's own edge; `spread` is how far across the stage that falls off,
+  // and `floor` the least cast any star keeps.
+  function groupsOf(sky, cast, spread, floor, k) {
+    const key = (cast || '') + '|' + spread + '|' + floor;   // a sky is made again whenever the stage (and so k) changes size
     if (sky.groups[key]) return sky.groups[key];
     const halos = {}, cores = {};
     const add = (into, style, width, star) => {
@@ -66,7 +69,7 @@
       const bright = Math.pow(s.m, 4);
       const i = s.t * (TEMPS.length - 1), lo = Math.floor(i), hi = Math.min(TEMPS.length - 1, lo + 1);
       let c = mix(TEMPS[lo], TEMPS[hi], i - lo);
-      if (cast) c = mix(c, CAST[cast], 0.85 * Math.max(0.15, 1 - s.x / spread));
+      if (cast) c = mix(c, CAST[cast], 0.85 * Math.max(floor, 1 - s.x / spread));
       const rgb = c.map(v => Math.min(255, quant(v, 8))).join(' ');
       const alpha = quant(0.14 + 0.8 * Math.pow(s.m, 2.4), 0.04);
       const width = quant((0.6 + 2 * bright) * k, 0.2);
@@ -122,7 +125,8 @@
     function arcs(pole, ends, to, cap) {
       const sky = skyOf(pole.sky);
       const k = Math.max(0.75, Math.sqrt(Math.min(1, W / 1920)));   // thinner on a small stage, never hairlines
-      const groups = groupsOf(sky, pole.cast, pole.width < 1 ? HALF_SKY : 1, k);
+      const whole = pole.width === 1;
+      const groups = groupsOf(sky, pole.cast, whole ? 1 : HALF_SKY, whole ? CAST_FLOOR.whole : CAST_FLOOR.half, k);
       const mirror = pole.edge === 'right';
       const cx = mirror ? W - POLE.x * W : POLE.x * W, cy = POLE.y * H;
       const due = sky.stars.map(s => (to - ends[s.i]) * s.r >= STEP_PX || ends[s.i] === 0);

@@ -191,6 +191,30 @@
     });
   });
 
+  // Spec §1.5 and §2.2: the whole room is the speaking side's, so the cast reaches across the sky, not only the pole's
+  // half; and 反方's cold sky is plainly colder than the neutral sky of a break, not a near neighbour of it.
+  DT.test('theme startrail: the whole sky leans warm for 正方 and cold for 反方', () => {
+    const ratio = (view, from, to) => {
+      const { stage, root } = mountSky(view);
+      const [r, , b] = light(root, from, to);
+      stage.destroy();
+      return b / r;
+    };
+    const neutral = ratio(singleAt('评委打分', 60), 0, 1);
+    [[OPENING, 'left', 0.5], [OPENING, 'right', 0], [REBUTTAL, 'left', 0], [REBUTTAL, 'right', 0.5]].forEach(([name, seat, far]) => {
+      const farSide = ratio(singleAt(name, 120, seat), far, far + 0.5), whole = ratio(singleAt(name, 120, seat), 0, 1);
+      const where = name + ' / ' + seat + ': far half b/r ' + farSide.toFixed(3) + ', whole ' + whole.toFixed(3) +
+        ', neutral ' + neutral.toFixed(3);
+      if (name === OPENING) {
+        assert.ok(farSide < 0.8, where);
+        assert.ok(whole < neutral * 0.75, where);
+      } else {
+        assert.ok(farSide > 1.25, where);
+        assert.ok(whole > neutral * 1.3, where);
+      }
+    });
+  });
+
   // Spec §2.2: in free debate a pole sits in each side's outer corner; only the speaking side's trails turn.
   DT.test('theme startrail: free debate has a pole for each side, and only the speaker\'s sky turns', () => {
     let now = 80000;
@@ -246,17 +270,41 @@
       stage.destroy();
       return out;
     };
-    const early = glow(10), late = glow(150), over = glow(200);
+    const early = glow(10), late = glow(150), low = glow(170), over = glow(200);
     assert.ok(/radial-gradient/.test(early.image), early.image);
     assert.equal(early.color, 'rgba(0, 0, 0, 0)', 'no flat colour');
     assert.ok(['none', 'inset(0px)'].indexOf(early.clip) >= 0, 'not cut back: ' + early.clip);
     assert.ok(early.opacity > late.opacity + 0.3, early.opacity + ' then ' + late.opacity);
-    assert.ok(over.opacity >= 0.2, 'overtime keeps a glow: ' + over.opacity);
+    // It fades, but never so far that the speaker's side is lost once the clock is low or over (spec §1.5).
+    assert.ok(low.opacity >= 0.55, 'a low clock keeps a strong glow: ' + low.opacity);
+    assert.ok(over.opacity >= 0.55, 'overtime keeps a strong glow: ' + over.opacity);
     [[OPENING, 'left', '0%'], [OPENING, 'right', '100%'], [REBUTTAL, 'left', '100%'], [REBUTTAL, 'right', '0%']].forEach(([name, seat, x]) => {
       const g = glow(60, name, seat);
       assert.ok(g.image.indexOf(' at ' + x + ' ') >= 0, name + ' / ' + seat + ': ' + g.image);
       assert.ok(['none', 'inset(0px)'].indexOf(g.clip) >= 0, name + ' / ' + seat + ': not cut back: ' + g.clip);
     });
+  });
+
+  // Even in overtime, with the glow at its floor, the bottom third of the room says whose floor it is: the haze over
+  // the horizon takes the speaking side's colour. A break keeps the town's warm haze.
+  DT.test('theme startrail: the horizon haze is the speaking side\'s colour, the town\'s on a break', () => {
+    const haze = view => {
+      const { stage, root } = mountSky(view);
+      const img = getComputedStyle(root.querySelector('.dt-backdrop')).backgroundImage;
+      stage.destroy();
+      return img.split('radial-gradient(')[1] || img;
+    };
+    const PRO = 'rgba(214, 90, 124, 0.3)', CON = 'rgba(58, 160, 200, 0.3)', TOWN = 'rgba(236, 150, 96, 0.24)';
+    [['left'], ['right']].forEach(([seat]) => {
+      let h = haze(singleAt(OPENING, 200, seat));
+      assert.ok(h.indexOf(PRO) >= 0, 'pro in overtime / ' + seat + ': ' + h);
+      h = haze(singleAt(REBUTTAL, 200, seat));
+      assert.ok(h.indexOf(CON) >= 0, 'con in overtime / ' + seat + ': ' + h);
+      h = haze(dualAt(30, seat));
+      assert.ok(h.indexOf(CON) >= 0, 'free debate, con holding the floor / ' + seat + ': ' + h);
+    });
+    const h = haze(singleAt('评委打分', 60));
+    assert.ok(h.indexOf(TOWN) >= 0, 'break: ' + h);
   });
 
   DT.test('theme startrail: the digits are starlight white with a faint glow, one layer on and off the glow', () => {
@@ -341,6 +389,13 @@
       assert.ok(px(f.opacity) > 0, h.dataset.side);
     });
     stage.destroy();
+    // Pro has 10 s left of its 4:00: its glow has faded but still says whose floor it is.
+    const low = mountSky(E.view(E.tick(E.floor(session('自由辩论'), 'pro', T0), T0 + 230000).session, T0 + 230000));
+    const lowPro = low.root.querySelector('.dt-half[data-side="pro"]');
+    assert.ok(!lowPro.hasAttribute('data-locked'), 'pro still has time');
+    const lowOpacity = px(getComputedStyle(lowPro.querySelector('.dt-half-field')).opacity);
+    assert.ok(lowOpacity >= 0.5, 'a half nearly out of time keeps its glow: ' + lowOpacity);
+    low.stage.destroy();
     // Pro speaks until its 4:00 run out and is locked; con holds the floor.
     const s = E.tick(E.floor(session('自由辩论'), 'pro', T0), T0 + 245000).session;
     const locked = mountSky(E.view(s, T0 + 250000));
