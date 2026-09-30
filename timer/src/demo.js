@@ -12,6 +12,16 @@
 
   function freshman() { return DT.BUILTIN_FORMATS.find(f => f.id === FORMAT_ID); }
 
+  // A format of the user's own, so the editor's list shows both groups.
+  function weekend() {
+    const st = (n, name, type, side, secs) => Object.assign({ id: 'u-demo-weekend-' + n, name, type, side, secs },
+      type === 'dual' ? { first: 'pro' } : {});
+    return { id: 'u-demo-weekend', name: '周末模辩', builtin: false, theme: 'hall',
+      bells: { warn: [30], countdown: 0, end: 'double' }, extras: [],
+      stages: [st(1, '正方立论', 'single', 'pro', 180), st(2, '反方立论', 'single', 'con', 180),
+        st(3, '自由辩论', 'dual', null, 120), st(4, '反方总结', 'single', 'con', 120), st(5, '正方总结', 'single', 'pro', 120)] };
+  }
+
   // The freshman cup with its first stage swapped for a 40-character, 60-minute one.
   function longFormat() {
     const f = JSON.parse(JSON.stringify(freshman()));
@@ -46,6 +56,8 @@
   // Each scene (or a function returning one): `at` is the frozen moment in seconds after the first step;
   // steps are [second, action, arg?]; `dock: true` keeps the control dock open. A `setup` scene opens the
   // setup page with the match remembered from last time; its steps, if any, are a match left unfinished.
+  // An `editor` scene opens the format editor over the match (E): `expand` opens a row's details, `typo`
+  // leaves [row, text] in a duration box.
   const SINGLE = { at: 73, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle']] };
   const DUAL = { at: 137, steps: [[0, 'goto', '自由辩论'], [0, 'floor', 'pro'], [20, 'floor', 'con'], [68, 'floor', 'pro']] };
   const SCENES = {
@@ -65,6 +77,8 @@
     'dock': Object.assign({ dock: true }, SINGLE),   // the control dock held open over a running stage
     'setup': { setup: true, at: 0, steps: [] },
     'setup-resume': Object.assign({ setup: true }, DUAL),   // the free debate left half way
+    'editor': Object.assign({ editor: { expand: 1 } }, SINGLE),
+    'editor-error': Object.assign({ editor: { typo: [0, '3分半'] } }, SINGLE),
   };
 
   // Play the scene so that its last moment is `now`; the loop ticks before each action, as the UI does.
@@ -86,7 +100,11 @@
   function build(name, now) {
     if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
     const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
-    if (!scene.setup) return { route: 'timer', session: play(scene, now), dock: !!scene.dock };
+    if (!scene.setup) {
+      const out = { route: 'timer', session: play(scene, now), dock: !!scene.dock };
+      if (scene.editor) Object.assign(out, { editor: scene.editor, formats: DT.BUILTIN_FORMATS.concat([weekend()]) });
+      return out;
+    }
     const lastMatch = { formatId: FORMAT_ID };
     ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'].forEach(k => { lastMatch[k] = MATCH[k]; });
     return { route: 'setup', session: scene.steps.length ? play(scene, now) : null, lastMatch, dock: false };

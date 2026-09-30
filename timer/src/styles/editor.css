@@ -1,5 +1,5 @@
-/* editor.css: pages outside the stage: the setup page (spec §5.9), and the form and list parts it shares with
-   the format editor (§5.10). Same palette and type as the stage: the ground and ink, the two side colours,
+/* editor.css: pages outside the stage: the setup page (spec §5.9), the format editor (§5.10), and the form and
+   list parts they share. Same palette and type as the stage: the ground and ink, the two side colours,
    the serif for names and motions. Surfaces reuse the console's panel variables from console.css. */
 
 /* ---- shared form parts ---- */
@@ -296,6 +296,348 @@
   .dt-setup-list { max-height: 40vh; }
 }
 
+/* ---- format editor ---- */
+
+/* A full-screen sheet that rises from the bottom. It wears the default theme (editor.js sets data-theme), so it
+   reads the same over any match; the panel variables are set here because it may open outside .dt-app. */
+.dt-editor {
+  --panel: color-mix(in oklab, var(--ground) 91%, var(--ink));
+  --panel-line: color-mix(in oklab, var(--ink) 15%, transparent);
+  --panel-hover: color-mix(in oklab, var(--ink) 9%, transparent);
+  --ed-error: color-mix(in oklab, var(--pro) 50%, var(--ink));
+  --ed-error-line: color-mix(in oklab, var(--pro) 82%, var(--ink));
+  --ed-ease: cubic-bezier(.2, .8, .2, 1);
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+  color: var(--ink);
+  color-scheme: dark;
+  font-family: var(--font-ui);
+  font-size: clamp(13px, calc(1.3vh + 2px), 17px);
+  line-height: 1.5;
+  font-synthesis: none;
+  outline: none;
+  animation: dt-editor-in 260ms var(--ed-ease) both;
+}
+.dt-editor[data-leaving] { animation: dt-editor-out 260ms cubic-bezier(.5, 0, .75, .3) both; pointer-events: none; }
+.dt-editor[data-still] { animation: none; }
+@keyframes dt-editor-in { from { translate: 0 100%; } }
+@keyframes dt-editor-out { to { translate: 0 100%; } }
+
+.dt-editor :where(h1, h2, p) { margin: 0; }
+/* Zero specificity, so .dt-button and the editor's own button rules win. */
+:where(.dt-editor) button {
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.dt-editor button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dt-editor button:disabled { opacity: .32; cursor: default; }
+.dt-editor .dt-button:hover:not(:disabled) { background: var(--panel-hover); }
+.dt-editor .dt-button[data-primary] { border-color: var(--ink); background: var(--ink); color: var(--ground); font-weight: 600; }
+.dt-editor .dt-button[data-primary]:hover { background: color-mix(in oklab, var(--ink) 86%, var(--ground)); }
+
+.dt-ed-head {
+  display: flex;
+  align-items: center;
+  gap: 1.6em;
+  padding: .85em clamp(16px, 3vw, 44px);
+  border-bottom: 1px solid var(--panel-line);
+}
+.dt-ed-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2em 1.4em; margin-right: auto; }
+.dt-ed-title h1 { font-family: var(--font-title); font-size: 1.45em; font-weight: 600; letter-spacing: .26em; }
+.dt-ed-title h1::before {
+  content: "";
+  display: inline-block;
+  width: .2em;
+  height: .95em;
+  margin-right: .65em;
+  border-radius: .04em;
+  vertical-align: -.1em;
+  background: linear-gradient(var(--pro) 50%, var(--con) 50%);
+}
+.dt-ed-title p { font-size: .9em; letter-spacing: .12em; color: var(--ink-dim); }
+.dt-ed-head [data-action="close"] { padding: .5em 2.2em; letter-spacing: .3em; }
+
+/* 已保存 fades in and out; an unsaved draft keeps its warning up until it is fixed. */
+.dt-ed-status { font-size: .92em; letter-spacing: .12em; color: var(--ink-dim); opacity: 0; transition: opacity 300ms ease; }
+.dt-ed-status[data-shown] { opacity: 1; }
+.dt-ed-status[data-kind="saved"]::before { content: "✓"; margin-right: .5em; color: var(--accent); }
+.dt-ed-status[data-kind="invalid"] { color: var(--ed-error); }
+
+.dt-ed-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(15em, 19em) minmax(0, 1fr); }
+
+/* The format list and its tools. */
+.dt-ed-side { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--panel-line); }
+.dt-ed-list { flex: 1 1 auto; min-height: 0; overflow: auto; padding-bottom: .8em; }
+.dt-ed-group-label { padding: 1.1em 1.4em .35em; font-size: .78em; letter-spacing: .32em; color: var(--ink-dim); }
+.dt-ed-format {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: .12em;
+  width: 100%;
+  padding: .6em 1.2em .65em 1.4em;
+  text-align: left;
+  transition: background 150ms ease;
+}
+.dt-ed-format:hover { background: var(--panel-hover); }
+.dt-ed-format[aria-current="true"] { background: color-mix(in oklab, var(--ink) 10%, transparent); }
+.dt-ed-format[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .6em;
+  bottom: .6em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+.dt-ed-format-name {
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 1.04em;
+  letter-spacing: .05em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dt-ed-format-meta { font-size: .8em; letter-spacing: .04em; color: var(--ink-dim); }
+.dt-ed-format-meta em {
+  margin-left: .8em;
+  padding: 0 .45em;
+  border: 1px solid color-mix(in oklab, var(--accent) 50%, transparent);
+  border-radius: .3em;
+  font-style: normal;
+  color: var(--accent);
+}
+.dt-ed-empty { padding: .3em 1.4em; font-size: .85em; line-height: 1.6; color: var(--ink-dim); }
+
+.dt-ed-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .4em;
+  padding: .9em 1.2em;
+  border-top: 1px solid var(--panel-line);
+}
+.dt-ed-tools .dt-button { padding: .42em .3em; font-size: .9em; letter-spacing: .06em; white-space: nowrap; }
+.dt-ed-notice { max-height: 30vh; overflow: auto; padding: 0 1.2em; font-size: .86em; line-height: 1.55; }
+.dt-ed-notice p { margin-bottom: .75em; letter-spacing: .03em; color: var(--ink-dim); }
+.dt-ed-notice p[data-kind="bad"] { color: var(--ed-error); }
+
+/* The form. */
+.dt-ed-main { position: relative; min-height: 0; overflow: auto; padding: .4em clamp(16px, 3vw, 48px) 5em; }
+.dt-ed-main > * { max-width: 74em; }
+.dt-ed-section { padding: 1.2em 0 1.4em; border-bottom: 1px solid var(--panel-line); }
+.dt-ed-section:last-child { border-bottom: 0; }
+.dt-ed-h2 { margin-bottom: .8em; font-size: .8em; font-weight: normal; letter-spacing: .32em; color: var(--ink-dim); }
+.dt-ed-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2em 1.4em; margin-bottom: .6em; }
+.dt-ed-section-head .dt-ed-h2 { margin-bottom: 0; }
+.dt-ed-meta, .dt-ed-hint { font-size: .85em; letter-spacing: .05em; color: var(--ink-dim); }
+.dt-ed-hint { margin-top: .7em; }
+.dt-ed-hint:empty { display: none; }
+
+.dt-ed-field { display: flex; align-items: center; gap: .6em; min-width: 0; }
+.dt-ed-label { flex: none; font-size: .86em; letter-spacing: .14em; color: var(--ink-dim); white-space: nowrap; }
+.dt-ed-unit { flex: none; color: var(--ink-dim); }
+.dt-ed-short { width: 6em; }
+.dt-ed-secs { width: 5.4em; text-align: center; font-family: var(--font-digits); font-variant-numeric: tabular-nums; letter-spacing: .03em; }
+.dt-ed-select { width: auto; padding-block: .45em; cursor: pointer; }
+.dt-editor .dt-input[aria-invalid="true"] { border-color: var(--ed-error-line); box-shadow: 0 0 0 1px var(--ed-error-line); }
+.dt-ed-msg { font-size: .88em; letter-spacing: .04em; color: var(--ed-error); }
+.dt-ed-msg:empty { display: none; }
+.dt-ed-main > .dt-ed-msg { margin-top: 1em; }
+
+/* Name and theme on one line; the name box is the one big serif field on the page. */
+.dt-ed-format-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1em 2.4em; }
+.dt-ed-format-head .dt-ed-field { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .4em .8em; }
+.dt-ed-format-head .dt-ed-field > :nth-child(n+3) { grid-column: 2; margin: 0; }
+.dt-ed-grow { flex: 1 1 22em; }
+.dt-ed-name { font-size: 1.3em; font-weight: 600; letter-spacing: .08em; }
+.dt-ed-bells { display: flex; flex-wrap: wrap; align-items: center; gap: .7em 2.2em; }
+
+/* Stage rows: handle, number, name, type, side, time, details, remove. The header row uses the same columns. */
+.dt-ed-line {
+  display: grid;
+  grid-template-columns: 1.5em 1.7em minmax(9em, 1fr) 11.6em 9.8em 6.6em 2em 2em;
+  align-items: center;
+  gap: .55em;
+}
+.dt-ed-cols { padding: 0 .6em .3em 1em; color: var(--ink-dim); }
+/* Sized on the labels, not the row, so the header keeps the rows' em-based columns. */
+.dt-ed-cols span { font-size: .76em; letter-spacing: .22em; }
+.dt-ed-cols span:nth-child(6) { text-align: right; }
+.dt-ed-stagebox { position: relative; }
+.dt-ed-stages { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.dt-ed-stage {
+  position: relative;
+  padding: .36em .6em .36em 1em;
+  border-radius: .5em;
+  transition: background 150ms ease, opacity 150ms ease;
+}
+.dt-ed-stage:hover, .dt-ed-stage:focus-within { background: color-mix(in oklab, var(--ink) 5%, transparent); }
+.dt-ed-stage[data-dragging] { opacity: .45; }
+/* The side's colour down the row's edge, as on the progress bar. */
+.dt-ed-stage::before {
+  content: "";
+  position: absolute;
+  left: .2em;
+  top: .6em;
+  bottom: .6em;
+  width: 3px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--ground) 50%, var(--ink));
+}
+.dt-ed-stage[data-tone="pro"]::before { background: var(--pro); }
+.dt-ed-stage[data-tone="con"]::before { background: var(--con); }
+.dt-ed-stage[data-tone="dual"]::before { background: linear-gradient(var(--pro) 50%, var(--con) 50%); }
+.dt-ed-stage .dt-input { padding: .36em .6em; }
+.dt-ed-stage > .dt-ed-msg { margin: .3em 0 .15em calc(3.2em + 1.1em); }
+
+.dt-ed-handle {
+  height: 2em;
+  border-radius: .35em;
+  color: var(--ink-dim);
+  font-size: 1.1em;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+}
+.dt-ed-handle:hover { background: var(--panel-hover); color: var(--ink); }
+.dt-ed-stage[data-dragging] .dt-ed-handle { cursor: grabbing; }
+.dt-ed-index { font-family: var(--font-digits); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-dim); }
+
+/* Segmented choices: 单方 / 双方 / 间隔 and 正 / 反; a pressed side wears its colour. */
+.dt-ed-seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--panel-line);
+  border-radius: .45em;
+  background: color-mix(in oklab, var(--ground) 72%, transparent);
+}
+.dt-ed-seg-btn {
+  padding: .26em .72em;
+  border-radius: .3em;
+  color: var(--ink-dim);
+  letter-spacing: .1em;
+  white-space: nowrap;
+  transition: background 150ms ease, color 150ms ease;
+}
+.dt-ed-seg-btn:hover { background: var(--panel-hover); color: var(--ink); }
+.dt-ed-seg-btn[aria-pressed="true"] { background: color-mix(in oklab, var(--ink) 16%, transparent); color: var(--ink); }
+.dt-ed-seg-btn:is([data-side="pro"], [data-first="pro"])[aria-pressed="true"] { background: var(--pro); }
+.dt-ed-seg-btn:is([data-side="con"], [data-first="con"])[aria-pressed="true"] { background: var(--con); }
+.dt-ed-line > .dt-ed-seg { justify-self: start; }
+.dt-ed-side-cell { display: flex; align-items: center; gap: .5em; }
+.dt-ed-time { display: flex; align-items: center; justify-content: flex-end; gap: .4em; }
+
+.dt-ed-icon { display: grid; place-items: center; width: 2em; height: 2em; border-radius: .4em; color: var(--ink-dim); }
+.dt-ed-icon svg { width: .95em; height: .95em; }
+.dt-ed-icon:hover:not(:disabled) { background: var(--panel-hover); color: var(--ink); }
+.dt-ed-icon[data-action="expand"] { transition: rotate 150ms ease, background 150ms ease; }
+.dt-ed-icon[aria-expanded="true"] { rotate: 90deg; color: var(--ink); }
+.dt-ed-remove:hover:not(:disabled) { color: var(--ed-error); }
+
+/* A row's details, under its name. */
+.dt-ed-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .6em 2.2em;
+  margin: .45em 2.2em .5em calc(3.2em + 1.1em);
+  padding: .85em 1em;
+  border: 1px solid var(--panel-line);
+  border-radius: .55em;
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+}
+.dt-ed-details > .dt-ed-field { display: grid; grid-template-columns: 5.6em minmax(0, 1fr); }
+.dt-ed-details > .dt-ed-field .dt-ed-short { justify-self: start; }
+.dt-ed-wide { grid-column: 1 / -1; }
+.dt-ed-stage-bells { display: flex; flex-wrap: wrap; align-items: center; gap: .7em 2.2em; }
+.dt-ed-stage-bells > .dt-ed-field .dt-ed-label { min-width: 5.6em; }
+.dt-ed-stage-bells .dt-ed-bells .dt-ed-label { min-width: 0; }
+
+/* Where a dragged row will land: a 2px gold line with a dot at its start. */
+.dt-ed-drop {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.dt-ed-drop::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.dt-ed-drop[hidden] { display: none; }
+
+.dt-ed-add {
+  width: 100%;
+  margin-top: .7em;
+  padding: .55em;
+  border: 1px dashed var(--panel-line);
+  border-radius: .5em;
+  color: var(--ink-dim);
+  letter-spacing: .2em;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+.dt-ed-add:hover { border-color: color-mix(in oklab, var(--ink) 40%, transparent); background: var(--panel-hover); color: var(--ink); }
+.dt-ed-add-small { width: auto; padding: .35em 1.1em; letter-spacing: .1em; }
+
+/* Extra groups: a card each, its forms as rows. */
+.dt-ed-extra { margin-top: .8em; padding: .9em 1.1em; border: 1px solid var(--panel-line); border-radius: .6em; }
+.dt-ed-extra-head { display: flex; flex-wrap: wrap; align-items: center; gap: .6em 2em; }
+.dt-ed-extra-head .dt-ed-grow { flex-basis: 16em; }
+.dt-ed-extra-head [data-action="remove-extra"] { margin-left: auto; padding: .38em 1em; font-size: .9em; }
+.dt-ed-extra-head [data-action="remove-extra"]:hover { color: var(--ed-error); }
+.dt-ed-variants { display: flex; flex-direction: column; gap: .4em; margin-top: .8em; }
+.dt-ed-variant { display: grid; grid-template-columns: minmax(8em, 1fr) 5.4em minmax(8em, 1.4fr) 2em; align-items: center; gap: .55em; }
+.dt-ed-variant .dt-input { padding: .36em .6em; }
+.dt-ed-extra > .dt-ed-msg { margin-top: .6em; }
+
+/* A question over the editor: delete, or overwrite on import. */
+.dt-ed-dialog-layer { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; padding: 16px; }
+.dt-ed-scrim { position: absolute; inset: 0; background: color-mix(in oklab, var(--ground) 62%, transparent); animation: dt-fade 160ms ease both; }
+.dt-ed-dialog {
+  position: relative;
+  width: min(30em, 100%);
+  padding: 1.5em 1.6em 1.2em;
+  border: 1px solid var(--panel-line);
+  border-radius: .8em;
+  background: var(--panel);
+  animation: dt-ed-pop 200ms var(--ed-ease) both;
+}
+.dt-ed-dialog-text { font-family: var(--font-title); font-size: 1.18em; line-height: 1.5; letter-spacing: .06em; }
+.dt-ed-dialog-acts { display: flex; justify-content: flex-end; gap: .6em; margin-top: 1.4em; }
+.dt-ed-dialog-acts .dt-button { min-width: 6.5em; }
+.dt-ed-dialog-acts .dt-button[data-kind="danger"] { border-color: var(--ed-error-line); color: var(--ed-error); }
+@keyframes dt-ed-pop { from { opacity: 0; translate: 0 .6em; } }
+
+@media (max-width: 900px) {
+  .dt-ed-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .dt-ed-side { max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--panel-line); }
+  .dt-ed-cols { display: none; }
+  .dt-ed-line { grid-template-columns: 1.5em 1.7em minmax(0, 1fr) 2em 2em; }
+  .dt-ed-line > :nth-child(n+4):nth-child(-n+6) { grid-column: 3; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dt-setup, .dt-setup * { transition: none !important; }
+  .dt-editor, .dt-editor[data-leaving], .dt-ed-scrim, .dt-ed-dialog { animation: none; }
+  .dt-editor * { transition: none; }
 }

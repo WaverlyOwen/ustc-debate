@@ -9,7 +9,7 @@
   // Used when build.py has not injected DT.THEMES (the test page loads the sources directly).
   const FALLBACK_THEMES = [{ id: 'hall', name: '堂' }, { id: 'daylight', name: '昼' }, { id: 'chroma', name: '绿幕' }];
 
-  // Keys in the help overlay (spec §5.8). E and O are added by the tasks that bring the editor and the projector.
+  // Keys in the help overlay (spec §5.8). O is added by the task that brings the projector.
   const HELP = [
     [['空格'], '单方 / 间隔：开始 / 暂停；自由辩 / 对辩：在双方之间切换（未开始则开始）'],
     [['A'], '发言权给正方（自由辩 / 对辩）'],
@@ -26,6 +26,7 @@
     [['X'], '插入奇袭（赛制有可插入环节时）'],
     [['S'], '环节列表'],
     [['Shift+S'], '本场记录'],
+    [['E'], '编辑赛制（这一场照常进行）'],
     [['F'], '全屏'],
     [['M'], '静音'],
     [['H', '?'], '帮助'],
@@ -55,7 +56,8 @@
     '<div class="dt-dock-group">' +
     '<button type="button" data-act="undo"><span>撤销</span><kbd>Z</kbd></button>' +
     '<button type="button" data-act="insert"><span>插入奇袭</span><kbd>X</kbd></button>' +
-    '<button type="button" data-act="stages"><span>环节</span><kbd>S</kbd></button></div>' +
+    '<button type="button" data-act="stages"><span>环节</span><kbd>S</kbd></button>' +
+    '<button type="button" data-act="editor"><span>赛制</span><kbd>E</kbd></button></div>' +
     '<div class="dt-dock-group"><button type="button" data-act="fullscreen"><span>全屏</span><kbd>F</kbd></button></div>';
   const STATUS =
     '<span class="dt-pill" data-kind="sound">按任意键启用声音</span>' +
@@ -138,6 +140,37 @@
     return saved;
   }
 
+  const themeList = () => (Array.isArray(DT.THEMES) && DT.THEMES.length ? DT.THEMES : FALLBACK_THEMES);
+
+  // What has been typed on the setup page, read back from its form so a redraw after the editor keeps it.
+  function setupDraft(root) {
+    const page = root.querySelector('.dt-setup');
+    if (!page) return null;
+    const out = {};
+    ['title', 'proMotion', 'conMotion', 'proTeam', 'conTeam'].forEach(k => {
+      const input = page.querySelector('input[name="' + k + '"]');
+      out[k] = input ? input.value : '';
+    });
+    const seat = page.querySelector('input[name="proSeat"]:checked');
+    const chosen = page.querySelector('[data-format-id][aria-selected="true"]');
+    out.proSeat = seat ? seat.value : 'left';
+    out.formatId = chosen ? chosen.dataset.formatId : null;
+    return out;
+  }
+
+  // The editor demos: open a row's details, or leave a duration mistyped, as a timekeeper would.
+  function stageEditorDemo(root, spec) {
+    const ed = root.querySelector('.dt-editor');
+    const row = i => ed.querySelector('[data-stage-index="' + i + '"]');
+    ed.setAttribute('data-still', '');   // a still for review: already risen, no entrance to catch half way
+    if (spec.expand !== undefined) row(spec.expand).querySelector('button[data-action="expand"]').click();
+    if (spec.typo) {
+      const input = row(spec.typo[0]).querySelector('input[name="secs"]');
+      input.value = spec.typo[1];
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
   // The 'timer' route with nothing to resume: a new match in the given format, or the first one.
   function newSession(o, now) {
     const formats = DT.store.loadFormats();
@@ -171,6 +204,7 @@
       case 'KeyF': return { act: ['fullscreen'] };
       case 'KeyX': return { overlay: 'insert' };
       case 'KeyS': return { overlay: shift ? 'record' : 'stages' };
+      case 'KeyE': return { editor: true };
       case 'KeyH': case 'Slash': return { overlay: 'help' };
       case 'Escape': return { close: true };
       default: return null;
@@ -193,7 +227,8 @@
   };
 
   // The timer page for one match. env: {bells, settings, still (a screenshot: no sound hint), pinDock,
-  // emit(name, arg) to the app's listeners, onNewMatch() for 新的一场 on the end card}.
+  // emit(name, arg) to the app's listeners, onNewMatch() for 新的一场 on the end card, onEdit(formatId) for E,
+  // blocked() true while the editor covers the timer and its keys}.
   function mountTimer(root, first, env) {
     const bells = env.bells, settings = env.settings, still = !!env.still, emit = env.emit;
     let session = first;
@@ -333,6 +368,11 @@
         return true;
       }
       armed = null;
+      if (cmd.editor) {
+        closeOverlay();
+        env.onEdit(session.format.id);
+        return true;
+      }
       if (cmd.overlay) {
         if (overlay && overlay.name === cmd.overlay) closeOverlay();
         else openOverlay(cmd.overlay);
@@ -556,7 +596,7 @@
     const DOCK_ACTS = {
       prev: () => act('prev'), next: () => act('next'), toggle: () => act('toggle'), undo: () => act('undo'),
       insert: () => openOverlay('insert'), stages: () => openOverlay('stages'), fullscreen: () => act('fullscreen'),
-      new: () => env.onNewMatch(),
+      new: () => env.onNewMatch(), editor: () => key('KeyE'),
     };
     dock.addEventListener('click', e => {
       const b = e.target.closest('button');
@@ -580,6 +620,7 @@
 
     function onKeyDown(e) {
       gesture();
+      if (env.blocked()) return;
       if (isEditable(e.target)) return;
       if (e.isComposing) return;
       if (key(e.code, e)) e.preventDefault();
@@ -650,6 +691,7 @@
       const now = DT.clock.now();
       if (route.frozen) DT.clock.set(() => now);
       demo = DT.demo.build(route.demo, now);
+      if (demo.formats) DT.store.saveFormats(demo.formats);
     } else if (o.storage) {
       DT.store.useStorage(o.storage);
     }
@@ -660,6 +702,7 @@
 
     const listeners = { change: [], events: [] };
     let screen = null, destroyed = false;   // {name: 'setup' | 'timer', handle}
+    let editor = null;                       // the format editor's handle while it covers the screen
 
     function emit(name, arg) { listeners[name].slice().forEach(fn => fn(arg)); }
     const timer = () => (screen && screen.name === 'timer' ? screen.handle : null);
@@ -672,9 +715,30 @@
     // Starting or resuming is a click or a key press, so the sound can be unlocked right there.
     function unlockSound() { if (!bells.isUnlocked()) bells.unlock(); }
 
+    // The editor covers the page; what is behind it is out of reach until it closes, then `after(formatId)` runs.
+    function openEditor(selectedId, after) {
+      if (editor || destroyed) return;
+      const behind = Array.from(root.children);
+      behind.forEach(c => { c.inert = true; });
+      editor = DT.editor.mount(root, {
+        formats: DT.store.loadFormats(),
+        selectedId,
+        themes: themeList(),
+        onChange(list) { DT.store.saveFormats(list); },
+        onClose(id) {
+          editor = null;
+          behind.forEach(c => { c.inert = false; });
+          if (after && !destroyed) after(id);
+        },
+      });
+    }
+
     function showTimer(session, pinDock) {
       leave();
-      const env = { bells, settings, still: route.name === 'demo' && route.frozen, pinDock, emit, onNewMatch: newMatch };
+      const env = {
+        bells, settings, still: route.name === 'demo' && route.frozen, pinDock, emit, onNewMatch: newMatch,
+        onEdit: formatId => openEditor(formatId), blocked: () => !!editor,
+      };
       screen = { name: 'timer', handle: mountTimer(root, session, env) };
     }
 
@@ -683,14 +747,15 @@
       showSetup();
     }
 
-    function showSetup() {
+    // `typed`: what was on the page before the editor, with the format last looked at in the editor chosen.
+    function showSetup(typed) {
       leave();
       const saved = resumable(DT.store.loadSession(), DT.clock.now());
       const handle = DT.setup.mount(root, {
         formats: DT.store.loadFormats(),
-        lastMatch: DT.store.loadLastMatch(),
+        lastMatch: typed || DT.store.loadLastMatch(),
         resumable: saved ? resumeInfo(saved) : null,
-        themes: Array.isArray(DT.THEMES) && DT.THEMES.length ? DT.THEMES : FALLBACK_THEMES,
+        themes: themeList(),
         onStart(format, match, theme) {
           const last = { formatId: format.id };
           LAST_MATCH.forEach(k => { last[k] = match[k]; });
@@ -705,7 +770,16 @@
           showTimer(saved);
         },
         onDiscard() { DT.store.clearSession(); },
-        onEdit: null,   // the format editor's task wires 编辑赛制
+        onEdit() {
+          const before = setupDraft(root);
+          openEditor(before.formatId, id => {
+            const typed = setupDraft(root) || before;
+            showSetup(Object.assign(typed, { formatId: id || typed.formatId }));
+            // The setup page does not prefill the match title, so it goes back in by hand.
+            const title = root.querySelector('.dt-setup input[name="title"]');
+            if (title) title.value = typed.title;
+          });
+        },
       });
       screen = { name: 'setup', handle };
     }
@@ -716,6 +790,10 @@
       showSetup();
     } else if (demo) {
       showTimer(demo.session, demo.dock);
+      if (demo.editor) {
+        openEditor(demo.session.format.id);
+        stageEditorDemo(root, demo.editor);
+      }
     } else if (route.name === 'timer') {
       const now = DT.clock.now();
       showTimer(resumable(DT.store.loadSession(), now) || newSession(o, now));
@@ -739,6 +817,7 @@
       destroy() {
         if (destroyed) return;
         destroyed = true;
+        if (editor) { editor.destroy(); editor = null; }
         if (screen) screen.handle.destroy();
         root.classList.remove('dt-app');
         listeners.change = [];
