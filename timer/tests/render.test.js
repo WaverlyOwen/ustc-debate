@@ -186,4 +186,29 @@
     h.destroy();
     assert.equal(box.querySelector('.dt-stage'), null);
   });
+  // ---- final review ----
+
+  DT.test('render: record rows carry their kind so a free debate is marked like its progress segment', () => {
+    const h = R.mount(host());
+    const s = E.goto(E.toggle(session(0), T0), 99, T0 + 60000);
+    h.update(Object.assign(E.view(s, T0 + 60000), { record: E.record(s, T0 + 60000) }));
+    const rows = Array.from(document.querySelectorAll('.dt-record tr')).slice(1);
+    const kinds = F().stages.map(st => st.type);
+    assert.deepEqual(rows.map(r => r.getAttribute('data-kind')), kinds);
+    assert.deepEqual(Array.from(document.querySelectorAll('.dt-record th')).map(th => th.textContent), ['环节', '计划', '实际', '备注']);
+    h.destroy();
+  });
+
+  DT.test('render: a dual team name sits in a box of its own and steps down when long', () => {
+    const h = R.mount(host());
+    const long = '物理学院与天文学系及近代物理系联合代表队';
+    const m = Object.assign({}, MATCH, { conTeam: long });
+    h.update(E.view(E.goto(E.createSession(F(), m, T0), stageIdx('自由辩论'), T0), T0));
+    const team = side => document.querySelector('.dt-half[data-side="' + side + '"] .dt-team');
+    assert.equal(team('con').querySelector('.dt-team-name').textContent, long);
+    assert.equal(team('con').getAttribute('data-long'), 'true');
+    assert.equal(team('pro').querySelector('.dt-team-name').textContent, '物理学院');
+    assert.equal(team('pro').getAttribute('data-long'), 'false');
+    h.destroy();
+  });
 })();

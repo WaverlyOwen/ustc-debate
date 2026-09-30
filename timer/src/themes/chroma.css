@@ -76,3 +76,15 @@
 .dt-stage[data-theme="chroma"] .dt-half:last-child .dt-team { left: auto; right: 5cqw; }
 /* Neutral segments mix with the plate, not the green ground, so nothing on screen carries the key colour. */
 .dt-stage[data-theme="chroma"] .dt-seg[data-side="none"] { --seg: color-mix(in oklab, var(--plate) 45%, var(--ink)); }
+.dt-stage[data-theme="chroma"] .dt-record tr[data-kind="break"] td:first-child::before {
+  background: color-mix(in oklab, var(--plate) 45%, var(--ink));
+}
+/* The floor of a half is key green here: the speaker's line goes just under the digits' plate instead
+   (the active digits are min(30cqh, 17cqw) tall, centred at 52%, on a plate reaching 2cqh past them). */
+.dt-stage[data-theme="chroma"] .dt-floorline {
+  left: 25%;
+  right: 25%;
+  bottom: auto;
+  top: calc(52% + min(15cqh, 8.5cqw) + 3.2cqh);
+  border-radius: .2cqh;
+}

@@ -503,6 +503,8 @@
             attr(b, 'data-kind', st.type);
             attr(b, 'data-gap', i > 0 && (st.block || '') !== (tl[i - 1].block || ''));
             const state = el('span', 'dt-row-state');
+            const dot = state.appendChild(el('span', 'dt-row-dot'));
+            const time = state.appendChild(el('span'));
             [el('span', 'dt-row-index', String(i + 1)), el('i', 'dt-row-side'), el('span', 'dt-row-name', st.name),
               el('span', 'dt-row-plan', planned(st)), state].forEach(c => b.appendChild(c));
             b.addEventListener('click', () => {
@@ -511,7 +513,7 @@
             });
             li.appendChild(b);
             list.appendChild(li);
-            return { b, state };
+            return { b, dot, time };
           });
         }
         const rec = DT.engine.record(session, now);
@@ -521,10 +523,11 @@
           attr(r.b, 'aria-current', cur ? 'step' : null);
           attr(r.b, 'data-over', !cur && rec[i].over >= 1000);
           let s = '';
-          if (cur) s = '● ' + (active ? active.text : '');
+          if (cur) s = active ? active.text : '';
           else if (rec[i].over >= 1000) s = '+' + duration(rec[i].over);
           else if (rec[i].used > 0) s = '✓ ' + duration(rec[i].used);
-          text(r.state, s);
+          text(r.dot, cur ? '● ' : '');
+          text(r.time, s);
         });
       };
     }

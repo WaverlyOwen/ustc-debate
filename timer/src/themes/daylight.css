@@ -30,8 +30,12 @@
   translate: 0 -50%;
 }
 .dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"] .dt-deco { background: var(--side-deep); }
-.dt-stage[data-theme="daylight"][data-kind="break"] .dt-field { display: none; }
-.dt-stage[data-theme="daylight"] .dt-warnline { -webkit-mask-image: none; mask-image: none; }
+/* Gold on the lit band is too faint (about 1.9:1 on 朱), so the band's line carries a light halo. */
+.dt-stage[data-theme="daylight"] .dt-warnline {
+  -webkit-mask-image: none;
+  mask-image: none;
+  box-shadow: 0 0 0 1px var(--on-side);
+}
 
 /* Dual: each half keeps the light ground, with its band draining from the top inside the track. */
 .dt-stage[data-theme="daylight"] .dt-half { background: var(--ground); }

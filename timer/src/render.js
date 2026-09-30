@@ -4,6 +4,7 @@
   const SIDE_NAME = { pro: '正方', con: '反方' };
   const BUILTIN_THEMES = ['hall', 'daylight', 'chroma'];   // used when build.py has not injected DT.THEMES
   const LONG_TITLE = 14;       // characters; longer stage names step the title down a size
+  const LONG_TEAM = 12;        // characters; longer team names step down in a dual stage's half (and then clip)
   const ENTER_MS = 600;        // the entrance class outlives the longest entrance animation (560 ms)
   const TOAST_MS = 1500;
   const RING_MS = 1500;        // fallback removal when no animationend arrives (no stylesheet, animation off)
@@ -14,7 +15,7 @@
   const CLOCK = '<span class="dt-digits"><span class="dt-sign"></span><span class="dt-min"></span>' +
     '<span class="dt-colon">:</span><span class="dt-sec"></span></span><span class="dt-state"></span>';
   const HALF = side => '<div class="dt-half" data-side="' + side + '"><div class="dt-half-field"></div>' +
-    '<div class="dt-team"></div><div class="dt-clock" data-clock="' + side + '">' + CLOCK + '</div>' +
+    '<div class="dt-team"><span class="dt-team-name"></span></div><div class="dt-clock" data-clock="' + side + '">' + CLOCK + '</div>' +
     '<div class="dt-floorline"></div></div>';
   // Static markup only; every piece of match or format text goes in through textContent.
   const TEMPLATE =
@@ -106,7 +107,7 @@
     const halves = {};
     ['pro', 'con'].forEach(side => {
       const el = els.halves.querySelector('.dt-half[data-side="' + side + '"]');
-      halves[side] = { el, team: el.querySelector('.dt-team') };
+      halves[side] = { el, team: el.querySelector('.dt-team'), teamName: el.querySelector('.dt-team-name') };
       clocks[side] = clockParts(el.querySelector('.dt-clock'));
     });
     const teamSpans = { pro: els.teams.querySelector('[data-side="pro"]'), con: els.teams.querySelector('[data-side="con"]') };
@@ -190,13 +191,14 @@
         table.appendChild(tr);
         return tr;
       };
-      row(['环节', '计划', '实际', ''], 'th');
+      row(['环节', '计划', '实际', '备注'], 'th');
       record.forEach(r => {
         let note = '';
         if (r.over >= 1000) note = '超时 ' + duration(r.over);
         else if (r.yielded >= 1000) note = '放弃 ' + duration(r.yielded);
         const tr = row([r.name, DT.engine.fmt(r.planned), r.used > 0 ? duration(r.used) : '—', note], 'td');
         attr(tr, 'data-side', r.side || 'none');
+        attr(tr, 'data-kind', r.type);   // a dual row is marked half and half, as on the progress bar
         attr(tr, 'data-over', r.over >= 1000);
         attr(tr, 'data-skipped', r.used <= 0);
       });
@@ -271,8 +273,9 @@
         const label = name === SIDE_NAME[side] ? '' : SIDE_NAME[side];
         text(teamSpans[side], name);
         attr(teamSpans[side], 'data-label', label);
-        text(halves[side].team, name);
+        text(halves[side].teamName, name);   // its own box, so a long name ends in an ellipsis
         attr(halves[side].team, 'data-label', label);
+        attr(halves[side].team, 'data-long', Array.from(name).length > LONG_TEAM ? 'true' : 'false');
       });
       paintRecord(v.mode === 'end' && Array.isArray(v.record) ? v.record : null);
       paintProgress(v.progress || []);

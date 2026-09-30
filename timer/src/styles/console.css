@@ -255,7 +255,9 @@
 .dt-row[data-kind="dual"] .dt-row-side { background: linear-gradient(var(--pro) 50%, var(--con) 50%); }
 .dt-row-name { overflow: hidden; font-family: var(--font-title); white-space: nowrap; text-overflow: ellipsis; }
 .dt-row-state { text-align: right; }
-.dt-row[aria-current] .dt-row-state, .dt-row[data-over] .dt-row-state { color: var(--accent); }
+/* Gold means overtime here (spec §5.7); the current row's time is plain ink behind a gold dot. */
+.dt-row[aria-current] .dt-row-state { color: var(--ink); }
+.dt-row[data-over] .dt-row-state, .dt-row-dot { color: var(--accent); }
 
 /* Help: the key table. */
 .dt-keys { width: 100%; border-collapse: collapse; }

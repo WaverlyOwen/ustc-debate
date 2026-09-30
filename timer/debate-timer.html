@@ -118,8 +118,10 @@ body {
 .dt-stage[data-pro-seat="left"][data-side="con"] .dt-field {
   clip-path: inset(0 0 0 calc(var(--used) * 100%));
 }
+/* A break is the plain ground (spec §5.4): a receding field's edge would cut through its centred text. */
 .dt-stage:not([data-mode="stage"]) .dt-field,
-.dt-stage[data-kind="dual"] .dt-field { display: none; }
+.dt-stage[data-kind="dual"] .dt-field,
+.dt-stage[data-kind="break"] .dt-field { display: none; }
 
 /* A gold hairline where the warn bell sits, visible until the field has been taken back past it. */
 .dt-warnline {
@@ -128,9 +130,13 @@ body {
   width: 2px;
   margin-left: -1px;
   background: var(--accent);
-  /* Faint behind the title and digits, full strength near the floor where the eye reads the field's edge. */
-  -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / .2) 0 45%, #000 85% 100%);
-  mask-image: linear-gradient(to bottom, rgb(0 0 0 / .2) 0 45%, #000 85% 100%);
+  /* Kept to the field's clear zone: absent where the stage name and speaker sit, faint behind the digits,
+     full strength below them, gone again before the bottom bar and its 下一环节, then a short full-strength
+     tick at the very floor under the bar, so the 30-second point still reads from the back of the room. */
+  --warn-mask: linear-gradient(to bottom, transparent 0 30cqh, rgb(0 0 0 / .2) 34cqh 74cqh, #000 80cqh 86cqh,
+    transparent 90cqh calc(100% - 1.6cqh), #000 calc(100% - 1.6cqh));
+  -webkit-mask-image: var(--warn-mask);
+  mask-image: var(--warn-mask);
   transition: opacity 400ms ease;
 }
 .dt-stage[data-pro-seat="right"][data-side="pro"] .dt-warnline,
@@ -287,7 +293,11 @@ body {
   color: var(--on-side);
 }
 .dt-half:last-child .dt-team { flex-direction: row-reverse; }
+.dt-team[data-long="true"] { font-size: 2.6cqh; }
+/* The name has a box of its own so a joint team's long name ends in an ellipsis instead of mid-glyph. */
+.dt-team-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .dt-team:not([data-label=""])::before {
+  flex: none;
   content: attr(data-label);
   font-family: var(--font-ui);
   font-size: .7em;
@@ -320,15 +330,14 @@ body {
   opacity: .92;
 }
 
-/* The speaker's gold floor line opens from the middle outward. */
+/* The speaker's gold floor line (spec §5.4): on the floor of the half, its full width, opening from the middle. */
 .dt-floorline {
   position: absolute;
   z-index: 1;
-  left: 14%;
-  right: 14%;
-  bottom: 18cqh;
-  height: .4cqh;
-  border-radius: .2cqh;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: max(4px, .4cqh);
   background: var(--accent);
   transform: scaleX(0);
   transition: transform 520ms var(--ease-out);
@@ -420,13 +429,14 @@ body {
 .dt-stage[data-mode="stage"][data-kind="break"] .dt-motion { font-size: 3.4cqh; }
 .dt-stage[data-mode="stage"][data-kind="break"] .dt-bottom { margin-top: 0; }
 
-/* End card: the match record, sized so every row fits; like the title card it sits on the centre axis. */
+/* End card: the match record, as large as fits so the room can read it (spec §5.4); like the title card it
+   sits on the centre axis. */
 .dt-stage[data-mode="end"] .dt-head { align-self: center; text-align: center; }
 .dt-stage[data-mode="end"] .dt-card { margin-top: 3.6cqh; min-height: 0; }
 .dt-record {
   align-self: center;
   border-collapse: collapse;
-  font-size: min(2cqh, calc(62cqh / var(--rows, 20) / 1.5));
+  font-size: min(2.6cqh, calc(68cqh / var(--rows, 20) / 1.5));   /* the rows fill what is left above the bar */
   line-height: 1.5;
 }
 .dt-record th, .dt-record td { padding: 0 4em 0 0; text-align: left; white-space: nowrap; }
@@ -446,10 +456,11 @@ body {
   height: .5em;
   margin-right: .8em;
   vertical-align: .12em;
-  background: color-mix(in oklab, var(--ground) 50%, var(--ink));
+  background: color-mix(in oklab, var(--ground) 45%, var(--ink));   /* a break: the progress bar's grey */
 }
 .dt-record tr[data-side="pro"] td:first-child::before { background: var(--pro); }
 .dt-record tr[data-side="con"] td:first-child::before { background: var(--con); }
+.dt-record tr[data-kind="dual"] td:first-child::before { background: linear-gradient(90deg, var(--pro) 50%, var(--con) 50%); }
 .dt-record td:not(:first-child) { font-family: var(--font-digits); font-variant-numeric: tabular-nums; }
 .dt-record tr[data-over] td:nth-child(n+3) { color: var(--accent); }
 .dt-record tr[data-skipped] { opacity: .45; }
@@ -830,7 +841,9 @@ body {
 .dt-row[data-kind="dual"] .dt-row-side { background: linear-gradient(var(--pro) 50%, var(--con) 50%); }
 .dt-row-name { overflow: hidden; font-family: var(--font-title); white-space: nowrap; text-overflow: ellipsis; }
 .dt-row-state { text-align: right; }
-.dt-row[aria-current] .dt-row-state, .dt-row[data-over] .dt-row-state { color: var(--accent); }
+/* Gold means overtime here (spec §5.7); the current row's time is plain ink behind a gold dot. */
+.dt-row[aria-current] .dt-row-state { color: var(--ink); }
+.dt-row[data-over] .dt-row-state, .dt-row-dot { color: var(--accent); }
 
 /* Help: the key table. */
 .dt-keys { width: 100%; border-collapse: collapse; }
@@ -1839,6 +1852,18 @@ body {
 .dt-stage[data-theme="chroma"] .dt-half:last-child .dt-team { left: auto; right: 5cqw; }
 /* Neutral segments mix with the plate, not the green ground, so nothing on screen carries the key colour. */
 .dt-stage[data-theme="chroma"] .dt-seg[data-side="none"] { --seg: color-mix(in oklab, var(--plate) 45%, var(--ink)); }
+.dt-stage[data-theme="chroma"] .dt-record tr[data-kind="break"] td:first-child::before {
+  background: color-mix(in oklab, var(--plate) 45%, var(--ink));
+}
+/* The floor of a half is key green here: the speaker's line goes just under the digits' plate instead
+   (the active digits are min(30cqh, 17cqw) tall, centred at 52%, on a plate reaching 2cqh past them). */
+.dt-stage[data-theme="chroma"] .dt-floorline {
+  left: 25%;
+  right: 25%;
+  bottom: auto;
+  top: calc(52% + min(15cqh, 8.5cqw) + 3.2cqh);
+  border-radius: .2cqh;
+}
 
 /* === themes/daylight.css === */
 /* @theme id=daylight name=昼 desc=浅色底，色场收成数字后的一条横带，适合亮场投影 */
@@ -1873,8 +1898,12 @@ body {
   translate: 0 -50%;
 }
 .dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"] .dt-deco { background: var(--side-deep); }
-.dt-stage[data-theme="daylight"][data-kind="break"] .dt-field { display: none; }
-.dt-stage[data-theme="daylight"] .dt-warnline { -webkit-mask-image: none; mask-image: none; }
+/* Gold on the lit band is too faint (about 1.9:1 on 朱), so the band's line carries a light halo. */
+.dt-stage[data-theme="daylight"] .dt-warnline {
+  -webkit-mask-image: none;
+  mask-image: none;
+  box-shadow: 0 0 0 1px var(--on-side);
+}
 
 /* Dual: each half keeps the light ground, with its band draining from the top inside the track. */
 .dt-stage[data-theme="daylight"] .dt-half { background: var(--ground); }
@@ -3736,6 +3765,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
   const SIDE_NAME = { pro: '正方', con: '反方' };
   const BUILTIN_THEMES = ['hall', 'daylight', 'chroma'];   // used when build.py has not injected DT.THEMES
   const LONG_TITLE = 14;       // characters; longer stage names step the title down a size
+  const LONG_TEAM = 12;        // characters; longer team names step down in a dual stage's half (and then clip)
   const ENTER_MS = 600;        // the entrance class outlives the longest entrance animation (560 ms)
   const TOAST_MS = 1500;
   const RING_MS = 1500;        // fallback removal when no animationend arrives (no stylesheet, animation off)
@@ -3746,7 +3776,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
   const CLOCK = '<span class="dt-digits"><span class="dt-sign"></span><span class="dt-min"></span>' +
     '<span class="dt-colon">:</span><span class="dt-sec"></span></span><span class="dt-state"></span>';
   const HALF = side => '<div class="dt-half" data-side="' + side + '"><div class="dt-half-field"></div>' +
-    '<div class="dt-team"></div><div class="dt-clock" data-clock="' + side + '">' + CLOCK + '</div>' +
+    '<div class="dt-team"><span class="dt-team-name"></span></div><div class="dt-clock" data-clock="' + side + '">' + CLOCK + '</div>' +
     '<div class="dt-floorline"></div></div>';
   // Static markup only; every piece of match or format text goes in through textContent.
   const TEMPLATE =
@@ -3838,7 +3868,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     const halves = {};
     ['pro', 'con'].forEach(side => {
       const el = els.halves.querySelector('.dt-half[data-side="' + side + '"]');
-      halves[side] = { el, team: el.querySelector('.dt-team') };
+      halves[side] = { el, team: el.querySelector('.dt-team'), teamName: el.querySelector('.dt-team-name') };
       clocks[side] = clockParts(el.querySelector('.dt-clock'));
     });
     const teamSpans = { pro: els.teams.querySelector('[data-side="pro"]'), con: els.teams.querySelector('[data-side="con"]') };
@@ -3922,13 +3952,14 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         table.appendChild(tr);
         return tr;
       };
-      row(['环节', '计划', '实际', ''], 'th');
+      row(['环节', '计划', '实际', '备注'], 'th');
       record.forEach(r => {
         let note = '';
         if (r.over >= 1000) note = '超时 ' + duration(r.over);
         else if (r.yielded >= 1000) note = '放弃 ' + duration(r.yielded);
         const tr = row([r.name, DT.engine.fmt(r.planned), r.used > 0 ? duration(r.used) : '—', note], 'td');
         attr(tr, 'data-side', r.side || 'none');
+        attr(tr, 'data-kind', r.type);   // a dual row is marked half and half, as on the progress bar
         attr(tr, 'data-over', r.over >= 1000);
         attr(tr, 'data-skipped', r.used <= 0);
       });
@@ -4003,8 +4034,9 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         const label = name === SIDE_NAME[side] ? '' : SIDE_NAME[side];
         text(teamSpans[side], name);
         attr(teamSpans[side], 'data-label', label);
-        text(halves[side].team, name);
+        text(halves[side].teamName, name);   // its own box, so a long name ends in an ellipsis
         attr(halves[side].team, 'data-label', label);
+        attr(halves[side].team, 'data-long', Array.from(name).length > LONG_TEAM ? 'true' : 'false');
       });
       paintRecord(v.mode === 'end' && Array.isArray(v.record) ? v.record : null);
       paintProgress(v.progress || []);
@@ -6124,6 +6156,8 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
             attr(b, 'data-kind', st.type);
             attr(b, 'data-gap', i > 0 && (st.block || '') !== (tl[i - 1].block || ''));
             const state = el('span', 'dt-row-state');
+            const dot = state.appendChild(el('span', 'dt-row-dot'));
+            const time = state.appendChild(el('span'));
             [el('span', 'dt-row-index', String(i + 1)), el('i', 'dt-row-side'), el('span', 'dt-row-name', st.name),
               el('span', 'dt-row-plan', planned(st)), state].forEach(c => b.appendChild(c));
             b.addEventListener('click', () => {
@@ -6132,7 +6166,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
             });
             li.appendChild(b);
             list.appendChild(li);
-            return { b, state };
+            return { b, dot, time };
           });
         }
         const rec = DT.engine.record(session, now);
@@ -6142,10 +6176,11 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
           attr(r.b, 'aria-current', cur ? 'step' : null);
           attr(r.b, 'data-over', !cur && rec[i].over >= 1000);
           let s = '';
-          if (cur) s = '● ' + (active ? active.text : '');
+          if (cur) s = active ? active.text : '';
           else if (rec[i].over >= 1000) s = '+' + duration(rec[i].over);
           else if (rec[i].used > 0) s = '✓ ' + duration(rec[i].used);
-          text(r.state, s);
+          text(r.dot, cur ? '● ' : '');
+          text(r.time, s);
         });
       };
     }

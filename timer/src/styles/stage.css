@@ -46,8 +46,10 @@
 .dt-stage[data-pro-seat="left"][data-side="con"] .dt-field {
   clip-path: inset(0 0 0 calc(var(--used) * 100%));
 }
+/* A break is the plain ground (spec §5.4): a receding field's edge would cut through its centred text. */
 .dt-stage:not([data-mode="stage"]) .dt-field,
-.dt-stage[data-kind="dual"] .dt-field { display: none; }
+.dt-stage[data-kind="dual"] .dt-field,
+.dt-stage[data-kind="break"] .dt-field { display: none; }
 
 /* A gold hairline where the warn bell sits, visible until the field has been taken back past it. */
 .dt-warnline {
@@ -56,9 +58,13 @@
   width: 2px;
   margin-left: -1px;
   background: var(--accent);
-  /* Faint behind the title and digits, full strength near the floor where the eye reads the field's edge. */
-  -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / .2) 0 45%, #000 85% 100%);
-  mask-image: linear-gradient(to bottom, rgb(0 0 0 / .2) 0 45%, #000 85% 100%);
+  /* Kept to the field's clear zone: absent where the stage name and speaker sit, faint behind the digits,
+     full strength below them, gone again before the bottom bar and its 下一环节, then a short full-strength
+     tick at the very floor under the bar, so the 30-second point still reads from the back of the room. */
+  --warn-mask: linear-gradient(to bottom, transparent 0 30cqh, rgb(0 0 0 / .2) 34cqh 74cqh, #000 80cqh 86cqh,
+    transparent 90cqh calc(100% - 1.6cqh), #000 calc(100% - 1.6cqh));
+  -webkit-mask-image: var(--warn-mask);
+  mask-image: var(--warn-mask);
   transition: opacity 400ms ease;
 }
 .dt-stage[data-pro-seat="right"][data-side="pro"] .dt-warnline,
@@ -215,7 +221,11 @@
   color: var(--on-side);
 }
 .dt-half:last-child .dt-team { flex-direction: row-reverse; }
+.dt-team[data-long="true"] { font-size: 2.6cqh; }
+/* The name has a box of its own so a joint team's long name ends in an ellipsis instead of mid-glyph. */
+.dt-team-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .dt-team:not([data-label=""])::before {
+  flex: none;
   content: attr(data-label);
   font-family: var(--font-ui);
   font-size: .7em;
@@ -248,15 +258,14 @@
   opacity: .92;
 }
 
-/* The speaker's gold floor line opens from the middle outward. */
+/* The speaker's gold floor line (spec §5.4): on the floor of the half, its full width, opening from the middle. */
 .dt-floorline {
   position: absolute;
   z-index: 1;
-  left: 14%;
-  right: 14%;
-  bottom: 18cqh;
-  height: .4cqh;
-  border-radius: .2cqh;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: max(4px, .4cqh);
   background: var(--accent);
   transform: scaleX(0);
   transition: transform 520ms var(--ease-out);
@@ -348,13 +357,14 @@
 .dt-stage[data-mode="stage"][data-kind="break"] .dt-motion { font-size: 3.4cqh; }
 .dt-stage[data-mode="stage"][data-kind="break"] .dt-bottom { margin-top: 0; }
 
-/* End card: the match record, sized so every row fits; like the title card it sits on the centre axis. */
+/* End card: the match record, as large as fits so the room can read it (spec §5.4); like the title card it
+   sits on the centre axis. */
 .dt-stage[data-mode="end"] .dt-head { align-self: center; text-align: center; }
 .dt-stage[data-mode="end"] .dt-card { margin-top: 3.6cqh; min-height: 0; }
 .dt-record {
   align-self: center;
   border-collapse: collapse;
-  font-size: min(2cqh, calc(62cqh / var(--rows, 20) / 1.5));
+  font-size: min(2.6cqh, calc(68cqh / var(--rows, 20) / 1.5));   /* the rows fill what is left above the bar */
   line-height: 1.5;
 }
 .dt-record th, .dt-record td { padding: 0 4em 0 0; text-align: left; white-space: nowrap; }
@@ -374,10 +384,11 @@
   height: .5em;
   margin-right: .8em;
   vertical-align: .12em;
-  background: color-mix(in oklab, var(--ground) 50%, var(--ink));
+  background: color-mix(in oklab, var(--ground) 45%, var(--ink));   /* a break: the progress bar's grey */
 }
 .dt-record tr[data-side="pro"] td:first-child::before { background: var(--pro); }
 .dt-record tr[data-side="con"] td:first-child::before { background: var(--con); }
+.dt-record tr[data-kind="dual"] td:first-child::before { background: linear-gradient(90deg, var(--pro) 50%, var(--con) 50%); }
 .dt-record td:not(:first-child) { font-family: var(--font-digits); font-variant-numeric: tabular-nums; }
 .dt-record tr[data-over] td:nth-child(n+3) { color: var(--accent); }
 .dt-record tr[data-skipped] { opacity: .45; }
