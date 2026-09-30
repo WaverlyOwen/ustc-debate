@@ -143,4 +143,31 @@
     S.saveLastMatch({ proTeam: '甲' });
     assert.equal(S.loadLastMatch().proTeam, '甲');
   });
+  DT.test('store: validateFormat rejects malformed extras', () => {
+    const bad = x => { const f = good(); f.extras = x; return S.validateFormat(f); };
+    assert.ok(bad({}).length, 'object');
+    assert.ok(bad('x').length, 'string');
+    assert.ok(bad([null]).length, 'null group');
+    assert.ok(bad([{ group: 5, perSide: 1, variants: [{ type: 'single', secs: 30 }] }]).length, 'non-string group');
+    assert.ok(bad([{ group: ' ', perSide: 1, variants: [{ type: 'single', secs: 30 }] }]).length, 'empty group');
+    assert.ok(!bad([null]).join('').includes('undefined'));
+    assert.deepEqual(bad([{ group: '质询', perSide: 1, variants: [{ type: 'single', secs: 30 }] }]), []);
+    const r = S.parseImport(JSON.stringify(Object.assign(good(), { extras: {} })));
+    assert.equal(r.formats.length, 0); assert.equal(r.errors.length, 1);
+  });
+
+  DT.test('store: loadFormats drops stored formats with no id or a repeated id', () => {
+    const st = memStorage(); S.useStorage(st);
+    const noId = good(); delete noId.id;
+    const numId = Object.assign(good(), { id: 7 });
+    const a = Object.assign(good(), { id: 'dup', name: '甲' });
+    const b = Object.assign(good(), { id: 'dup', name: '乙' });
+    const badExtras = Object.assign(good(), { id: 'be', extras: {} });
+    st.setItem('dt.formats.v1', JSON.stringify({ schema: 1, formats: [noId, numId, a, b, badExtras] }));
+    const list = S.loadFormats();
+    const users = list.filter(f => !f.builtin);
+    assert.equal(users.length, 1);
+    assert.equal(users[0].id, 'dup'); assert.equal(users[0].name, '甲');
+    assert.equal(list.length, DT.BUILTIN_FORMATS.length + 1);
+  });
 })();

@@ -90,7 +90,8 @@
     return errs;
   }
   function extraErrors(g) {
-    if (!isObj(g)) return [];
+    if (!isObj(g)) return ['可插入环节的格式不对'];
+    if (typeof g.group !== 'string' || !g.group.trim()) return ['可插入环节的名称不能为空'];
     const p = '可插入环节「' + g.group + '」';
     const errs = [];
     if (!(Number.isInteger(g.perSide) && g.perSide >= 1)) errs.push(p + '：每方次数至少 1 次');
@@ -118,7 +119,10 @@
       f.stages.forEach((s, i) => stageErrors(s, i, first).forEach(e => errs.push(e)));
     }
     if (f.bells !== undefined && f.bells !== null) bellsErrors(f.bells).forEach(e => errs.push(e));
-    if (Array.isArray(f.extras)) f.extras.forEach(g => extraErrors(g).forEach(e => errs.push(e)));
+    if (f.extras !== undefined) {
+      if (Array.isArray(f.extras)) f.extras.forEach(g => extraErrors(g).forEach(e => errs.push(e)));
+      else errs.push('可插入环节的格式不对');
+    }
     return errs;
   }
 
@@ -146,7 +150,14 @@
   // ---- formats persistence ----
   function loadFormats() {
     const data = readJSON(KEYS.formats);
-    const stored = data && Array.isArray(data.formats) ? data.formats.filter(f => isObj(f) && !validateFormat(f).length) : [];
+    const seen = {};
+    // Drop invalid entries, entries without a usable id, and repeated ids (first one wins).
+    const stored = data && Array.isArray(data.formats) ? data.formats.filter(f => {
+      if (!isObj(f) || typeof f.id !== 'string' || !f.id || Object.prototype.hasOwnProperty.call(seen, f.id)) return false;
+      if (validateFormat(f).length) return false;
+      seen[f.id] = true;
+      return true;
+    }) : [];
     const byId = {};
     stored.forEach(f => { byId[f.id] = f; });
     const out = DT.BUILTIN_FORMATS.map(b => clone(byId[b.id] || b));
