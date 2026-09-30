@@ -2,8 +2,8 @@
 """Compile the debate documents (.tex, written against assets/latex/debate.cls) to PDF.
 
 Usage:
-    python3 build_pdf.py prep/<题>/            # every .tex in the folder
-    python3 build_pdf.py prep/<题>/速查-*.tex  # just these
+    python3 build_pdf.py prep/v3/新生赛/<题>/            # every .tex in the folder
+    python3 build_pdf.py prep/v3/新生赛/<题>/速查-*.tex  # just these
     python3 build_pdf.py --check              # only report whether the toolchain is there
 
 Needs XeLaTeX with ctex + tcolorbox and a Simplified Chinese font (Noto /
@@ -26,6 +26,9 @@ import re
 import shutil
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _version  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CLS_DIR = os.path.join(HERE, "..", "assets", "latex")
@@ -64,6 +67,12 @@ def pdf_pages(pdf_path):
         return n
     counts = [int(x) for x in re.findall(rb"/Type\s*/Pages[^>]*?/Count\s+(\d+)", data, re.S)]
     return max(counts) if counts else None
+
+
+def class_dir(tex_path):
+    """assets/latex/v<N>/ when the class was frozen for that version, else the current class."""
+    frozen = os.path.join(CLS_DIR, "v%d" % _version.topic_version(tex_path))
+    return os.path.abspath(frozen if os.path.isfile(os.path.join(frozen, "debate.cls")) else CLS_DIR)
 
 
 def compile_one(tex_path, env):
@@ -131,10 +140,11 @@ def main():
     if not files:
         print("no .tex files found", file=sys.stderr)
         return 2
-    env = dict(os.environ)
-    env["TEXINPUTS"] = ".:" + os.path.abspath(CLS_DIR) + ":" + env.get("TEXINPUTS", "")
+    base_env = dict(os.environ)
     failed, over = [], []
     for tex in files:
+        env = dict(base_env)
+        env["TEXINPUTS"] = ".:" + class_dir(tex) + ":" + base_env.get("TEXINPUTS", "")
         ok, pdf, errors = compile_one(tex, env)
         if not ok:
             failed.append(tex)

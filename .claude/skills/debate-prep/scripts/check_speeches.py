@@ -2,7 +2,7 @@
 """Count the spoken length of each speech in a 文稿 file and check it against the format's band.
 
 Usage:
-    python3 check_speeches.py prep/<题>/文稿-*.tex [--format ustc-freshman-cup] [--json]
+    python3 check_speeches.py prep/v<版本>/<赛制>/<题>/文稿-*.tex [--format ustc-freshman-cup] [--json]
     python3 check_speeches.py --list-formats
 
 The file is LaTeX written against assets/latex/debate.cls. There are two kinds
@@ -54,6 +54,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FORMATS_DIR = os.path.join(HERE, "..", "references", "formats")
 sys.path.insert(0, HERE)
 import _tex  # noqa: E402
+import _version  # noqa: E402
 
 # Fallback only; the format file is the source of truth.
 BUILTIN_BANDS = {
@@ -304,7 +305,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="*", help="文稿-*.tex files")
     ap.add_argument("--format", default=None,
-                    help="format key (a file in references/formats/); omit to detect from the ## headings")
+                    help="format key (a file in references/formats/); omit to read it from the folder name, then from the headings")
     ap.add_argument("--list-formats", action="store_true", help="list the formats that have a file")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args()
@@ -316,13 +317,15 @@ def main():
     if not args.files:
         ap.error("no files given")
 
-    fmt = args.format or detect_format(args.files)
+    from_path = next((f for f in map(_version.topic_format, args.files) if f), None)
+    fmt = args.format or from_path or detect_format(args.files)
     bands, chain_bands, source = load_bands(fmt)
     if not bands:
         print("unknown format %r; known: %s" % (fmt, ", ".join(list_formats() or BUILTIN_BANDS)), file=sys.stderr)
         return 2
     if not args.json:
-        print("(format: %s%s；区间来源：%s)" % (fmt, "" if args.format else "，按二级标题自动判断；用 --format 可指定", source))
+        how = "" if args.format else ("，按目录名判断" if from_path else "，按二级标题自动判断；用 --format 可指定")
+        print("(format: %s%s；区间来源：%s)" % (fmt, how, source))
 
     bad = 0
     warn = 0

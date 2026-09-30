@@ -14,7 +14,9 @@
 
 ```
 .claude/skills/debate-prep/
-├── SKILL.md                         # 技能入口：原则、输入、九步流程（第 0–8 步）、输出、后续互动
+├── SKILL.md                         # 技能入口：原则、输入、九步流程（第 0–8 步）、输出、版本、后续互动
+├── VERSION                          # 当前版本号（主版本.次版本）
+├── CHANGELOG.md                     # 各版本的改动、兼容约定、每个版本下的辩题
 ├── references/
 │   ├── formats/
 │   │   ├── ustc-freshman-cup.md     # 中科大新生辩论赛赛制（默认）
@@ -34,13 +36,13 @@
 │   └── agent-prompts.md             # 对抗迭代用的建构 / 攻击子代理提示词，两方共用只换持方
 ├── scripts/
 │   ├── build_pdf.py                 # .tex → PDF（latexmk / xelatex；打印页数，速查正文超两页报 WARN；没有 TeX 时打印安装说明）
-│   ├── md2tex.py                    # 旧版 Markdown 产出的迁移工具，正常流程不用
 │   ├── check_speeches.py            # 口播字数是否落在赛制区间（区间从赛制文件读，套件算最短与最长组装）；问题链每问 ≤25 字、封闭式、链数
 │   ├── check_voice.py               # 检出念稿腔：破折号、金句、等长句、书面连接词、黏合剂种类与重复、未口语化的数字；套件逐个组装查
 │   ├── check_consistency.py         # 速查与文稿中的数字（阿拉伯与口语形式）是否都在口径表内
 │   ├── check_evidence.py            # 出处清单：已核实必须有日期、出处、引句；【待核实】不得进稿件；--strict 为校赛红线
 │   ├── _numerals.py                 # 中文数字解析（一致性与论据检查共用）
-│   └── _tex.py                      # LaTeX 读取：按 debate.cls 的宏切分节、抽稿件正文、套件组装、问题链、出处行
+│   ├── _tex.py                      # LaTeX 读取：按 debate.cls 的宏切分节、抽稿件正文、套件组装、问题链、出处行
+│   └── _version.py                  # 读版本号；从 prep/v<N>/<赛制>/ 路径认出辩题的版本与赛制；按版本启用检查规则
 └── evals/
     └── evals.json                   # 测试用例（全套、部分请求、未抽签、校赛、陪练、压字数）
 ```
@@ -51,10 +53,10 @@
 
 > 辩题：XXX / YYY，我方反方，中科大新生赛，帮我备赛。
 
-也可以把 `.claude/skills/debate-prep` 复制到 `~/.claude/skills/` 供所有项目使用。生成的文档默认放在 `prep/<辩题简称>/`，文件名带辩题不带编号：
+也可以把 `.claude/skills/debate-prep` 复制到 `~/.claude/skills/` 供所有项目使用。生成的文档默认放在 `prep/v<主版本>/<赛制>/<辩题简称>/`，文件名带辩题不带编号：
 
 ```
-prep/宠物之爱/
+prep/v3/新生赛/宠物之爱/
 ├── 备赛文档-宠物之爱.tex / .pdf      # 双方共用
 ├── 速查-正方-宠物之爱.tex / .pdf     # 每方一份，正文两页 + 场上记录卡
 ├── 速查-反方-宠物之爱.tex / .pdf
@@ -89,7 +91,7 @@ prep/宠物之爱/
 
 ```
 python3 .claude/skills/debate-prep/scripts/build_pdf.py --check          # 只看环境
-python3 .claude/skills/debate-prep/scripts/build_pdf.py prep/<辩题简称>/
+python3 .claude/skills/debate-prep/scripts/build_pdf.py prep/v3/新生赛/<辩题简称>/
 ```
 
 版式由 `\documentclass[prep|quick|script, pro|con|both]{debate}` 决定：备赛文档用阅读版式，速查用紧凑两页版式，文稿用 12pt 朗读版式，把"如果……就……"预案收进虚线框，套件的选择组、兜底和临场位各有自己的框；正方红、反方蓝，是华语辩论的惯例色。宏的清单见 `references/document-structure.md`。
@@ -103,6 +105,18 @@ python3 .claude/skills/debate-prep/scripts/build_pdf.py prep/<辩题简称>/
 | 赛制 | 可选，默认中科大新生辩论赛 |
 | 比赛日期、队员分工、对手信息 | 可选 |
 
+## 版本
+
+技能有版本号（`VERSION`），改动记在 `CHANGELOG.md`。辩题按「版本 / 赛制」分目录，在哪个版本下建成就一直留在那里：
+
+```
+prep/
+├── v2/新生赛/…            # LaTeX，成段讲稿都是定稿（现有七道题）
+└── v3/新生赛/…、v3/校赛2025/…   # 当前版本：回应型发言是套件
+```
+
+新辩题直接用当前版本；旧辩题不用跟着升级。检查脚本从路径认出版本，某个版本新加的规则只管这个版本以后的辩题；`debate.cls` 只加宏不删宏，旧辩题照样能编译。想让旧辩题用上新写法，就复制到新版本目录重做。每个主版本在 git 里打了标签 `debate-prep-v<N>`，可以取回当时的完整技能。
+
 ## 新增赛制
 
-复制 `references/formats/_template.md`，填写新赛制的流程、计时方式、打分块、双方稿件清单与字数换算，保存为 `references/formats/<赛制简称>.md`，并在 `SKILL.md` 的输入表格"赛制"一行加上说明。字数换算表按模板里的固定格式写，`check_speeches.py --format <赛制简称>` 会直接从这个文件读区间，不需要改脚本；`--list-formats` 列出已有赛制。
+复制 `references/formats/_template.md`，填写新赛制的流程、计时方式、打分块、双方稿件清单与字数换算，保存为 `references/formats/<赛制简称>.md`（开头「目录名」一行是它在 `prep/v<N>/` 下的目录名），并在 `SKILL.md` 的输入表格"赛制"一行加上说明。字数换算表按模板里的固定格式写，`check_speeches.py --format <赛制简称>` 会直接从这个文件读区间，不需要改脚本；`--list-formats` 列出已有赛制。

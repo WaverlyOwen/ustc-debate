@@ -2,7 +2,7 @@
 """Flag the mechanical tells that make a debate script sound read rather than spoken.
 
 Usage:
-    python3 check_voice.py prep/<题>/文稿-*.tex [--verbose]
+    python3 check_voice.py prep/v<版本>/<赛制>/<题>/文稿-*.tex [--verbose]
 
 The file is LaTeX (assets/latex/debate.cls): a speech is \begin{speech}…\end{speech},
 emphasis is \stress{…}, stage directions \aside{…} and 临场位 notes \reserve{…}
@@ -45,6 +45,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _tex  # noqa: E402
+import _version  # noqa: E402
 
 BOOKISH = ["综上所述", "值得注意的是", "鉴于", "旨在", "因而", "与此同时", "由此可见",
            "不言而喻", "众所周知", "从某种意义上", "换而言之", "诚然如此", "基于此",
@@ -260,6 +261,9 @@ def main():
     bad = 0
     if args.desk:
         for path in args.files:
+            if not _version.applies("desk-dash", path):
+                print("== %s  跳过（v%d 辩题；这条规则从 v%d 起）" % (path, _version.topic_version(path), _version.RULES["desk-dash"]))
+                continue
             hits = desk_lines(path)
             if hits:
                 bad += 1
