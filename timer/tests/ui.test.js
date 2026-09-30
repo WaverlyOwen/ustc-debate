@@ -701,8 +701,32 @@
     } finally { t.done(); }
   });
 
+  // A save that fails says so, rather than 已导出.
+  DT.test('ui: 导出这一场 says when the file could not be saved', () => {
+    const built = '<html lang="zh-CN"><head><title>辩论计时器</title><style id="dt-style">b{}</style></head><body data-dt-autoboot>' +
+      '<div id="app"></div><script id="dt-main">window.__x = 1;</script></body></html>';
+    const realSave = DT.store.saveFile, warn = console.warn;
+    DT.preset.captureSource(new DOMParser().parseFromString(built, 'text/html'));
+    DT.store.saveFile = () => { throw new Error('blocked'); };
+    console.warn = () => {};
+    const t = bootPreset(memStorage(), null);
+    try {
+      t.box.querySelector('[data-format-id="ustc-freshman-cup"]').click();
+      t.box.querySelector('button[data-action="export"]').click();
+      const notice = t.box.querySelector('.dt-setup-notice').textContent;
+      assert.ok(notice.indexOf('已导出') < 0, 'no success message: ' + notice);
+      assert.ok(notice.indexOf('没能导出') >= 0, notice);
+      assert.equal(t.c.route(), 'setup');
+    } finally {
+      t.done();
+      DT.store.saveFile = realSave;
+      console.warn = warn;
+      DT.preset.captureSource(document);
+    }
+  });
+
   DT.test('ui: 导出这一场 saves a page that opens on the chosen match, and says so', () => {
-    const built = '<html lang="zh-CN"><head><title>辩论计时器</title><style>b{}</style></head><body data-dt-autoboot>' +
+    const built = '<html lang="zh-CN"><head><title>辩论计时器</title><style id="dt-style">b{}</style></head><body data-dt-autoboot>' +
       '<div id="app"></div><script id="dt-main">window.__x = 1;</script></body></html>';
     const saved = [], realSave = DT.store.saveFile;
     DT.preset.captureSource(new DOMParser().parseFromString(built, 'text/html'));

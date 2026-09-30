@@ -14,6 +14,7 @@
   // Used when build.py has not injected DT.THEMES (the test page loads the sources directly).
   const FALLBACK_THEMES = [{ id: 'hall', name: '堂' }, { id: 'daylight', name: '昼' }, { id: 'chroma', name: '绿幕' }];
   const EXPORTED = '已导出。把这个文件拷到比赛用的电脑上，双击就能直接开始这一场';
+  const EXPORT_FAILED = '没能导出这个文件：浏览器没有让它下载。再试一次，或换一个浏览器';
   const RESTART_LABEL = '重新开始这一场';   // 新的一场 on the end card of a match file (new spec §4.1)
   // What ?exportProbe=1 exports, for the end-to-end test (new spec §4.4).
   const PROBE = {
@@ -1178,9 +1179,17 @@
         resumable: saved ? resumeInfo(saved) : null,
         themes: themeList(),
         canExport: !!DT.preset.sourceParts(),
+        // The download is handed to the browser; what it does next (a save dialog the timekeeper may cancel) the page
+        // cannot see, so the notice says only whether the file was handed over.
         onExport(format, match, theme) {
-          const p = DT.preset.make(format, match, theme, DT.clock.now());
-          DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(DT.preset.sourceParts(), p), 'text/html');
+          try {
+            const p = DT.preset.make(format, match, theme, DT.clock.now());
+            DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(DT.preset.sourceParts(), p), 'text/html');
+          } catch (e) {
+            console.warn('导出失败：', e);
+            handle.toast(EXPORT_FAILED);
+            return;
+          }
           handle.toast(EXPORTED);
         },
         onStart(format, match, theme) {

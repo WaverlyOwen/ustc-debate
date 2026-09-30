@@ -12,6 +12,28 @@
   }
   const withStage = patch => { const f = good(); Object.assign(f.stages[0], patch); return f; };
 
+  // The object URL behind a download stays valid long enough for a slow machine's "where to save" dialog.
+  DT.test('store: saveFile keeps its download link alive for 30 seconds', () => {
+    const realSet = window.setTimeout, realCreate = URL.createObjectURL, realRevoke = URL.revokeObjectURL;
+    const timers = [], revoked = [];
+    window.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return 0; };
+    URL.createObjectURL = () => 'blob:probe';
+    URL.revokeObjectURL = url => revoked.push(url);
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () {};
+    try {
+      DT.store.saveFile('a.json', '{}');
+      assert.equal(revoked.length, 0, 'not revoked at once');
+      const t = timers.find(x => x.ms >= 30000);
+      assert.ok(t, 'revoked after 30 s or more: ' + timers.map(x => x.ms).join(', '));
+      t.fn();
+      assert.deepEqual(revoked, ['blob:probe']);
+    } finally {
+      window.setTimeout = realSet; URL.createObjectURL = realCreate; URL.revokeObjectURL = realRevoke;
+      HTMLAnchorElement.prototype.click = click;
+    }
+  });
+
   DT.test('store: every builtin format validates', () => {
     assert.ok(DT.BUILTIN_FORMATS.length >= 5);
     DT.BUILTIN_FORMATS.forEach(f => assert.deepEqual(S.validateFormat(f), [], f.id));

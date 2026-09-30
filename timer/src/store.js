@@ -274,6 +274,8 @@
 
   // ---- files ----
   // A download through a temporary link: the editor's format export and the match export share it.
+  // The link's object URL lives on for a while: the browser may still be showing its "where to save" dialog.
+  const DOWNLOAD_URL_MS = 30000;
   function saveFile(name, text, mime = 'application/json') {
     const url = URL.createObjectURL(new Blob([text], { type: mime }));
     const a = document.createElement('a');
@@ -283,7 +285,7 @@
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_MS);
   }
 
   // ---- session, settings, last match ----

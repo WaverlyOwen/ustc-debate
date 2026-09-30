@@ -236,6 +236,12 @@ class ThemeBuildTests(unittest.TestCase):
         html = build.inline_html(build.parse_all(FORMATS))
         self.assertEqual(html.count('<script id="dt-main">'), 1)
 
+    def test_stylesheet_is_tagged(self):
+        # preset.js finds the page's own CSS by this id when it exports a match (not as the first <style> in <head>).
+        html = build.inline_html(build.parse_all(FORMATS))
+        self.assertEqual(html.count('<style id="dt-style">'), 1)
+        self.assertEqual(html[:html.index("</head>")].count("<style"), 1)   # the head's only stylesheet
+
     def test_theme_order_comes_from_the_header(self):
         # By purpose, not by file name: dark projection first, then light, the keying utility last.
         ids = [t["id"] for t in build.themes_meta()]

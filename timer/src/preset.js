@@ -4,6 +4,7 @@
   'use strict';
   const KIND = 'debate-timer-match';
   const MAIN_ID = 'dt-main';       // build.py tags the main script so; the preset block goes just before it
+  const STYLE_ID = 'dt-style';     // and the stylesheet so
   const PRESET_ID = 'dt-preset';
   const SCHEMA = 1;
   const APP_TITLE = '辩论计时器';
@@ -16,11 +17,12 @@
   // ---- the page's own source, read before the app changes anything ----
   let source = null;
 
-  // The built page has one <style> and one main script (id dt-main); the dev shell links its files, so it has
-  // no source to copy and cannot export. An old preset block is not part of the source: a new one replaces it.
+  // The built page has one stylesheet (id dt-style) and one main script (id dt-main), found by their ids: a style
+  // something else put into the head first is not the page's own. The dev shell links its files, so it has no
+  // source to copy and cannot export. An old preset block is not part of the source: a new one replaces it.
   function captureSource(doc = document) {
     const main = doc.getElementById(MAIN_ID);
-    const style = doc.querySelector('head > style');
+    const style = doc.getElementById(STYLE_ID);
     source = main && style ? {
       lang: doc.documentElement.getAttribute('lang') || 'zh-CN',
       title: doc.title,
@@ -70,7 +72,7 @@
       '<html lang="' + escapeText(parts.lang).replace(/"/g, '&quot;') + '"><head><meta charset="utf-8">' +
       '<meta name="viewport" content="width=device-width, initial-scale=1">' +
       '<title>' + escapeText(label(preset) + '：' + APP_TITLE) + '</title>\n' +
-      '<style>' + parts.style + '</style></head>\n' +
+      '<style id="' + STYLE_ID + '">' + parts.style + '</style></head>\n' +
       '<body data-dt-autoboot><div id="app"></div>\n' +
       '<script type="application/json" id="' + PRESET_ID + '">' + json + '</script>\n' +
       '<script id="' + MAIN_ID + '">' + parts.main + '</script></body></html>\n';

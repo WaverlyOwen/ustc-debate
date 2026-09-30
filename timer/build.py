@@ -263,7 +263,8 @@ def inline_html(formats):
                   for p in script_files())
     js = re.sub(r"</script", r"<\/script", js, flags=re.I)
     # The main script is tagged so a page can find its own source (the match export reads it back).
-    return _page(banner, f"<style>\n{css}</style>\n", f'<script id="dt-main">\n{js}</script>\n')
+    # Both are tagged so an export (preset.js) copies exactly these, whatever else ends up in the page.
+    return _page(banner, f'<style id="dt-style">\n{css}</style>\n', f'<script id="dt-main">\n{js}</script>\n')
 
 
 def main(argv=None):

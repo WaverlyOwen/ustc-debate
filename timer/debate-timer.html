@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>辩论计时器</title>
-<style>
+<style id="dt-style">
 /* === styles/base.css === */
 /* base.css: the theme variable contract with 堂 (hall) defaults, a small reset, and the stage's size basis. */
 
@@ -5243,6 +5243,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 
   // ---- files ----
   // A download through a temporary link: the editor's format export and the match export share it.
+  // The link's object URL lives on for a while: the browser may still be showing its "where to save" dialog.
+  const DOWNLOAD_URL_MS = 30000;
   function saveFile(name, text, mime = 'application/json') {
     const url = URL.createObjectURL(new Blob([text], { type: mime }));
     const a = document.createElement('a');
@@ -5252,7 +5254,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_MS);
   }
 
   // ---- session, settings, last match ----
@@ -5286,6 +5288,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   'use strict';
   const KIND = 'debate-timer-match';
   const MAIN_ID = 'dt-main';       // build.py tags the main script so; the preset block goes just before it
+  const STYLE_ID = 'dt-style';     // and the stylesheet so
   const PRESET_ID = 'dt-preset';
   const SCHEMA = 1;
   const APP_TITLE = '辩论计时器';
@@ -5298,11 +5301,12 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   // ---- the page's own source, read before the app changes anything ----
   let source = null;
 
-  // The built page has one <style> and one main script (id dt-main); the dev shell links its files, so it has
-  // no source to copy and cannot export. An old preset block is not part of the source: a new one replaces it.
+  // The built page has one stylesheet (id dt-style) and one main script (id dt-main), found by their ids: a style
+  // something else put into the head first is not the page's own. The dev shell links its files, so it has no
+  // source to copy and cannot export. An old preset block is not part of the source: a new one replaces it.
   function captureSource(doc = document) {
     const main = doc.getElementById(MAIN_ID);
-    const style = doc.querySelector('head > style');
+    const style = doc.getElementById(STYLE_ID);
     source = main && style ? {
       lang: doc.documentElement.getAttribute('lang') || 'zh-CN',
       title: doc.title,
@@ -5352,7 +5356,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       '<html lang="' + escapeText(parts.lang).replace(/"/g, '&quot;') + '"><head><meta charset="utf-8">' +
       '<meta name="viewport" content="width=device-width, initial-scale=1">' +
       '<title>' + escapeText(label(preset) + '：' + APP_TITLE) + '</title>\n' +
-      '<style>' + parts.style + '</style></head>\n' +
+      '<style id="' + STYLE_ID + '">' + parts.style + '</style></head>\n' +
       '<body data-dt-autoboot><div id="app"></div>\n' +
       '<script type="application/json" id="' + PRESET_ID + '">' + json + '<\/script>\n' +
       '<script id="' + MAIN_ID + '">' + parts.main + '<\/script></body></html>\n';
@@ -8167,6 +8171,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   // Used when build.py has not injected DT.THEMES (the test page loads the sources directly).
   const FALLBACK_THEMES = [{ id: 'hall', name: '堂' }, { id: 'daylight', name: '昼' }, { id: 'chroma', name: '绿幕' }];
   const EXPORTED = '已导出。把这个文件拷到比赛用的电脑上，双击就能直接开始这一场';
+  const EXPORT_FAILED = '没能导出这个文件：浏览器没有让它下载。再试一次，或换一个浏览器';
   const RESTART_LABEL = '重新开始这一场';   // 新的一场 on the end card of a match file (new spec §4.1)
   // What ?exportProbe=1 exports, for the end-to-end test (new spec §4.4).
   const PROBE = {
@@ -9331,9 +9336,17 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         resumable: saved ? resumeInfo(saved) : null,
         themes: themeList(),
         canExport: !!DT.preset.sourceParts(),
+        // The download is handed to the browser; what it does next (a save dialog the timekeeper may cancel) the page
+        // cannot see, so the notice says only whether the file was handed over.
         onExport(format, match, theme) {
-          const p = DT.preset.make(format, match, theme, DT.clock.now());
-          DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(DT.preset.sourceParts(), p), 'text/html');
+          try {
+            const p = DT.preset.make(format, match, theme, DT.clock.now());
+            DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(DT.preset.sourceParts(), p), 'text/html');
+          } catch (e) {
+            console.warn('导出失败：', e);
+            handle.toast(EXPORT_FAILED);
+            return;
+          }
           handle.toast(EXPORTED);
         },
         onStart(format, match, theme) {

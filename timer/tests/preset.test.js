@@ -51,6 +51,25 @@
     P.captureSource(document);   // restore for other tests
   });
 
+  // The page's own stylesheet is found by its id, not as the first <style> in the head: anything that puts a style
+  // there before the page has loaded (an extension, say) must not become the exported file's only stylesheet.
+  DT.test('preset: the source is the tagged stylesheet, whatever else is in the head', () => {
+    const html = P.buildHtml(PARTS, P.make(F(), MATCH, 'hall', 1));
+    const doc = docFrom(html);
+    assert.equal(doc.querySelectorAll('style#dt-style').length, 1, 'the export tags its stylesheet too');
+    const stray = doc.createElement('style');
+    stray.textContent = '.injected{}';
+    doc.head.insertBefore(stray, doc.head.firstChild);
+    P.captureSource(doc);
+    try {
+      assert.equal(P.sourceParts().style, PARTS.style);
+    } finally { P.captureSource(document); }
+    P.captureSource(docFrom('<html><head><style>.first{}</style></head><body><script id="dt-main">x</script></body></html>'));
+    try {
+      assert.equal(P.sourceParts(), null, 'an untagged stylesheet is not taken for the page\'s own');
+    } finally { P.captureSource(document); }
+  });
+
   DT.test('preset: the dev shell cannot export', () => {
     P.captureSource(docFrom('<html><head><style>x{}</style></head><body><script src="engine.js"></script></body></html>'));
     assert.equal(P.sourceParts(), null);
