@@ -177,6 +177,7 @@
     let theme = null;       // the theme on screen
     let paint = null;       // while that theme has a painter: its canvas, context, instance and frame bookkeeping
     let lastView = null, lastSig = null;
+    let painterWarned = false;
 
     function later(fn, ms) {
       const id = setTimeout(() => { timers.delete(id); fn(); }, ms);
@@ -285,9 +286,23 @@
       paint.canvas.width = w;
       paint.canvas.height = h;
       if (paint.ctx) paint.ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      paint.painter.resize(box.width, box.height);
+      if (!guard(() => paint.painter.resize(box.width, box.height))) return false;
       paint.dirty = true;
       return true;
+    }
+
+    // A painter is decoration: one that throws is stopped (said once in the console) and the theme carries on with
+    // its stylesheet alone, so the digits, the bars and the rest of the frame keep updating.
+    function guard(fn) {
+      try {
+        fn();
+        return true;
+      } catch (e) {
+        if (!painterWarned) console.warn('主题画面出错，已停用画布，只保留样式：', e);
+        painterWarned = true;
+        stopPainter();
+        return false;
+      }
     }
 
     function startPainter(factory) {
@@ -298,11 +313,12 @@
       const ctx = canvas.getContext('2d');
       const flags = { thumbnail, reducedMotion: reducedMotion(), frozen: frozenPage() };
       paint = {
-        canvas, ctx, painter: factory(canvas, ctx, flags),
+        canvas, ctx, painter: null,
         still: flags.thumbnail || flags.reducedMotion || flags.frozen,
         at: -Infinity, sig: null, dirty: true, sized: false, observer: null,
       };
-      sizeCanvas();
+      if (!guard(() => { paint.painter = factory(canvas, ctx, flags); })) return;
+      if (!sizeCanvas() && !paint) return;
       if (typeof ResizeObserver === 'function') {
         paint.observer = new ResizeObserver(() => { if (paint && sizeCanvas() && lastView) draw(lastView, lastSig); });
         paint.observer.observe(stage);
@@ -314,7 +330,9 @@
       const p = paint;
       paint = null;
       if (p.observer) p.observer.disconnect();
-      p.painter.destroy();
+      try {
+        if (p.painter) p.painter.destroy();
+      } catch (e) { /* it is going anyway */ }
       p.canvas.remove();
     }
 
@@ -336,8 +354,17 @@
       paint.at = now;
       paint.sig = sig;
       paint.dirty = false;
-      paint.painter.frame(v, now);
+      guard(() => paint.painter.frame(v, now));
     }
+
+    // A frame skipped while the page was hidden (a thumbnail drawn in a background tab, say) is drawn when it shows:
+    // a still painter would otherwise wait for the next change on screen.
+    function onVisible() {
+      if (!destroyed && paint && lastView && !stage.ownerDocument.hidden && (paint.dirty || paint.sig !== lastSig)) {
+        draw(lastView, lastSig);
+      }
+    }
+    stage.ownerDocument.addEventListener('visibilitychange', onVisible);
 
     function update(v) {
       if (destroyed || !v) return;
@@ -461,6 +488,7 @@
 
     function destroy() {
       destroyed = true;
+      stage.ownerDocument.removeEventListener('visibilitychange', onVisible);
       stopPainter();
       timers.forEach(id => clearTimeout(id));
       timers.clear();

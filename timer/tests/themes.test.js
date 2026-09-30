@@ -395,6 +395,65 @@
     } finally { DT.THEMES = saved; DT.clock.reset(); }
   });
 
+  // A painter is decoration. One that throws, when it is made, sized or asked for a frame, is stopped with one
+  // warning; the rest of the frame (digits, bars, text) is still written, and the theme goes on as CSS alone.
+  DT.test('themes: a painter that throws is stopped and the stage keeps updating', () => {
+    const warn = console.warn, warnings = [];
+    console.warn = function () { warnings.push(Array.from(arguments).join(' ')); };
+    const saved = DT.THEMES;
+    DT.THEMES = (saved || []).concat(['zz-bad-frame', 'zz-bad-make', 'zz-bad-size'].map(id => ({ id, name: 'x', desc: 'x', tone: 'dark' })));
+    let frames = 0, destroyed = 0;
+    DT.themes.register('zz-bad-frame', { painter: () => ({ frame() { frames++; throw new Error('frame'); }, resize() {}, destroy() { destroyed++; } }) });
+    DT.themes.register('zz-bad-make', { painter: () => { throw new Error('make'); } });
+    DT.themes.register('zz-bad-size', { painter: () => ({ frame() { frames++; }, resize() { throw new Error('size'); }, destroy() {} }) });
+    let now = 5000; DT.clock.set(() => now);
+    try {
+      ['zz-bad-frame', 'zz-bad-make', 'zz-bad-size'].forEach(id => {
+        warnings.length = 0; frames = 0;
+        const h = R.mount(host());
+        const root = document.querySelector('.dt-stage');
+        h.update(viewAt('正方一辩开篇立论', id));
+        assert.equal(root.querySelector('.dt-canvas'), null, id + ': the canvas goes');
+        assert.ok(root.querySelector('.dt-next-name').textContent, id + ': the bottom bar was still written');
+        now += 1000;
+        h.update(Object.assign(viewAt('正方一辩开篇立论', id), { formatName: '之后的一帧' }));
+        assert.equal(root.querySelector('.dt-format').textContent, '之后的一帧', id + ': later frames are written');
+        assert.ok(frames <= 1, id + ': the painter is not asked again: ' + frames);
+        assert.equal(warnings.length, 1, id + ': one warning: ' + warnings.join(' | '));
+        h.destroy();
+      });
+      assert.equal(destroyed, 1, 'a painter that failed is still destroyed');
+    } finally { console.warn = warn; DT.THEMES = saved; DT.clock.reset(); }
+  });
+
+  // A frame is never drawn while the page is hidden. A thumbnail updated once in a background tab would then keep a
+  // bare backdrop; its frame is drawn when the page shows.
+  DT.test('themes: a still frame skipped while the page is hidden is drawn when it shows', () => {
+    let frames = 0;
+    DT.themes.register('zz-hidden', { painter: () => ({ frame() { frames++; }, resize() {}, destroy() {} }) });
+    const saved = DT.THEMES; DT.THEMES = (saved || []).concat([{ id: 'zz-hidden', name: 'x', desc: 'x', tone: 'dark' }]);
+    let hidden = true;
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+    try {
+      const h = R.mount(host(), { thumbnail: true });
+      h.update(viewAt('正方一辩开篇立论', 'zz-hidden'));
+      assert.equal(frames, 0, 'nothing drawn while hidden');
+      hidden = false;
+      document.dispatchEvent(new Event('visibilitychange'));
+      assert.equal(frames, 1, 'drawn once it shows');
+      document.dispatchEvent(new Event('visibilitychange'));
+      assert.equal(frames, 1, 'and not again for nothing');
+      h.destroy();
+      hidden = true;
+      const h2 = R.mount(host(), { thumbnail: true });
+      h2.update(viewAt('正方一辩开篇立论', 'zz-hidden'));
+      h2.destroy();
+      hidden = false;
+      document.dispatchEvent(new Event('visibilitychange'));
+      assert.equal(frames, 1, 'a destroyed stage stops listening');
+    } finally { delete document.hidden; DT.THEMES = saved; }
+  });
+
   DT.test('themes: thumbnail mode draws once and never animates', () => {
     let frames = 0;
     DT.themes.register('zz-thumb', { painter: () => ({ frame() { frames++; }, resize() {}, destroy() {} }) });
