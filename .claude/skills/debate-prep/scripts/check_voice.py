@@ -25,7 +25,18 @@ references/speech-voice.md for the ones that need a human ear):
   数字口语化    no decimals or percent signs in the spoken text; the precise
                 value lives in the 速查 (百分之十四出头, 将近六成 on stage)
 
-Exit code 1 if any speech fails.
+A kit (\\begin{kit}, see _tex.kit_parts) is checked over EVERY assembly the
+speaker could build on the day, by running the full check above on each one:
+a live choice of modules must never produce a speech that fails. The report
+names one failing assembly by its chosen modules.
+
+Desk mode (--desk) checks the lines of a 备赛文档 or 速查 that a debater will
+say out loud: the whole of a 速查, and in a 备赛文档 the \\definition one-liners,
+\\thesis and thesisbox, the 标准表述 and 允许的换说法 columns of \\canonrow,
+\\sub{口头版}, and any \\field whose label ends in 口径. There, dashes must be
+zero. Analysis prose may keep its dashes.
+
+Exit code 1 if anything fails.
 """
 import argparse
 import os
@@ -165,31 +176,132 @@ def check(heading, raw, verbose=False):
     return problems, {"dash": dash, "bold": len(bold), "glue": glue, "kinds": kinds, "sents": len(sents)}
 
 
+def check_kit(heading, raw):
+    """Run check() on every assembly of a kit. Returns (problems, stats, n_assemblies)."""
+    parts = _tex.kit_parts(raw)
+    seen, first_bad, n = {}, None, 0
+    worst = {"dash": 0, "bold": 0, "glue": 10 ** 6, "kinds": 10 ** 6}
+    for choices, tex in _tex.assemblies(parts):
+        n += 1
+        probs, st = check(heading, tex)
+        worst["dash"] = max(worst["dash"], st["dash"]); worst["bold"] = max(worst["bold"], st["bold"])
+        worst["glue"] = min(worst["glue"], st["glue"]); worst["kinds"] = min(worst["kinds"], st["kinds"])
+        for name, value, fix in probs:
+            if name not in seen:
+                seen[name] = [0, value, fix, choices]
+            seen[name][0] += 1
+    # Pieces that trip a check on their own: names the module to rewrite instead of an assembly.
+    pieces = [("固定「%s」" % p.name, p.text) for p in parts if p.kind == "fixed"]
+    pieces += [("「%s」%s" % (p.name, cond), t) for p in parts if p.kind == "pick" for cond, t, _ in p.modules]
+    problems = []
+    for name, (cnt, value, fix, choices) in seen.items():
+        own = [label for label, t in pieces if any(pn == name for pn, _, _ in check(heading, t)[0])]
+        where = ("出在：" + "；".join(own)) if own else ("如：" + ("；".join(choices) or "固定段"))
+        problems.append((name, "%s（%d/%d 种组装，%s）" % (value, cnt, n, where), fix))
+    if n == 0:
+        worst = {"dash": 0, "bold": 0, "glue": 0, "kinds": 0}
+    return problems, worst, n
+
+
+SPOKEN_ONE_ARG = ("definition",)
+
+
+def spoken_dash(t):
+    """A dash inside a sentence. A cell holding only "——" is a placeholder, not speech."""
+    return re.search(r"[^\s{}&]——|——[^\s{}&]", _tex.plain(t)) is not None
+
+
+def desk_lines(path):
+    """Yield (line, text) for each spoken line in a 备赛文档 / 速查 that contains a dash."""
+    text = _tex.read(path)
+    body_start = text.find("\\begin{document}")
+    body = text[body_start:] if body_start >= 0 else text
+    offset = text.count("\n", 0, max(body_start, 0))
+    quick = "速查" in os.path.basename(path) or re.search(r"\\documentclass\[[^\]]*quick", text)
+    hits = []
+    if quick:
+        for k, ln in enumerate(body.split("\n"), 1):
+            if spoken_dash(ln):
+                hits.append((offset + k, _tex.plain(ln).strip()))
+        return hits
+
+    def grab(pattern, n_args, keep):
+        for m in re.finditer(pattern, body):
+            a, _ = _tex.args(body, m.end() - 1, n_args)
+            for idx in keep:
+                if idx < len(a) and spoken_dash(a[idx]):
+                    hits.append((offset + body.count("\n", 0, m.start()) + 1, _tex.plain(a[idx]).strip()))
+    grab(r"\\definition\s*\{", 1, [0])
+    grab(r"\\thesis\s*\{", 2, [1])
+    grab(r"\\canonrow\s*\{", 5, [1, 2])
+    for m in re.finditer(r"\\sub\s*\{口头版\}", body):
+        a, _ = _tex.args(body, m.end(), 1)
+        if a and spoken_dash(a[0]):
+            hits.append((offset + body.count("\n", 0, m.start()) + 1, _tex.plain(a[0]).strip()))
+    for m in re.finditer(r"\\field\s*\{", body):
+        a, _ = _tex.args(body, m.end() - 1, 2)
+        if len(a) == 2 and _tex.plain(a[0]).strip().endswith("口径") and spoken_dash(a[1]):
+            hits.append((offset + body.count("\n", 0, m.start()) + 1, _tex.plain(a[1]).strip()))
+    for m in re.finditer(r"\\begin\{thesisbox\}", body):
+        end = body.find("\\end{thesisbox}", m.end())
+        seg = re.sub(r"^\s*\[[^\]]*\]", "", body[m.end():end])
+        if spoken_dash(seg):
+            hits.append((offset + body.count("\n", 0, m.start()) + 1, _tex.plain(seg).strip()))
+    return sorted(set(hits))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="+")
     ap.add_argument("--verbose", action="store_true", help="also print stats for speeches that pass")
+    ap.add_argument("--desk", action="store_true", help="check the spoken lines of 备赛文档 / 速查 instead of speeches")
     args = ap.parse_args()
 
     bad = 0
+    if args.desk:
+        for path in args.files:
+            hits = desk_lines(path)
+            if hits:
+                bad += 1
+                print("== %s  %d 处会被念出口的破折号" % (path, len(hits)))
+                for ln, t in hits:
+                    print("   line %d: %s" % (ln, t[:70]))
+            else:
+                print("== %s  OK" % path)
+        if bad:
+            print("\n这些句子会被队员说出口。破折号改成句号断句，或换成冒号、「也就是说」「比如」。")
+        return 1 if bad else 0
     for path in args.files:
         text = _tex.read(path)
         print("== %s" % path)
         for kind, title, meta, body in _tex.sections(text):
-            if kind != "speech":
+            if kind not in ("speech", "kit"):
                 continue
             heading = _tex.heading(title, meta)
-            if not re.search(r"(立论|驳论|小结|结辩|申论)稿", heading):
+            if not re.search(r"(立论|驳论|小结|结辩|申论)", heading):
                 continue
-            problems, stats = check(heading, body, args.verbose)
+            if kind == "kit":
+                try:
+                    problems, stats, n = check_kit(heading, body)
+                except ValueError as e:
+                    problems, stats, n = [("套件结构", "", str(e))], {"dash": 0, "bold": 0, "glue": 0, "kinds": 0}, 0
+            else:
+                if "稿" not in heading:
+                    continue
+                problems, stats = check(heading, body, args.verbose)
+                n = 0
             if problems:
                 bad += 1
                 print("   FAIL %s" % heading[:44])
                 for name, value, fix in problems:
                     print("        %-6s %-14s %s" % (name, value, fix))
             else:
-                print("   OK   %-44s 破折号 %d 着重 %d 口语 %d（%d 类）"
-                      % (heading[:44], stats["dash"], stats["bold"], stats["glue"], stats["kinds"]))
+                if n:
+                    print("   OK   %-44s %d 种组装全过：着重≤%d 口语≥%d（≥%d 类）  [套件]"
+                          % (heading[:44], n, stats["bold"], stats["glue"], stats["kinds"]))
+                else:
+                    print("   OK   %-44s 破折号 %d 着重 %d 口语 %d（%d 类）"
+                          % (heading[:44], stats["dash"], stats["bold"], stats["glue"], stats["kinds"]))
     if bad:
         print("\n%d 篇稿件有机械痕迹。改法见 references/speech-voice.md，"
               "剩下的三条（画面、形容词、不工整）要自己出声念一遍。" % bad)

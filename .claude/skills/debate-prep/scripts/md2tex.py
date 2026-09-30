@@ -403,6 +403,12 @@ def render_table(rows, ctx):
 
     def g(r, i):
         return r[i].strip() if i is not None and i < len(r) else ""
+    if ctx.get("recordcard") and heads and "什么时候填" in heads[0]:
+        def opts(cell):
+            items = [o.strip() for o in cell.split("□") if o.strip()]
+            return "".join(r"\opt{%s}" % inline(re.sub(r"^(如果|兜底[：:]\s*)", "", o)) for o in items) if "□" in cell else inline(cell)
+        return "\n".join(r"\record{%s}{%s}{%s}{%s}" % (inline(g(r, 0)), inline(g(r, 1)), opts(g(r, 2)), inline(g(r, 3)))
+                         for r in body)
     if heads and heads[0] == "块" and any("环节" in h for h in heads):
         out = [r"\begin{flowtable}"]
         last = None
@@ -572,13 +578,38 @@ def render_body(blocks, ctx):
         if kind_b == "heading":
             level, text = payload
             if level == 2:
+                nm = re.match(r"(\d+)[.、]\s*(.+?)(?:（(.+?)）)?\s*$", text) if kind == "script" else None
+                if nm and "奇袭申论" in nm.group(2) and "套件" in (nm.group(3) or "") \
+                        and open_env and open_env[0] == "stage" and ctx.get("surprise_stage"):
+                    # old Markdown layout had 奇袭申论 as its own ## section; it now nests in the 奇袭预案 stage
+                    close_to(1)
+                    out.append(r"\begin{kit}{奇袭申论}{%s}" % inline(nm.group(3)))
+                    open_env.append("kit")
+                    ctx["stress"] = True
+                    continue
                 close_to(0)
                 ctx["stress"] = False
+                ctx["recordcard"] = False
+                ctx["surprise_stage"] = False
+                if kind == "quick" and "场上记录卡" in text:
+                    out.append(r"\begin{recordcard}")
+                    open_env.append("recordcard")
+                    ctx["recordcard"] = True
+                    continue
                 if kind == "script":
-                    nm = re.match(r"(\d+)[.、]\s*(.+?)(?:（(.+?)）)?\s*$", text)
                     if nm:
                         title = "%s. %s" % (nm.group(1), nm.group(2))
                         meta = nm.group(3) or ""
+                        if "套件" in meta:
+                            out.append(r"\begin{kit}{%s}{%s}" % (inline(title), inline(meta)))
+                            open_env.append("kit")
+                            ctx["stress"] = True
+                            continue
+                        if "奇袭" in nm.group(2) and "预案" in nm.group(2):
+                            ctx["surprise_stage"] = True
+                            side = "正方" if "正方" in nm.group(2) else "反方"
+                            title = "%s. %s奇袭预案" % (nm.group(1), side)
+                            meta = "质询 150 秒双边 / 申论 120 秒，二选一"
                         is_speech = "稿" in nm.group(2) and "预案" not in nm.group(2)
                         env = "speech" if is_speech else "stage"
                         out.append(r"\begin{%s}{%s}{%s}" % (env, inline(title), inline(meta)))
@@ -600,6 +631,30 @@ def render_body(blocks, ctx):
                 cur_section_side = sd
                 cmd = {"pro": r"\prosection", "con": r"\consection"}.get(sd, r"\section")
                 out.append(r"%s{%s}" % (cmd, inline(text)))
+            elif level in (3, 4) and "kit" in open_env:
+                base = open_env.index("kit") + 1
+                if level == 3:
+                    close_to(base)
+                    pm = re.match(r"^(.+?)\s*·\s*任选\s*(\d+)", text)
+                    lm = re.match(r"^临场.*?约\s*(\d+)\s*字", text)
+                    if pm:
+                        out.append(r"\begin{pick}{%s}{%s}" % (inline(pm.group(1)), pm.group(2)))
+                        open_env.append("pick")
+                    elif lm:
+                        out.append(r"\live{%s}" % lm.group(1))
+                    else:
+                        out.append(r"\begin{fixed}{%s}" % inline(re.sub(r"（固定）$", "", text).strip()))
+                        open_env.append("fixed")
+                else:
+                    close_to(base + 1)
+                    fm = re.match(r"^兜底[：:]\s*(.+)$", text)
+                    if fm:
+                        out.append(r"\begin{fallback}{%s}" % inline(fm.group(1)))
+                        open_env.append("fallback")
+                    else:
+                        out.append(r"\begin{module}{%s}" % inline(text))
+                        open_env.append("module")
+                continue
             elif level == 3:
                 close_to(1 if open_env and open_env[0] in ("speech", "stage") else 0)
                 if "定义杀" in text:
@@ -636,6 +691,8 @@ def render_body(blocks, ctx):
             if chain_open:
                 out.append(r"\end{chain}"); chain_open = False
             if re.match(r"^如果", head) and not rest:
+                if "kit" in open_env:
+                    close_to(open_env.index("kit") + 1)
                 out.append(r"\begin{contingency}")
                 open_env.append("contingency")
                 continue
@@ -716,6 +773,11 @@ def render_body(blocks, ctx):
 
         if kind_b == "para":
             text = payload
+            if ctx.get("recordcard"):
+                continue                       # the environment prints its own one-line intro
+            if open_env and open_env[-1] == "kit" and re.match(r"^\**组装\**[：:]", text):
+                out.append(r"\assembly{%s}" % inline(re.sub(r"^\**组装\**[：:]\s*", "", text)))
+                continue
             if chain_open:
                 cm = re.match(r"^\**(打断用语|收束语)\**\s*[：:]\s*(.*)$", text)
                 if cm:

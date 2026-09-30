@@ -42,6 +42,7 @@ def clean_line(line):
     scan = re.sub(r"^\s*\|\s*\d+\s*\|", "| |", scan)              # "| 18 | ..." table row index
     scan = re.sub(r"(?<![\d.])\d+-(?=[^\d\s])", " ", scan)        # "01-备赛文档" file-name prefixes
     scan = re.sub(r"\b\d{1,2}\s*[–—-]\s*\d{1,2}\s*(个|条|次|句|点|问)", " ", scan)  # "6–8 个" template wording
+    scan = re.sub(r"\d+\s*[–—-]\s*\d+\s*(秒|字)", " ", scan)        # kit headings: "组装后 805–812 字"
     scan = re.sub(r"\d+\s*(秒|字)", " ", scan)                    # "约 700 字 / 180 秒" is format metadata
     scan = re.sub(r"(?i)(doi\s*[:：]?\s*)?10\.\d{4,}/\S+", " ", scan)   # DOI is an identifier, not a datum
     scan = re.sub(r"(?i)isbn[\s:：-]*[\d-]+X?", " ", scan)

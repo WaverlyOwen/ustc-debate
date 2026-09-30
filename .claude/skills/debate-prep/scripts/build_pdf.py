@@ -12,8 +12,10 @@ Claude Code on the web; on a personal machine install TeX Live / MacTeX.
 Nothing is pip-installed here.
 
 latexmk is used when present (it reruns as needed and cleans up); otherwise
-xelatex is run twice. After each PDF the page count is printed; a 速查 that
-runs past two pages gets a WARN, because the sheet is read on stage.
+xelatex is run twice. After each PDF the page count is printed; a 速查 whose
+body runs past two pages gets a WARN, because the sheet is read on stage. The
+场上记录卡 (\begin{recordcard}) always starts its own page and is not counted
+against the limit: it is torn off and filled in during the match.
 
 Exit code 1 if any file fails to compile or the toolchain is missing.
 """
@@ -71,7 +73,8 @@ def compile_one(tex_path, env):
         cmd = ["latexmk", "-xelatex", "-interaction=nonstopmode", "-halt-on-error", "-silent", base]
         r = subprocess.run(cmd, cwd=d, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         ok = r.returncode == 0
-        subprocess.run(["latexmk", "-c", "-silent", base], cwd=d, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if ok:   # on failure keep the .log: the error report below reads it
+            subprocess.run(["latexmk", "-c", "-silent", base], cwd=d, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     else:
         ok = True
         for _ in range(2):
@@ -141,9 +144,10 @@ def main():
             continue
         pages = pdf_pages(pdf)
         print("OK   %s  ->  %s%s" % (tex, pdf, ("  %d 页" % pages) if pages else ""))
-        if "速查" in os.path.basename(tex) and pages and pages > QUICKREF_MAX_PAGES:
+        limit = QUICKREF_MAX_PAGES + (1 if "\\begin{recordcard}" in open(tex, encoding="utf-8").read() else 0)
+        if "速查" in os.path.basename(tex) and pages and pages > limit:
             over.append((tex, pages))
-            print("WARN %s 排出 %d 页，速查要控制在 %d 页以内：删对方论点表里最弱的行、合并临场预案，不要缩字号"
+            print("WARN %s 排出 %d 页，速查正文要控制在 %d 页以内（记录卡另占一页，不算在内）：删对方论点表里最弱的行、合并临场预案，不要缩字号"
                   % (os.path.basename(tex), pages, QUICKREF_MAX_PAGES))
     if failed:
         print("\n%d 个文件编译失败（.log 保留在同目录，看第一个 ! 开头的错误）。" % len(failed))

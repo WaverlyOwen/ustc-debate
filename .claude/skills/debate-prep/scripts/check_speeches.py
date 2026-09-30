@@ -5,9 +5,15 @@ Usage:
     python3 check_speeches.py prep/<题>/文稿-*.tex [--format ustc-freshman-cup] [--json]
     python3 check_speeches.py --list-formats
 
-The file is LaTeX written against assets/latex/debate.cls. A speech is
-\begin{speech}{标题}{正文 NNN 字 / 180 秒} … \end{speech}; everything else is a
-\begin{stage}. Counting rule (the single canonical one, mirrored from the
+The file is LaTeX written against assets/latex/debate.cls. There are two kinds
+of prose speech:
+  定稿  \begin{speech}{标题}{正文 NNN 字 / 180 秒} … \end{speech}
+  套件  \begin{kit}{标题}{套件 · 组装后 NNN–NNN 字 / T 秒} … \end{kit}
+A kit answers the other side, so it is fixed parts plus pick groups of
+conditional modules chosen on the day plus live slots (see _tex.kit_parts).
+Its shortest and longest assembly are both computed and BOTH must fit the full
+band: whichever modules the speaker picks live, the speech fits the time.
+Everything else is a \begin{stage}. Counting rule (the single canonical one, mirrored from the
 format file):
   counted    汉字, 阿拉伯数字 (one char each), English words (two chars each)
   not counted  punctuation, whitespace, LaTeX macros
@@ -30,7 +36,12 @@ format's band (WARN).
 Estimating by eye gives a different answer every time, which is how a script
 that says "约 740 字" ends up being 771 on stage. Run this instead.
 
-Exit code 1 if any speech falls outside its band or any question is too long.
+The number written in a heading must equal the computed one (正文 N 字, or
+组装后 N–M 字 for a kit). A heading that says 约 740 字 over a body of 771 is
+the drift this script exists to stop, so a mismatch fails.
+
+Exit code 1 if any speech falls outside its band, a heading disagrees with its
+count, or any question is too long.
 """
 import argparse
 import glob
@@ -185,9 +196,22 @@ def detect_format(files):
 
 
 # ------------------------------------------------------------- speeches --
-def classify(heading):
-    """Map a section heading to a band key, or None if it is not a full speech."""
+def classify(heading, is_kit=False):
+    """Map a section heading to a band key, or None if it is not a full speech.
+
+    A kit never uses a shortened 留临场位 band: its live slots are declared
+    parts and counted, so it is checked against the full band. A kit closing
+    uses the full 210-second band whichever side speaks."""
     h = heading
+    if is_kit:
+        if "奇袭" in h and "申论" in h:
+            return "奇袭申论"
+        for key in ("立论", "驳论", "小结"):
+            if key in h:
+                return key
+        if "结辩" in h:
+            return "结辩·反四"
+        return None
     reserve = "临场位" in h or "临场回应" in h
     if "奇袭" in h and "预案" in h:
         return None   # composite section: a question chain plus a speech, handled by split_surprise()
@@ -203,6 +227,37 @@ def classify(heading):
         first = h.split("结辩")[0]
         return "结辩·反四" if ("反" in first[-3:] or "封路" in h) else "结辩·正四"
     return None
+
+
+def declared(meta):
+    """What the heading claims: (lo, hi) for a kit, (n, n) for a script, or None."""
+    m = re.search(r"组装后\s*(\d+)\s*[–—-]\s*(\d+)\s*字", meta)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    m = re.search(r"正文\s*(\d+)\s*字", meta)
+    if m:
+        return int(m.group(1)), int(m.group(1))
+    return None
+
+
+def kit_breakdown(body):
+    """One line per part: how many 字 it adds to the shortest and longest assembly."""
+    out = []
+    for p in _tex.kit_parts(body):
+        if p.kind == "fixed":
+            out.append("固定「%s」%d" % (p.name, spoken_len(_tex.spoken(p.text))))
+        elif p.kind == "live":
+            out.append("临场 %d" % p.live)
+        else:
+            vals = [spoken_len(_tex.spoken(t)) for _, t, _ in p.modules]
+            out.append("「%s」任选 %d，模块 %s" % (p.name, p.k, "/".join(map(str, vals))))
+    return out
+
+
+def kit_length(body):
+    """(min, max) spoken length over every assembly of a kit, or raises ValueError."""
+    parts = _tex.kit_parts(body)
+    return _tex.assembly_range(parts, lambda t: spoken_len(_tex.spoken(t)))
 
 
 def question_kind(heading):
@@ -277,18 +332,32 @@ def main():
         rows = []
         qrows = []
         for kind, title, meta, body in _tex.sections(text):
-            if kind not in ("speech", "stage"):
+            if kind not in ("speech", "kit", "stage"):
                 continue
             heading = _tex.heading(title, meta)
-            key = classify(heading) if kind == "speech" else None
+            key = classify(heading, kind == "kit") if kind in ("speech", "kit") else None
             if key:
-                n = spoken_len(speech_text(body))
+                err = None
+                if kind == "kit":
+                    try:
+                        nmin, nmax = kit_length(body)
+                    except ValueError as e:
+                        nmin = nmax = 0
+                        err = str(e)
+                else:
+                    nmin = nmax = spoken_len(speech_text(body))
                 secs, lo, hi = bands[key]
-                ok = lo <= n <= hi
-                if not ok:
+                ok = err is None and lo <= nmin and nmax <= hi
+                dec = declared(meta)
+                mismatch = dec != (nmin, nmax)
+                if kind == "speech" and dec is None and not re.search(r"NNN", meta):
+                    mismatch = False     # older scripts may leave the count out; a literal NNN still fails
+                if not ok or mismatch:
                     bad += 1
-                rows.append({"heading": heading, "kind": key, "seconds": secs,
-                             "count": n, "low": lo, "high": hi, "ok": ok})
+                rows.append({"heading": heading, "kind": key, "kit": kind == "kit", "seconds": secs,
+                             "count": nmin, "max": nmax, "low": lo, "high": hi, "ok": ok,
+                             "declared": dec, "mismatch": mismatch, "error": err,
+                             "parts": kit_breakdown(body) if kind == "kit" and err is None and not ok else []})
                 continue
             qk = question_kind(heading)
             if qk == "奇袭质询" and "预案" in heading:
@@ -299,8 +368,9 @@ def main():
                     ok = lo <= n <= hi
                     if not ok:
                         bad += 1
-                    rows.append({"heading": heading[:20] + "·奇袭申论稿", "kind": "奇袭申论", "seconds": secs,
-                                 "count": n, "low": lo, "high": hi, "ok": ok})
+                    rows.append({"heading": heading[:20] + "·奇袭申论稿", "kind": "奇袭申论", "kit": False, "seconds": secs,
+                                 "count": n, "max": n, "low": lo, "high": hi, "ok": ok,
+                                 "declared": None, "mismatch": False, "error": None})
             if qk:
                 chains, qs = questions_of(body)
                 long_qs = [(q, n) for q, n, _ in qs if n > MAX_QUESTION]
@@ -320,10 +390,27 @@ def main():
             if not rows:
                 print("   (no \\begin{speech} found — check the headings against the format file)")
             for r in rows:
-                mark = "OK  " if r["ok"] else "OUT "
-                delta = "" if r["ok"] else ("  (%+d)" % (r["count"] - (r["high"] if r["count"] > r["high"] else r["low"])))
-                print("   %s%-46s %4d 字  目标 %d–%d / %d 秒%s"
-                      % (mark, r["heading"][:46], r["count"], r["low"], r["high"], r["seconds"], delta))
+                mark = "OK  " if (r["ok"] and not r["mismatch"]) else ("OUT " if not r["ok"] else "标题 ")
+                n = ("%d–%d" % (r["count"], r["max"])) if r["kit"] else "%d" % r["count"]
+                extra = ""
+                if r["error"]:
+                    extra = "  " + r["error"]
+                elif not r["ok"]:
+                    if r["count"] < r["low"]:
+                        extra += "  （%s少 %d 字）" % ("最短组装" if r["kit"] else "", r["low"] - r["count"])
+                    if r["max"] > r["high"]:
+                        extra += "  （%s多 %d 字）" % ("最长组装" if r["kit"] else "", r["max"] - r["high"])
+                if r["mismatch"]:
+                    d = r["declared"]
+                    if d is None:
+                        extra += "  标题没填字数，照这里的数字填"
+                    else:
+                        extra += "  标题写 %s，实际 %s" % (("%d–%d" % d) if r["kit"] else d[0], n)
+                print("   %s%-44s %9s 字  目标 %d–%d / %d 秒%s%s"
+                      % (mark, r["heading"][:44], n, r["low"], r["high"], r["seconds"],
+                         "  [套件]" if r["kit"] else "", extra))
+                for line in r.get("parts", []):
+                    print("        " + line)
             for q in qrows:
                 status = "OUT " if q["long"] else ("WARN" if (q["open"] or not q["counts_ok"]) else "OK  ")
                 band = ""
@@ -341,7 +428,8 @@ def main():
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
         if bad:
-            print("\n%d 处超出区间。稿件删减顺序：论据 → 修饰语 → 机制中间步骤；价值升华段不删。"
+            print("\n%d 处未通过。稿件删减顺序：论据 → 修饰语 → 机制中间步骤；价值升华段不删。"
+                  "套件要让最短与最长两种组装都落在区间内。标题数字照本脚本输出填，不要手写。"
                   "问题超过 %d 字就拆成两问或去掉铺垫。" % (bad, MAX_QUESTION))
         if warn:
             print("（%d 处 WARN 只是提醒：边界链、必问里故意让对方答不出的开放问可以保留，其余请改成封闭式；链数与问题数以赛制表为准）" % warn)

@@ -254,7 +254,7 @@
 %% \begin{stage}{2. 正一被质询防守预案}{反四质询，120 秒双边计时} … \end{stage}
 \newcommand{\stagehead}[2]{\par\needspace{6\baselineskip}\vspace{18pt}{\color{rule}\hrule}\vspace{8pt}
   {\fontsize{14.5}{18}\selectfont\sffamily\bfseries\debate@stagenum{#1}\hfill\ifblank{#2}{}{\fboxsep=3pt\fboxrule=0.5pt\fcolorbox{rule}{white}{\scriptsize\sffamily\mdseries\color{inkc}#2}}}\par\vspace{8pt}}
-\newcommand{\debate@stagenum}[1]{\debate@splitnum#1\@nil}
+\newcommand{\debate@stagenum}[1]{\in@{.}{#1}\ifin@\debate@splitnum#1\@nil\else#1\fi}% 奇袭申论 这类内嵌套件没有序号
 \def\debate@splitnum#1.#2\@nil{\textcolor{accent}{#1.}\hspace{8pt}#2}
 \newenvironment{speech}[2]{\stagehead{#1}{#2}\begingroup\fontsize{12}{22}\selectfont\setlength{\parskip}{10pt}}{\endgroup\par}
 \newenvironment{stage}[2]{\stagehead{#1}{#2}}{\par}
@@ -265,6 +265,42 @@
   left=10pt,right=8pt,top=4pt,bottom=4pt,arc=0pt,before skip=10pt,after skip=6pt,fontupper=\small\color{inkb},
   title={\scriptsize\sffamily\bfseries\color{inkc}临场预案 · 如果……就……},colbacktitle=white,toptitle=6pt,bottomtitle=0pt,attach title to upper=\par}
 \newcommand{\ifthen}[2]{\par\hangindent=1.2em\hangafter=1{\bfseries 如果}#1\,→\,#2}
+%% 套件：后发言、要回应对方的成段讲稿（驳论、小结、结辩、奇袭申论、反一立论开头）。
+%% 赛前写好固定段与条件模块，上场按记录卡组装；写法见 references/stage-playbooks.md 第 0 节。
+%% \begin{kit}{4. 正二驳论}{套件 · 组装后 510–540 字 / 120 秒}
+%%   \assembly{开头 → 驳对方立论（任选 2） → 收尾}
+%%   \begin{fixed}{开头} … \end{fixed}                         固定段：照念
+%%   \begin{pick}{驳对方立论}{2}                                 选择组：上场任选 N 个模块
+%%     \begin{module}{如果对方立论建立在……上} … \end{module}     条件模块：标题是使用条件
+%%     \begin{fallback}{打对方的判准} … \end{fallback}           兜底：不断言任何场上事实
+%%   \end{pick}
+%%   \live{60}                                                   临场位：不写稿，约 N 字
+%% \end{kit}
+\newenvironment{kit}[2]{\stagehead{#1}{#2}}{\par}
+\newcommand{\assembly}[1]{\par\noindent{\fboxsep=4pt\colorbox{panel}{\parbox{\dimexpr\linewidth-8pt}{\scriptsize\sffamily
+  {\bfseries\color{inkc}组装}\hspace{8pt}{\color{inkb}#1}}}}\par\vspace{8pt}}
+\newenvironment{fixed}[1]{\par\needspace{4\baselineskip}\vspace{4pt}{\scriptsize\sffamily\bfseries\color{inkc}#1}\par\vspace{2pt}
+  \begingroup\fontsize{12}{22}\selectfont\setlength{\parskip}{10pt}}{\endgroup\par\vspace{6pt}}
+\newtcolorbox{pick}[2]{enhanced,breakable,frame hidden,boxrule=0pt,colback=white,borderline={0.5pt}{0pt}{rule},
+  borderline north={2pt}{0pt}{accent},left=10pt,right=8pt,top=4pt,bottom=4pt,arc=0pt,before skip=8pt,after skip=12pt,
+  title={\scriptsize\sffamily\bfseries\color{inkc}#1\hspace{8pt}{\color{accent}任选 #2}},colbacktitle=white,toptitle=5pt,
+  bottomtitle=0pt,attach title to upper=\par}
+\newenvironment{module}[1]{\par\needspace{3\baselineskip}\vspace{5pt}{\small\sffamily\bfseries\color{accent}#1}\par\vspace{3pt}
+  \begingroup\fontsize{11}{19}\selectfont\setlength{\parskip}{6pt}}{\endgroup\par\vspace{4pt}{\color{rulesoft}\hrule}}
+\newenvironment{fallback}[1]{\par\needspace{3\baselineskip}\vspace{5pt}{\small\sffamily\bfseries\color{inkb}{\fboxsep=1.5pt\fboxrule=0.5pt
+  \fcolorbox{rule}{white}{\scriptsize\mdseries\color{inkc}兜底}}\hspace{6pt}#1}\par\vspace{3pt}
+  \begingroup\fontsize{11}{19}\selectfont\setlength{\parskip}{6pt}}{\endgroup\par\vspace{2pt}}
+\newcommand{\live}[1]{\begin{tcolorbox}[enhanced,frame hidden,boxrule=0pt,colback=white,borderline={0.6pt}{0pt}{rule,dashed},
+  left=10pt,right=8pt,top=5pt,bottom=6pt,arc=0pt,before skip=8pt,after skip=10pt]
+  {\scriptsize\sffamily\bfseries\color{inkc}临场 · 不写稿 · 约 #1 字}\par\vspace{18pt}{\color{rulesoft}\hrule}\vspace{18pt}{\color{rulesoft}\hrule}
+  \end{tcolorbox}}
+%% 场上记录卡（速查末页，单独成页）：选项与文稿套件的模块条件逐字一致，三辩四辩边听边勾
+%% \begin{recordcard} \record{什么时候填}{要判断的}{\opt{选项一}\opt{选项二}\opt{都没有}}{念哪个模块} \end{recordcard}
+\newenvironment{recordcard}{\clearpage\section{场上记录卡}{\small\color{inkb}边听边勾。每一行对应文稿里一个套件的选择组，勾了哪条就念哪个模块。}\par\vspace{6pt}
+  \renewcommand{\arraystretch}{1.9}\begin{longtable}{@{}L{5.5em}L{7em}L{\dimexpr\linewidth-20em-6\tabcolsep}L{7.5em}@{}}\toprule
+  \thead{什么时候填}&\thead{要判断的}&\thead{选项（勾一个）}&\thead{念哪个模块}\\\midrule\endhead}{\bottomrule\end{longtable}}
+\newcommand{\record}[4]{#1&{\bfseries #2}&#3&{\small\color{inkb}#4}\\}
+\newcommand{\opt}[1]{\par\hangindent=1.1em\hangafter=1\makebox[1.1em][l]{□}#1}% 记录卡里的一个选项，一行一个
 %% 问题链：\begin{chain}{链一：归因链}{目标：…} \q{问题}{答"是"→…；答"否"→…} \cut{打断用语} \close{收束语} \end{chain}
 \newcounter{debateq}
 \newenvironment{chain}[2]{\par\needspace{4\baselineskip}\vspace{6pt}{\bfseries\color{accent}#1}\ifblank{#2}{}{\hspace{8pt}{\small\color{inkb}（#2）}}\par\setcounter{debateq}{0}}{\par\vspace{4pt}}
