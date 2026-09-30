@@ -283,7 +283,7 @@ DT.engine = {
 ```js
 {
   mode: 'title' | 'stage' | 'end',
-  match, theme, proSeat,
+  match, formatName /* session.format.name，顶栏右边用 */, theme, proSeat,
   stage: { index, count, name, type, side, speaker, block, note, extra } | null,
   clocks: [ { id: 'main'|'pro'|'con', side, total, remaining, running, active, locked, yielded,
               fraction /* 剩余/总，夹在 [0,1] */, overtime /* ms ≥ 0 */, phase /* 'calm'|'warn'|'count'|'over'|'done' */ } ],

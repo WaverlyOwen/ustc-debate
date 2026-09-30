@@ -402,7 +402,7 @@
     const st = currentStage(session);
     const out = {
       mode: cur < 0 ? 'title' : st ? 'stage' : 'end',
-      match, theme: session.theme, proSeat: (match && match.proSeat) || 'left',
+      match, formatName: session.format.name || '', theme: session.theme, proSeat: (match && match.proSeat) || 'left',
       stage: null, clocks: [], running: false, next: null, warnAt: null,
       progress: session.timeline.map((x, i) => ({
         index: i, side: x.side || null, type: x.type, block: x.block || '', extra: !!x.extra,

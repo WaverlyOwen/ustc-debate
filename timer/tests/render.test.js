@@ -21,6 +21,15 @@
     h.destroy();
   });
 
+  DT.test('render: the top bar shows the match title and the format name from the view', () => {
+    const h = R.mount(host());
+    h.update(E.view(session(0), T0));
+    const root = document.querySelector('.dt-stage');
+    assert.equal(root.querySelector('.dt-match').textContent, '第 1 场');
+    assert.equal(root.querySelector('.dt-format').textContent, F().name);
+    h.destroy();
+  });
+
   DT.test('render: single stage sets side, digits and the used fraction', () => {
     const h = R.mount(host());
     let s = E.toggle(session(0), T0);

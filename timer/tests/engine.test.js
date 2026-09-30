@@ -310,6 +310,13 @@
     assert.equal(E.view(E.goto(E.createSession(f, MATCH, T0), 3, T0), T0).stage.first, 'pro');
   });
 
+  DT.test('engine: view carries the format name in every mode', () => {
+    const s = E.createSession(fx(), MATCH, T0);
+    assert.equal(E.view(s, T0).formatName, '测试赛制');
+    assert.equal(E.view(at(0), T0).formatName, '测试赛制');
+    assert.equal(E.view(E.goto(s, 99, T0), T0).formatName, '测试赛制');
+  });
+
   DT.test('engine: upcomingBells lists future bells of the running clock', () => {
     const s = E.toggle(at(4), T0);
     assert.deepEqual(E.upcomingBells(s, T0 + 1000).map(b => [b.sound, b.at - T0]), [
