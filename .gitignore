@@ -13,3 +13,4 @@ prep/**/.work/
 *.fdb_latexmk
 *.xdv
 *.synctex.gz
+timer/tests/out/
