@@ -1,15 +1,18 @@
 /* ui.js: application assembly: boot, routing between the setup page and the timer, the timer controller
-   (keys, dock, overlays, bells, persistence) and the frame loop. */
+   (keys, dock, overlays, bells, persistence), the console beside a projector window, the projector window
+   itself, and the frame loop. */
 (function (DT) {
   'use strict';
   const DOUBLE_MS = 1500;       // the second press of R R / G G must come within this
   const DOCK_IDLE_MS = 2500;    // the dock folds away after this long without pointer movement
+  const RUNG_MEMORY = 32;       // visual events the projector remembers, so one reported twice plays once
+  const PROJECTOR_FLAG = 'dt.projector';   // sessionStorage: this tab has a projector window open (§5.11)
   const SIDE_NAME = { pro: '正方', con: '反方' };
   const LAST_MATCH = ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'];   // prefilled next time (§5.9)
   // Used when build.py has not injected DT.THEMES (the test page loads the sources directly).
   const FALLBACK_THEMES = [{ id: 'hall', name: '堂' }, { id: 'daylight', name: '昼' }, { id: 'chroma', name: '绿幕' }];
 
-  // Keys in the help overlay (spec §5.8). O is added by the task that brings the projector.
+  // Keys in the help overlay (spec §5.8).
   const HELP = [
     [['空格'], '单方 / 间隔：开始 / 暂停；自由辩 / 对辩：在双方之间切换（未开始则开始）'],
     [['A'], '发言权给正方（自由辩 / 对辩）'],
@@ -27,6 +30,7 @@
     [['S'], '环节列表'],
     [['Shift+S'], '本场记录'],
     [['E'], '编辑赛制（这一场照常进行）'],
+    [['O'], '打开投影窗口（这个窗口变成操作台）'],
     [['F'], '全屏'],
     [['M'], '静音'],
     [['H', '?'], '帮助'],
@@ -58,7 +62,40 @@
     '<button type="button" data-act="insert"><span>插入奇袭</span><kbd>X</kbd></button>' +
     '<button type="button" data-act="stages"><span>环节</span><kbd>S</kbd></button>' +
     '<button type="button" data-act="editor"><span>赛制</span><kbd>E</kbd></button></div>' +
-    '<div class="dt-dock-group"><button type="button" data-act="fullscreen"><span>全屏</span><kbd>F</kbd></button></div>';
+    '<div class="dt-dock-group"><button type="button" data-act="projector"><span>投影窗口</span><kbd>O</kbd></button>' +
+    '<button type="button" data-act="fullscreen"><span>全屏</span><kbd>F</kbd></button></div>';
+  // The console (spec §5.7): stage list, preview, controls. The stage moves into .dt-preview while it is open.
+  const ADJUST = [[-5000, '−5'], [-1000, '−1'], [1000, '+1'], [5000, '+5']];
+  const CONSOLE =
+    '<aside class="dt-console-col dt-console-list" aria-label="环节"><h2 class="dt-console-head">环节</h2>' +
+    '<div class="dt-console-scroll"></div></aside>' +
+    '<section class="dt-console-col dt-console-main" aria-label="投影预览"><header class="dt-console-head">' +
+    '<h2>投影预览</h2><div class="dt-console-status"></div><span class="dt-console-live">投影窗口已连接</span></header>' +
+    '<div class="dt-preview-frame"><div class="dt-preview"></div>' +
+    '<p class="dt-console-note" hidden><span class="dt-console-note-label">计时员提示</span>' +
+    '<span class="dt-console-note-text"></span></p></div></section>' +
+    '<aside class="dt-console-col dt-console-controls" aria-label="计时控制"><h2 class="dt-console-head">控制</h2>' +
+    '<div class="dt-control-group"><button type="button" data-act="toggle" data-primary>' +
+    '<span class="dt-icon"></span><span class="dt-toggle-label">开始</span><kbd>空格</kbd></button>' +
+    '<button type="button" data-act="new" data-primary hidden><span>新的一场</span></button></div>' +
+    '<div class="dt-control-group">' +
+    '<button type="button" data-act="floor" data-side="pro"><i class="dt-swatch" data-side="pro"></i><span>正方</span><kbd>A</kbd></button>' +
+    '<button type="button" data-act="floor" data-side="con"><i class="dt-swatch" data-side="con"></i><span>反方</span><kbd>L</kbd></button></div>' +
+    '<div class="dt-control-group dt-adjust" role="group" aria-label="调整当前时钟">' +
+    ADJUST.map(([ms, label]) => '<button type="button" data-act="adjust" data-ms="' + ms + '">' + label + '</button>').join('') +
+    '<span class="dt-adjust-unit">秒</span></div>' +
+    '<div class="dt-control-group">' +
+    '<button type="button" data-act="prev"><span>上一环节</span><kbd>←</kbd></button>' +
+    '<button type="button" data-act="next"><span>下一环节</span><kbd>→</kbd></button></div>' +
+    '<div class="dt-control-group">' +
+    '<button type="button" data-act="undo"><span>撤销</span><kbd>Z</kbd></button>' +
+    '<button type="button" data-act="reset"><span>重置</span><kbd>R R</kbd></button>' +
+    '<button type="button" data-act="insert" data-wide><span>插入奇袭</span><kbd>X</kbd></button></div>' +
+    '<div class="dt-control-group">' +
+    '<button type="button" data-act="bell"><span>敲铃</span><kbd>B</kbd></button>' +
+    '<button type="button" data-act="mute" aria-pressed="false"><span class="dt-mute-label">静音</span><kbd>M</kbd></button>' +
+    '<label class="dt-volume"><span>音量</span><input type="range" name="volume" min="0" max="1" step="0.05"></label></div>' +
+    '</aside>';
   const STATUS =
     '<span class="dt-pill" data-kind="sound">按任意键启用声音</span>' +
     '<span class="dt-pill" data-kind="muted">' + ICON.muted + '<span>静音</span></span>';
@@ -123,7 +160,7 @@
     const params = new URLSearchParams(loc.search || '');
     const demo = params.get('demo');
     if (demo && DT.demo.names.indexOf(demo) >= 0) return { name: 'demo', demo, frozen: params.get('frozen') === '1' };
-    // '#projector' becomes the projector window in the sync task; until then it opens like any other page.
+    if (loc.hash === '#projector') return { name: 'projector' };
     return { name: 'setup' };
   }
 
@@ -205,6 +242,7 @@
       case 'KeyX': return { overlay: 'insert' };
       case 'KeyS': return { overlay: shift ? 'record' : 'stages' };
       case 'KeyE': return { editor: true };
+      case 'KeyO': return { projector: true };
       case 'KeyH': case 'Slash': return { overlay: 'help' };
       case 'Escape': return { close: true };
       default: return null;
@@ -226,8 +264,32 @@
     insert: (s, now, group, variant, side) => DT.engine.insertExtra(s, group, variant, side, now),
   };
 
+  function toggleFullscreen(target) {
+    try {
+      const p = document.fullscreenElement ? document.exitFullscreen() : target.requestFullscreen();
+      if (p && p.catch) p.catch(() => {});
+    } catch (e) { /* fullscreen not allowed here */ }
+  }
+
+  // The buttons a control surface (the dock, the console's column) paints; the ones it lacks are null.
+  function controlSet(box) {
+    const b = sel => box.querySelector('button[data-act="' + sel + '"]');
+    const toggle = b('toggle');
+    return {
+      prev: b('prev'), next: b('next'), toggle, new: b('new'), undo: b('undo'), insert: b('insert'),
+      pro: box.querySelector('button[data-side="pro"]'), con: box.querySelector('button[data-side="con"]'),
+      icon: toggle.querySelector('.dt-icon'), label: toggle.querySelector('.dt-toggle-label'),
+    };
+  }
+
+  // A mouse click must not leave focus on a button, or the next space would press it as well as toggle.
+  function keepFocus(box) {
+    box.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+  }
+
   // The timer page for one match. env: {bells, settings, still (a screenshot: no sound hint), pinDock,
-  // emit(name, arg) to the app's listeners, onNewMatch() for 新的一场 on the end card, onEdit(formatId) for E,
+  // console (open as the console beside a projector), emit(name, arg) to the app's listeners, onNewMatch() for
+  // 新的一场 on the end card, onEdit(formatId) for E, onProjector() for O (false when no window could open),
   // blocked() true while the editor covers the timer and its keys}.
   function mountTimer(root, first, env) {
     const bells = env.bells, settings = env.settings, still = !!env.still, emit = env.emit;
@@ -241,17 +303,11 @@
     status.innerHTML = STATUS;
     root.appendChild(dock);
     root.appendChild(status);
-    const dockBtn = sel => dock.querySelector('button[data-act="' + sel + '"]');
-    const btn = {
-      prev: dockBtn('prev'), next: dockBtn('next'), toggle: dockBtn('toggle'),
-      pro: dock.querySelector('button[data-side="pro"]'), con: dock.querySelector('button[data-side="con"]'),
-      undo: dockBtn('undo'), insert: dockBtn('insert'), new: dockBtn('new'),
-    };
-    const toggleIcon = btn.toggle.querySelector('.dt-icon');
-    const toggleLabel = btn.toggle.querySelector('.dt-toggle-label');
+    const dockSet = controlSet(dock);
     const pills = { sound: status.querySelector('[data-kind="sound"]'), muted: status.querySelector('[data-kind="muted"]') };
 
     let raf = null, destroyed = false, overlay = null, armed = null, dockTimer = null, dockPinned = false;
+    let desk = null;   // the console's handle while a projector window is open
 
     function viewAt(now) {
       const v = DT.engine.view(session, now);
@@ -265,9 +321,15 @@
       emit('events', events);
     }
 
-    // ---- painting: stage, dock, status pills, the open overlay ----
+    // Toasts show on this stage and go to the projector too (the app relays 'toast').
+    function toast(message) {
+      stage.toast(message);
+      emit('toast', message);
+    }
 
-    function paintDock(v) {
+    // ---- painting: stage, dock, console, status pills, the open overlay ----
+
+    function paintControls(btn, v) {
       const st = v.stage;
       const run = st ? DT.engine.getRun(session) : null;
       const dual = !!st && st.type === 'dual';
@@ -278,9 +340,9 @@
       btn.new.hidden = v.mode !== 'end';
       const started = v.clocks.some(c => c.remaining !== c.total);
       const label = v.running ? (dual ? '换边' : '暂停') : started ? '继续' : '开始';
-      text(toggleLabel, label);
+      text(btn.label, label);
       const icon = v.running && !dual ? 'pause' : 'play';
-      if (toggleIcon.dataset.icon !== icon) { toggleIcon.dataset.icon = icon; toggleIcon.innerHTML = ICON[icon]; }
+      if (btn.icon.dataset.icon !== icon) { btn.icon.dataset.icon = icon; btn.icon.innerHTML = ICON[icon]; }
       ['pro', 'con'].forEach(side => {
         const clock = v.clocks.find(c => c.id === side);
         btn[side].disabled = !dual || !!(clock && clock.locked);
@@ -292,13 +354,15 @@
     function paintStatus() {
       attr(pills.sound, 'data-shown', !still && !bells.isUnlocked());
       attr(pills.muted, 'data-shown', !!settings.muted);
+      if (desk) desk.paintSettings();
     }
 
     function paint(now) {
       const v = viewAt(now);
       stage.update(v);
       attr(root, 'data-theme', stage.el.getAttribute('data-theme'));
-      paintDock(v);
+      paintControls(dockSet, v);
+      if (desk) desk.refresh(now, v);
       if (overlay) overlay.refresh(now, v);
     }
 
@@ -312,16 +376,9 @@
       session = fn.apply(null, [out.session, now].concat(args));
       DT.store.saveSession(session);
       bells.schedule(DT.engine.upcomingBells(session, now), now);
-      if (session.lastFeedback) stage.toast(session.lastFeedback.message);
+      if (session.lastFeedback) toast(session.lastFeedback.message);
       emit('change', session);
       paint(now);
-    }
-
-    function fullscreen() {
-      try {
-        const p = document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen();
-        if (p && p.catch) p.catch(() => {});
-      } catch (e) { /* fullscreen not allowed here */ }
     }
 
     function toggleMute() {
@@ -331,7 +388,13 @@
       paintStatus();
     }
 
-    const OTHER_ACTS = { bell: () => bells.play('ding'), mute: toggleMute, fullscreen };
+    function setVolume(volume) {
+      settings.volume = volume;
+      bells.setVolume(volume);
+      DT.store.saveSettings(settings);
+    }
+
+    const OTHER_ACTS = { bell: () => bells.play('ding'), mute: toggleMute, fullscreen: () => toggleFullscreen(root) };
 
     function act(name) {
       if (destroyed) return false;
@@ -363,7 +426,7 @@
           act.apply(null, cmd.act);
         } else {
           armed = { code, at: now };
-          stage.toast(cmd.twice);
+          toast(cmd.twice);
         }
         return true;
       }
@@ -371,6 +434,10 @@
       if (cmd.editor) {
         closeOverlay();
         env.onEdit(session.format.id);
+        return true;
+      }
+      if (cmd.projector) {
+        if (!env.onProjector()) toast('没能打开投影窗口。请允许这个页面弹出窗口，再按 O');
         return true;
       }
       if (cmd.overlay) {
@@ -494,11 +561,11 @@
         let ok = false;
         try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
         ta.remove();
-        stage.toast(ok ? '已复制' : '没能复制，请手动选中表格复制');
+        toast(ok ? '已复制' : '没能复制，请手动选中表格复制');
       };
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(value).then(() => stage.toast('已复制'), fallback);
+          navigator.clipboard.writeText(value).then(() => toast('已复制'), fallback);
           return;
         }
       } catch (e) { /* fall back below */ }
@@ -550,7 +617,7 @@
     function openOverlay(name) {
       if (destroyed || !OVERLAYS[name]) return false;
       if (name === 'insert' && !(session.format.extras || []).length) {
-        stage.toast('这个赛制没有可插入的环节');
+        toast('这个赛制没有可插入的环节');
         return false;
       }
       closeOverlay();
@@ -593,21 +660,85 @@
       attr(root, 'data-idle', true);
     }
 
-    const DOCK_ACTS = {
+    // What a button on the dock or the console does; the double-press ones go through their keys.
+    const CONTROL_ACTS = {
       prev: () => act('prev'), next: () => act('next'), toggle: () => act('toggle'), undo: () => act('undo'),
       insert: () => openOverlay('insert'), stages: () => openOverlay('stages'), fullscreen: () => act('fullscreen'),
-      new: () => env.onNewMatch(), editor: () => key('KeyE'),
+      new: () => env.onNewMatch(), editor: () => key('KeyE'), projector: () => key('KeyO'), reset: () => key('KeyR'),
+      bell: () => act('bell'), mute: () => act('mute'),
     };
-    dock.addEventListener('click', e => {
+    function onControlClick(e) {
       const b = e.target.closest('button');
       if (!b || b.disabled) return;
       if (b.dataset.act === 'floor') act('floor', b.dataset.side);
-      else if (DOCK_ACTS[b.dataset.act]) DOCK_ACTS[b.dataset.act]();
-    });
-    // A mouse click must not leave focus on a button, or the next space would press it as well as toggle.
-    dock.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+      else if (b.dataset.act === 'adjust') act('adjust', Number(b.dataset.ms));
+      else if (CONTROL_ACTS[b.dataset.act]) CONTROL_ACTS[b.dataset.act]();
+    }
+    dock.addEventListener('click', onControlClick);
+    keepFocus(dock);
     dock.addEventListener('focusin', showDock);
     dock.addEventListener('focusout', showDock);
+
+    // ---- console: the three columns this window turns into beside a projector window (spec §5.7) ----
+
+    // The stage moves into the preview, a 16:9 size container of its own, so it keeps the projector's proportions.
+    function mountDesk() {
+      const box = el('div', 'dt-console');
+      attr(box, 'data-theme', 'hall');   // the timekeeper's desk keeps the default palette, whatever the room shows
+      box.innerHTML = CONSOLE;
+      const preview = box.querySelector('.dt-preview');
+      preview.classList.add('dt-stage-host');
+      preview.appendChild(stage.el);
+      box.querySelector('.dt-console-status').appendChild(status);
+      const controls = box.querySelector('.dt-console-controls');
+      const set = controlSet(controls);
+      const mute = controls.querySelector('button[data-act="mute"]');
+      const volume = controls.querySelector('input[name="volume"]');
+      const note = box.querySelector('.dt-console-note');
+      const noteText = box.querySelector('.dt-console-note-text');
+      const list = box.querySelector('.dt-console-scroll');
+      const refreshList = stagesOverlay(list);
+      controls.addEventListener('click', onControlClick);
+      keepFocus(controls);
+      volume.addEventListener('input', () => setVolume(Number(volume.value)));
+      volume.addEventListener('pointerup', () => volume.blur());   // so the next space reaches the timer
+      root.insertBefore(box, root.firstChild);
+      attr(root, 'data-layout', 'console');
+      let cursor = null;
+      return {
+        refresh(now, v) {
+          refreshList(now, v);
+          paintControls(set, v);
+          const tip = (v.stage && v.stage.note) || '';
+          text(noteText, tip);
+          attr(note, 'hidden', !tip);
+          if (cursor !== session.cursor) {
+            cursor = session.cursor;
+            const current = list.querySelector('[aria-current]');
+            if (current && current.scrollIntoView) current.scrollIntoView({ block: 'nearest' });
+          }
+        },
+        paintSettings() {
+          attr(mute, 'aria-pressed', settings.muted ? 'true' : 'false');
+          text(mute.querySelector('.dt-mute-label'), settings.muted ? '取消静音' : '静音');
+          if (document.activeElement !== volume) volume.value = String(settings.volume);
+        },
+        destroy() {
+          root.insertBefore(stage.el, root.firstChild);
+          root.appendChild(status);
+          box.remove();
+          attr(root, 'data-layout', null);
+        },
+      };
+    }
+
+    function setConsole(on) {
+      if (destroyed || !!on === !!desk) return;
+      if (on) desk = mountDesk();
+      else { desk.destroy(); desk = null; }
+      paintStatus();
+      paint(DT.clock.now());
+    }
 
     // ---- window listeners ----
 
@@ -646,6 +777,7 @@
       raf = requestAnimationFrame(frame);
     }
     frame();
+    if (env.console) setConsole(true);
     const bootNow = DT.clock.now();
     bells.schedule(DT.engine.upcomingBells(session, bootNow), bootNow);   // a resumed clock rings on time
     paintStatus();
@@ -658,9 +790,10 @@
     return {
       session: () => session,
       view: () => viewAt(DT.clock.now()),
-      key, act, openOverlay, closeOverlay,
+      key, act, openOverlay, closeOverlay, setConsole,
       destroy() {
         if (destroyed) return;
+        if (desk) setConsole(false);
         destroyed = true;
         cancelAnimationFrame(raf);
         clearTimeout(dockTimer);
@@ -677,13 +810,108 @@
     };
   }
 
+  // The projector window (spec §5.11): draws what the console sends and works out the time in between with
+  // its own clock. Every key goes to the console except F, which makes this window full screen.
+  function mountProjector(root, env) {
+    const stage = DT.render.mount(root);
+    const hint = el('div', 'dt-projector-hint');
+    hint.append('把这个窗口拖到投影屏幕上，按 ', el('kbd', null, 'F'), ' 全屏');
+    root.appendChild(hint);
+    attr(root, 'data-layout', 'projector');
+    let session = null, raf = null, destroyed = false;
+    const rung = [];   // the console reports each bell it rings; this window may have seen it first
+
+    function pulse(events) {
+      events.forEach(e => {
+        const id = [e.type, e.clock, e.key, e.at].join('|');
+        if (rung.indexOf(id) >= 0) return;
+        rung.push(id);
+        if (rung.length > RUNG_MEMORY) rung.shift();
+        stage.pulse(e);
+      });
+    }
+
+    function viewAt(now) {
+      const v = DT.engine.view(session, now);
+      if (v.mode === 'end') v.record = DT.engine.record(session, now);
+      return v;
+    }
+
+    function draw(now) {
+      if (!session || destroyed) return;
+      try {
+        const out = DT.engine.tick(session, now);   // the automatic rules, until the console's next word
+        session = out.session;
+        pulse(out.events);
+        stage.update(viewAt(now));
+        attr(root, 'data-theme', stage.el.getAttribute('data-theme'));
+      } catch (e) {
+        console.warn('收到的场次无法显示，已丢弃');
+        session = null;
+      }
+    }
+
+    function frame() {
+      draw(DT.clock.now());
+      raf = requestAnimationFrame(frame);
+    }
+
+    const end = DT.sync.createProjectorEnd({
+      target: env.window, opener: env.window.opener || null, storage: env.storage,
+      onState(m) { session = m.session; draw(DT.clock.now()); },
+      onEvents: pulse,
+      onToast: message => stage.toast(message),
+      onKey(code) {
+        attr(hint, 'hidden', true);
+        if (code === 'KeyF') toggleFullscreen(root);
+      },
+    });
+    frame();
+
+    return {
+      session: () => session,
+      view: () => (session ? viewAt(DT.clock.now()) : null),
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        cancelAnimationFrame(raf);
+        end.stop();
+        hint.remove();
+        stage.destroy();
+        ['data-theme', 'data-layout'].forEach(a => root.removeAttribute(a));
+      },
+    };
+  }
+
+  // The projector route's controller: it only shows, so the timer methods do nothing.
+  function bootProjector(root, o, host) {
+    let storage = o.storage || null;
+    if (!storage) { try { storage = host.localStorage || null; } catch (e) { storage = null; } }
+    root.classList.add('dt-app');
+    if (host === window) document.title = '投影 - 辩论计时器';
+    const handle = mountProjector(root, { window: host, storage });
+    return {
+      route: () => 'projector', session: handle.session, view: handle.view,
+      key: () => false, act: () => false, openOverlay: () => false, closeOverlay() {},
+      on: () => () => {},
+      destroy() {
+        handle.destroy();
+        root.classList.remove('dt-app');
+      },
+    };
+  }
+
   // Opens the page on its route and moves between the setup page and the timer. The returned controller
   // speaks for the timer while it is on screen; on the setup page its timer methods do nothing.
+  // o.window stands for this browser window (tests pass a stand-in); o.pollMs is how often a closed
+  // projector window is noticed.
   function boot(opts) {
     const o = opts || {};
     const root = o.root;
+    const host = o.window || window;
     if (o.clock) DT.clock.set(() => o.clock.now());
     const route = o.route ? { name: o.route } : routeOf(o.location || window.location);
+    if (route.name === 'projector') return bootProjector(root, o, host);
     const bells = o.bells || DT.bells;
     let demo = null;
     if (route.name === 'demo') {
@@ -700,12 +928,83 @@
     bells.setMuted(settings.muted);
     root.classList.add('dt-app');
 
-    const listeners = { change: [], events: [] };
+    const listeners = { change: [], events: [], toast: [] };
     let screen = null, destroyed = false;   // {name: 'setup' | 'timer', handle}
     let editor = null;                       // the format editor's handle while it covers the screen
+    let projector = null;                    // {win, link} while a projector window is open
 
-    function emit(name, arg) { listeners[name].slice().forEach(fn => fn(arg)); }
+    function emit(name, arg) {
+      listeners[name].slice().forEach(fn => fn(arg));
+      relay(name, arg);
+    }
     const timer = () => (screen && screen.name === 'timer' ? screen.handle : null);
+
+    // ---- the projector window: this page is the console while one is open (spec §5.11) ----
+
+    // The undo history stays here: it is the bulk of a session and the projector never undoes.
+    function pushState(session) {
+      const s = session || (timer() ? timer().session() : null);
+      if (!projector || !s) return;
+      projector.link.push({ type: 'state', session: Object.assign({}, s, { history: [] }),
+        settings: { volume: settings.volume, muted: settings.muted } });
+    }
+
+    function relay(name, arg) {
+      if (!projector) return;
+      if (name === 'change') pushState(arg);
+      else if (name === 'events') projector.link.push({ type: 'events', events: arg });
+      else if (name === 'toast') projector.link.push({ type: 'toast', message: arg });
+    }
+
+    // Kept per tab, so a refreshed console knows to look for its projector window.
+    function remember(open) {
+      try {
+        if (open) host.sessionStorage.setItem(PROJECTOR_FLAG, '1');
+        else host.sessionStorage.removeItem(PROJECTOR_FLAG);
+      } catch (e) { /* no session storage: a refresh just will not find the window again */ }
+    }
+
+    function connect(win) {
+      const link = DT.sync.createConsoleLink({
+        target: host, pollMs: o.pollMs, getWindow: () => win,
+        onKey(code, k) { if (timer() && !editor) timer().key(code, k); },
+        onClosed() { if (projector && projector.link === link) disconnect(); },
+      });
+      projector = { win, link };
+      remember(true);
+      if (timer()) timer().setConsole(true);
+      pushState();
+    }
+
+    function disconnect() {
+      if (!projector) return;
+      projector.link.stop();
+      projector = null;
+      remember(false);
+      if (timer()) timer().setConsole(false);
+    }
+
+    // O: open the window, or bring it forward when it is already open. False when the browser blocked it.
+    function openProjector() {
+      if (projector && !projector.win.closed) {
+        try { projector.win.focus(); } catch (e) { /* focus is a nicety */ }
+        return true;
+      }
+      disconnect();
+      const win = DT.sync.openProjector(host);
+      if (!win) return false;
+      connect(win);
+      return true;
+    }
+
+    function reclaimProjector() {
+      let open = false;
+      try { open = host.sessionStorage.getItem(PROJECTOR_FLAG) === '1'; } catch (e) { open = false; }
+      if (!open) return;
+      const win = DT.sync.findProjector(host);
+      if (win) connect(win);
+      else remember(false);
+    }
 
     function leave() {
       if (screen) screen.handle.destroy();
@@ -733,13 +1032,17 @@
       });
     }
 
-    function showTimer(session, pinDock) {
+    // extra: {pinDock, console} for the demos.
+    function showTimer(session, extra) {
       leave();
+      const x = extra || {};
       const env = {
-        bells, settings, still: route.name === 'demo' && route.frozen, pinDock, emit, onNewMatch: newMatch,
-        onEdit: formatId => openEditor(formatId), blocked: () => !!editor,
+        bells, settings, still: route.name === 'demo' && route.frozen, pinDock: !!x.pinDock, emit,
+        console: !!projector || !!x.console, onNewMatch: newMatch, onEdit: formatId => openEditor(formatId),
+        onProjector: openProjector, blocked: () => !!editor,
       };
       screen = { name: 'timer', handle: mountTimer(root, session, env) };
+      pushState();
     }
 
     function newMatch() {
@@ -784,12 +1087,13 @@
       screen = { name: 'setup', handle };
     }
 
+    if (!demo) reclaimProjector();
     if (demo && demo.route === 'setup') {
       if (demo.lastMatch) DT.store.saveLastMatch(demo.lastMatch);
       if (demo.session) DT.store.saveSession(demo.session);
       showSetup();
     } else if (demo) {
-      showTimer(demo.session, demo.dock);
+      showTimer(demo.session, { pinDock: demo.dock, console: demo.console });
       if (demo.editor) {
         openEditor(demo.session.format.id);
         stageEditorDemo(root, demo.editor);
@@ -818,10 +1122,10 @@
         if (destroyed) return;
         destroyed = true;
         if (editor) { editor.destroy(); editor = null; }
+        if (projector) { projector.link.stop(); projector = null; }   // the window itself stays for a reload
         if (screen) screen.handle.destroy();
         root.classList.remove('dt-app');
-        listeners.change = [];
-        listeners.events = [];
+        Object.keys(listeners).forEach(k => { listeners[k] = []; });
       },
     };
   }

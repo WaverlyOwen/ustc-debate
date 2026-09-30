@@ -563,12 +563,13 @@ body {
 }
 
 /* === styles/console.css === */
-/* console.css: the timekeeper's layer over the stage: control dock, status pills, overlays (spec §5.7).
+/* console.css: the timekeeper's layer over the stage: control dock, status pills, overlays, the console beside
+   a projector window, and the projector window's first hint (spec §5.7, §5.11).
    Quiet surfaces in the theme's own colours, so the stage stays the only loud thing on screen. */
 
 /* ---- shared surface ---- */
 
-.dt-app {
+.dt-app, .dt-console {
   /* Chroma's dark plate when there is one, otherwise the ground lifted a little toward the ink. */
   --panel: var(--plate, color-mix(in oklab, var(--ground) 91%, var(--ink)));
   --panel-line: color-mix(in oklab, var(--ink) 15%, transparent);
@@ -578,7 +579,7 @@ body {
 }
 
 /* The root is the size container, so the layer is measured in the same cqh as the stage. */
-.dt-dock, .dt-status, .dt-overlay {
+.dt-dock, .dt-status, .dt-overlay, .dt-console, .dt-projector-hint {
   --ui: clamp(13px, 1.55cqh, 22px);
   font-family: var(--font-ui);
   font-size: var(--ui);
@@ -588,7 +589,7 @@ body {
 }
 
 /* Zero specificity, so each component's own button rules win without !important. */
-:where(.dt-dock, .dt-overlay) button {
+:where(.dt-dock, .dt-overlay, .dt-console) button {
   margin: 0;
   border: 0;
   background: none;
@@ -597,13 +598,13 @@ body {
   letter-spacing: inherit;
   cursor: pointer;
 }
-.dt-dock button:focus-visible, .dt-overlay button:focus-visible {
+.dt-dock button:focus-visible, .dt-overlay button:focus-visible, .dt-console button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.dt-dock button:disabled, .dt-overlay button:disabled { opacity: .34; cursor: default; }
+.dt-dock button:disabled, .dt-overlay button:disabled, .dt-console button:disabled { opacity: .34; cursor: default; }
 
-.dt-dock kbd, .dt-overlay kbd {
+.dt-dock kbd, .dt-overlay kbd, .dt-console kbd, .dt-projector-hint kbd {
   display: inline-block;
   min-width: 1.6em;
   padding: .08em .42em;
@@ -631,7 +632,7 @@ body {
 .dt-pill svg { flex: none; width: 1.15em; height: 1.15em; fill: currentColor; }
 
 /* The pointer disappears from the projection with the dock; it comes back on the next movement. */
-.dt-app[data-idle] .dt-stage { cursor: none; }
+.dt-app[data-idle]:not([data-layout="console"]) .dt-stage { cursor: none; }
 
 /* ---- dock: floats above the bottom bar, below the digits ---- */
 
@@ -901,12 +902,199 @@ body {
 /* The copy fallback's textarea, off screen. */
 .dt-offscreen { position: fixed; left: -9999px; top: 0; opacity: 0; }
 
+/* ---- console: stage list, preview and controls beside a projector window (spec §5.7) ---- */
+
+/* The console's right column takes over from the dock. */
+.dt-app[data-layout="console"] .dt-dock { display: none; }
+
+.dt-console {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 24em) minmax(0, 1fr) minmax(0, 19em);
+  background: var(--ground);
+}
+.dt-console-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.dt-console-list, .dt-console-controls { background: var(--panel); }
+.dt-console-list { border-right: 1px solid var(--panel-line); }
+.dt-console-controls { overflow: auto; border-left: 1px solid var(--panel-line); }
+
+/* Column heads: small, spaced, dim; the content below is what matters. */
+.dt-console-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 1.2em;
+  min-height: 4.2em;
+  margin: 0;
+  padding: 0 1.75em;
+  font-size: .8em;
+  font-weight: normal;
+  letter-spacing: .28em;
+  color: var(--ink-dim);
+}
+.dt-console-head h2 { margin: 0; font: inherit; letter-spacing: inherit; }
+
+.dt-console-scroll { flex: 1; min-height: 0; overflow: auto; padding: 0 1.4em 1.4em; }
+
+/* Middle: the preview, as large as the column allows at the projector's 16:9. */
+.dt-console-main { padding: 0 2em 1.6em; }
+.dt-console-main .dt-console-head { padding: 0; }
+.dt-console-status { margin-left: auto; }
+.dt-console .dt-status {
+  position: static;
+  flex-direction: row;
+  font-size: 1em;
+  letter-spacing: normal;
+}
+.dt-console .dt-pill:not([data-shown]) { display: none; }
+.dt-console-live { display: inline-flex; align-items: center; gap: .7em; letter-spacing: .14em; }
+.dt-console-live::before {
+  content: "";
+  width: .55em;
+  height: .55em;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 .3em color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
+/* The preview and the note under it, centred together; the preview gets all the room but the note's 5em. */
+.dt-preview-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+}
+/* A size container of its own (.dt-stage-host), so the stage inside is laid out exactly as on the projector. */
+.dt-preview {
+  flex: none;
+  width: min(100cqw, (100cqh - 5em) * 16 / 9);
+  height: min(100cqh - 5em, 100cqw * 9 / 16);
+  border-radius: .45em;
+  box-shadow: 0 0 0 1px var(--panel-line), var(--panel-shadow);
+}
+
+/* The timekeeper's note for this stage, one line as wide as the preview. Its room is kept when there is none,
+   so the preview never jumps. */
+.dt-console-note {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: 1.4em;
+  width: min(100cqw, (100cqh - 5em) * 16 / 9);
+  margin: 1.3em 0 0;
+  padding: .85em 1.3em;
+  border-left: 3px solid var(--accent);
+  border-radius: .2em .5em .5em .2em;
+  background: var(--panel);
+}
+.dt-console-note[hidden] { display: flex; visibility: hidden; }
+.dt-console-note-label { flex: none; font-size: .8em; letter-spacing: .24em; color: var(--ink-dim); }
+.dt-console-note-text {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-title);
+  letter-spacing: .06em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The console's list has room for two lines of a long stage name. */
+.dt-console .dt-row-name {
+  display: -webkit-box;
+  line-height: 1.3;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Right: the controls, grouped as on the sketch; each group a row of equal buttons. */
+.dt-control-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45em;
+  padding: 1.05em 1.4em;
+  border-top: 1px solid var(--panel-line);
+}
+.dt-console-head + .dt-control-group { padding-top: 0; border-top: 0; }
+.dt-console-controls button {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: .5em;
+  min-width: 0;
+  padding: .62em .5em;
+  border: 1px solid var(--panel-line);
+  border-radius: .5em;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+.dt-console-controls button:hover:not(:disabled) { background: var(--panel-hover); }
+.dt-console-controls button[hidden] { display: none; }
+.dt-console-controls button[data-wide] { flex-basis: 100%; }
+.dt-console-controls button[data-primary] {
+  flex-basis: 100%;
+  padding: 1.05em .8em;
+  border-color: transparent;
+  background: color-mix(in oklab, var(--ink) 13%, transparent);
+  font-size: 1.15em;
+  letter-spacing: .14em;
+}
+.dt-console-controls button[data-primary]:hover:not(:disabled) { background: color-mix(in oklab, var(--ink) 19%, transparent); }
+.dt-console-controls button[aria-pressed="true"] {
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
+  color: var(--accent);
+}
+.dt-console-controls .dt-icon { display: inline-flex; }
+.dt-console-controls svg { flex: none; width: .8em; height: .8em; fill: currentColor; }
+.dt-adjust button { padding-inline: 0; font-family: var(--font-digits); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.dt-adjust-unit { align-self: center; padding-left: .2em; font-size: .9em; color: var(--ink-dim); }
+.dt-volume {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: .9em;
+  padding-top: .45em;
+  letter-spacing: .1em;
+  color: var(--ink-dim);
+}
+.dt-volume input { flex: 1; min-width: 0; margin: 0; accent-color: var(--accent); }
+
+/* ---- projector window: the first hint, gone at the first key ---- */
+
+.dt-projector-hint {
+  position: absolute;
+  z-index: 25;
+  left: 50%;
+  bottom: 15cqh;
+  padding: 1em 1.8em;
+  border: 1px solid var(--panel-line);
+  border-radius: .75em;
+  background: var(--panel);
+  box-shadow: var(--panel-shadow);
+  font-size: clamp(14px, 2.4cqh, 32px);
+  letter-spacing: .16em;
+  white-space: nowrap;
+  translate: -50% 0;
+  pointer-events: none;
+  animation: dt-panel-in 320ms var(--console-ease) both;
+}
+.dt-projector-hint kbd { margin: 0 .2em; color: var(--ink); }
+.dt-projector-hint[hidden] { display: none; }
+/* Full screen on the projector: nothing to point at, so no pointer. */
+.dt-app[data-layout="projector"]:fullscreen .dt-stage { cursor: none; }
+
 @keyframes dt-fade { from { opacity: 0; } }
 @keyframes dt-panel-in { from { opacity: 0; transform: translateY(1.2cqh); } }
 @keyframes dt-drawer-in { from { transform: translateX(-100%); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .dt-dock, .dt-pill, .dt-overlay, .dt-overlay * {
+  .dt-dock, .dt-pill, .dt-overlay, .dt-overlay *, .dt-projector-hint {
     animation: none !important;
     transition: none !important;
   }
@@ -5055,7 +5243,165 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
 })(window.DT = window.DT || {});
 
 /* === sync.js === */
-/* not written yet */
+/* sync.js: the projector window (spec §5.11): opening it, pushing the console's state to it, and handing
+   its keys back. The console stays the only authority; the projector draws what it is sent. */
+(function (DT) {
+  'use strict';
+  const SOURCE = 'debate-timer';      // every message carries this; anything else on the channel is ignored
+  const NAME = 'dt-projector';        // the window's name, so a refreshed console can find it again
+  const HASH = '#projector';
+  const FEATURES = 'popup,width=1280,height=720';
+  const SESSION_KEY = 'dt.session.v1';
+  const POLL_MS = 1000;               // how often the console checks whether the projector was closed
+  const HEARTBEAT_MS = 1000;          // the last state goes out again this often, for a projector that missed it
+
+  const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  const ours = data => isObj(data) && data.source === SOURCE;
+
+  function post(win, message) {
+    try {
+      win.postMessage(Object.assign({ source: SOURCE }, message), '*');
+      return true;
+    } catch (e) { return false; }   // the other window is gone or closing
+  }
+
+  function parse(text) {
+    try { const v = JSON.parse(text); return isObj(v) ? v : null; } catch (e) { return null; }
+  }
+
+  // This page's own file, without query or hash, opened as the projector. Null when the browser blocks it.
+  function openProjector(win) {
+    const w = win || window;
+    try {
+      const url = String(w.location.href).split('#')[0].split('?')[0] + HASH;
+      return w.open(url, NAME, FEATURES) || null;
+    } catch (e) { return null; }
+  }
+
+  // After a refresh: the projector window by its name, or null. Asking for a name nobody holds opens a blank
+  // window, which is closed straight away.
+  function findProjector(win) {
+    const w = win || window;
+    let found = null;
+    try { found = w.open('', NAME); } catch (e) { return null; }
+    if (!found) return null;
+    let hash = HASH;
+    // A loaded file:// page is cross-origin to this one, so reading its location throws; a blank window is not.
+    try { hash = found.location.hash; } catch (e) { /* the projector page itself */ }
+    if (hash === HASH) return found;
+    try { found.close(); } catch (e) { /* already gone */ }
+    return null;
+  }
+
+  // The console's end. opts: {getWindow() -> the projector window, onKey(code, mods), onClosed(), target
+  // (the window whose messages to hear, default window), pollMs, heartbeatMs}. onClosed runs once.
+  function createConsoleLink(opts) {
+    const o = opts || {};
+    const target = o.target || window;
+    let last = null, stopped = false;
+
+    function projector() {
+      try { const w = o.getWindow(); return w && !w.closed ? w : null; } catch (e) { return null; }
+    }
+
+    function push(message) {
+      if (stopped || !isObj(message)) return false;
+      if (message.type === 'state') last = message;
+      const w = projector();
+      return !!w && post(w, message);
+    }
+
+    function onMessage(ev) {
+      const d = ev && ev.data;
+      if (stopped || !ours(d) || d.type !== 'key' || typeof d.code !== 'string') return;
+      const w = projector();
+      if (ev.source && w && ev.source !== w) return;   // only the projector we opened speaks for the room
+      o.onKey(d.code, { shiftKey: !!d.shiftKey, ctrlKey: !!d.ctrlKey, altKey: !!d.altKey, repeat: !!d.repeat });
+    }
+
+    const poll = setInterval(() => {
+      if (projector()) return;
+      stop();
+      if (o.onClosed) o.onClosed();
+    }, o.pollMs || POLL_MS);
+    const beat = setInterval(() => {
+      const w = projector();
+      if (last && w) post(w, last);
+    }, o.heartbeatMs || HEARTBEAT_MS);
+    target.addEventListener('message', onMessage);
+
+    function stop() {
+      if (stopped) return;
+      stopped = true;
+      clearInterval(poll);
+      clearInterval(beat);
+      target.removeEventListener('message', onMessage);
+    }
+
+    return { push, stop };
+  }
+
+  // The projector's end. opts: {target (this window), opener (the console), storage (read for the saved
+  // session at start, or null), onState({session, settings}), onKey(code, event) for every key pressed here,
+  // onEvents(list), onToast(message)}. Keys other than F go to the console; F stays for full screen here.
+  function createProjectorEnd(opts) {
+    const o = opts || {};
+    const target = o.target || window;
+    let stopped = false;
+
+    function state(session, settings) {
+      if (!stopped && isObj(session)) o.onState({ session, settings: isObj(settings) ? settings : null });
+    }
+
+    function onMessage(ev) {
+      const d = ev && ev.data;
+      if (stopped || !ours(d)) return;
+      if (d.type === 'state') state(d.session, d.settings);
+      else if (d.type === 'events' && Array.isArray(d.events) && o.onEvents) o.onEvents(d.events);
+      else if (d.type === 'toast' && o.onToast) o.onToast(String(d.message || ''));
+    }
+
+    function onKeyDown(e) {
+      if (stopped) return;
+      if (o.onKey) o.onKey(e.code, e);
+      if (e.code === 'KeyF') return;
+      if (o.opener) {
+        post(o.opener, { type: 'key', code: e.code, shiftKey: !!e.shiftKey, ctrlKey: !!e.ctrlKey,
+          altKey: !!e.altKey, repeat: !!e.repeat });
+      }
+      // Reload, close, the function keys and the like still belong to the browser.
+      const browserKey = e.ctrlKey || e.altKey || e.metaKey || /^F\d+$/.test(e.code || '');
+      if (!browserKey && e.preventDefault) e.preventDefault();
+    }
+
+    // Written by the console on every change: this keeps the picture going while the console reloads.
+    function onStorage(ev) {
+      if (!ev || ev.key !== SESSION_KEY || !ev.newValue) return;
+      state(parse(ev.newValue), null);
+    }
+
+    target.addEventListener('message', onMessage);
+    target.addEventListener('keydown', onKeyDown);
+    target.addEventListener('storage', onStorage);
+    if (o.storage) {
+      let saved = null;
+      try { saved = o.storage.getItem(SESSION_KEY); } catch (e) { saved = null; }
+      if (saved) state(parse(saved), null);
+    }
+
+    return {
+      stop() {
+        if (stopped) return;
+        stopped = true;
+        target.removeEventListener('message', onMessage);
+        target.removeEventListener('keydown', onKeyDown);
+        target.removeEventListener('storage', onStorage);
+      },
+    };
+  }
+
+  DT.sync = { openProjector, findProjector, createConsoleLink, createProjectorEnd };
+})(window.DT = window.DT || {});
 
 /* === demo.js === */
 /* demo.js: fixed scenes for ?demo=<name>, played out with engine actions; used for screenshots and visual review. */
@@ -5117,7 +5463,8 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
   // steps are [second, action, arg?]; `dock: true` keeps the control dock open. A `setup` scene opens the
   // setup page with the match remembered from last time; its steps, if any, are a match left unfinished.
   // An `editor` scene opens the format editor over the match (E): `expand` opens a row's details, `typo`
-  // leaves [row, text] in a duration box.
+  // leaves [row, text] in a duration box. A `console` scene shows the page as the console beside a projector
+  // window (O).
   const SINGLE = { at: 73, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle']] };
   const DUAL = { at: 137, steps: [[0, 'goto', '自由辩论'], [0, 'floor', 'pro'], [20, 'floor', 'con'], [68, 'floor', 'pro']] };
   const SCENES = {
@@ -5139,6 +5486,9 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     'setup-resume': Object.assign({ setup: true }, DUAL),   // the free debate left half way
     'editor': Object.assign({ editor: { expand: 1 } }, SINGLE),
     'editor-error': Object.assign({ editor: { typo: [0, '3分半'] } }, SINGLE),
+    // The opening speech done in 2:57, the cross-examination running with 1:12 left (spec §5.7's sketch).
+    'console': { console: true, at: 228, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle'], [177, 'toggle'],
+      [180, 'goto', '反方四辩质询正方一辩'], [180, 'toggle']] },
   };
 
   // Play the scene so that its last moment is `now`; the loop ticks before each action, as the UI does.
@@ -5161,7 +5511,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
     const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
     if (!scene.setup) {
-      const out = { route: 'timer', session: play(scene, now), dock: !!scene.dock };
+      const out = { route: 'timer', session: play(scene, now), dock: !!scene.dock, console: !!scene.console };
       if (scene.editor) Object.assign(out, { editor: scene.editor, formats: DT.BUILTIN_FORMATS.concat([weekend()]) });
       return out;
     }
@@ -5175,17 +5525,20 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
 
 /* === ui.js === */
 /* ui.js: application assembly: boot, routing between the setup page and the timer, the timer controller
-   (keys, dock, overlays, bells, persistence) and the frame loop. */
+   (keys, dock, overlays, bells, persistence), the console beside a projector window, the projector window
+   itself, and the frame loop. */
 (function (DT) {
   'use strict';
   const DOUBLE_MS = 1500;       // the second press of R R / G G must come within this
   const DOCK_IDLE_MS = 2500;    // the dock folds away after this long without pointer movement
+  const RUNG_MEMORY = 32;       // visual events the projector remembers, so one reported twice plays once
+  const PROJECTOR_FLAG = 'dt.projector';   // sessionStorage: this tab has a projector window open (§5.11)
   const SIDE_NAME = { pro: '正方', con: '反方' };
   const LAST_MATCH = ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'];   // prefilled next time (§5.9)
   // Used when build.py has not injected DT.THEMES (the test page loads the sources directly).
   const FALLBACK_THEMES = [{ id: 'hall', name: '堂' }, { id: 'daylight', name: '昼' }, { id: 'chroma', name: '绿幕' }];
 
-  // Keys in the help overlay (spec §5.8). O is added by the task that brings the projector.
+  // Keys in the help overlay (spec §5.8).
   const HELP = [
     [['空格'], '单方 / 间隔：开始 / 暂停；自由辩 / 对辩：在双方之间切换（未开始则开始）'],
     [['A'], '发言权给正方（自由辩 / 对辩）'],
@@ -5203,6 +5556,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     [['S'], '环节列表'],
     [['Shift+S'], '本场记录'],
     [['E'], '编辑赛制（这一场照常进行）'],
+    [['O'], '打开投影窗口（这个窗口变成操作台）'],
     [['F'], '全屏'],
     [['M'], '静音'],
     [['H', '?'], '帮助'],
@@ -5234,7 +5588,40 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     '<button type="button" data-act="insert"><span>插入奇袭</span><kbd>X</kbd></button>' +
     '<button type="button" data-act="stages"><span>环节</span><kbd>S</kbd></button>' +
     '<button type="button" data-act="editor"><span>赛制</span><kbd>E</kbd></button></div>' +
-    '<div class="dt-dock-group"><button type="button" data-act="fullscreen"><span>全屏</span><kbd>F</kbd></button></div>';
+    '<div class="dt-dock-group"><button type="button" data-act="projector"><span>投影窗口</span><kbd>O</kbd></button>' +
+    '<button type="button" data-act="fullscreen"><span>全屏</span><kbd>F</kbd></button></div>';
+  // The console (spec §5.7): stage list, preview, controls. The stage moves into .dt-preview while it is open.
+  const ADJUST = [[-5000, '−5'], [-1000, '−1'], [1000, '+1'], [5000, '+5']];
+  const CONSOLE =
+    '<aside class="dt-console-col dt-console-list" aria-label="环节"><h2 class="dt-console-head">环节</h2>' +
+    '<div class="dt-console-scroll"></div></aside>' +
+    '<section class="dt-console-col dt-console-main" aria-label="投影预览"><header class="dt-console-head">' +
+    '<h2>投影预览</h2><div class="dt-console-status"></div><span class="dt-console-live">投影窗口已连接</span></header>' +
+    '<div class="dt-preview-frame"><div class="dt-preview"></div>' +
+    '<p class="dt-console-note" hidden><span class="dt-console-note-label">计时员提示</span>' +
+    '<span class="dt-console-note-text"></span></p></div></section>' +
+    '<aside class="dt-console-col dt-console-controls" aria-label="计时控制"><h2 class="dt-console-head">控制</h2>' +
+    '<div class="dt-control-group"><button type="button" data-act="toggle" data-primary>' +
+    '<span class="dt-icon"></span><span class="dt-toggle-label">开始</span><kbd>空格</kbd></button>' +
+    '<button type="button" data-act="new" data-primary hidden><span>新的一场</span></button></div>' +
+    '<div class="dt-control-group">' +
+    '<button type="button" data-act="floor" data-side="pro"><i class="dt-swatch" data-side="pro"></i><span>正方</span><kbd>A</kbd></button>' +
+    '<button type="button" data-act="floor" data-side="con"><i class="dt-swatch" data-side="con"></i><span>反方</span><kbd>L</kbd></button></div>' +
+    '<div class="dt-control-group dt-adjust" role="group" aria-label="调整当前时钟">' +
+    ADJUST.map(([ms, label]) => '<button type="button" data-act="adjust" data-ms="' + ms + '">' + label + '</button>').join('') +
+    '<span class="dt-adjust-unit">秒</span></div>' +
+    '<div class="dt-control-group">' +
+    '<button type="button" data-act="prev"><span>上一环节</span><kbd>←</kbd></button>' +
+    '<button type="button" data-act="next"><span>下一环节</span><kbd>→</kbd></button></div>' +
+    '<div class="dt-control-group">' +
+    '<button type="button" data-act="undo"><span>撤销</span><kbd>Z</kbd></button>' +
+    '<button type="button" data-act="reset"><span>重置</span><kbd>R R</kbd></button>' +
+    '<button type="button" data-act="insert" data-wide><span>插入奇袭</span><kbd>X</kbd></button></div>' +
+    '<div class="dt-control-group">' +
+    '<button type="button" data-act="bell"><span>敲铃</span><kbd>B</kbd></button>' +
+    '<button type="button" data-act="mute" aria-pressed="false"><span class="dt-mute-label">静音</span><kbd>M</kbd></button>' +
+    '<label class="dt-volume"><span>音量</span><input type="range" name="volume" min="0" max="1" step="0.05"></label></div>' +
+    '</aside>';
   const STATUS =
     '<span class="dt-pill" data-kind="sound">按任意键启用声音</span>' +
     '<span class="dt-pill" data-kind="muted">' + ICON.muted + '<span>静音</span></span>';
@@ -5299,7 +5686,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     const params = new URLSearchParams(loc.search || '');
     const demo = params.get('demo');
     if (demo && DT.demo.names.indexOf(demo) >= 0) return { name: 'demo', demo, frozen: params.get('frozen') === '1' };
-    // '#projector' becomes the projector window in the sync task; until then it opens like any other page.
+    if (loc.hash === '#projector') return { name: 'projector' };
     return { name: 'setup' };
   }
 
@@ -5381,6 +5768,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       case 'KeyX': return { overlay: 'insert' };
       case 'KeyS': return { overlay: shift ? 'record' : 'stages' };
       case 'KeyE': return { editor: true };
+      case 'KeyO': return { projector: true };
       case 'KeyH': case 'Slash': return { overlay: 'help' };
       case 'Escape': return { close: true };
       default: return null;
@@ -5402,8 +5790,32 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     insert: (s, now, group, variant, side) => DT.engine.insertExtra(s, group, variant, side, now),
   };
 
+  function toggleFullscreen(target) {
+    try {
+      const p = document.fullscreenElement ? document.exitFullscreen() : target.requestFullscreen();
+      if (p && p.catch) p.catch(() => {});
+    } catch (e) { /* fullscreen not allowed here */ }
+  }
+
+  // The buttons a control surface (the dock, the console's column) paints; the ones it lacks are null.
+  function controlSet(box) {
+    const b = sel => box.querySelector('button[data-act="' + sel + '"]');
+    const toggle = b('toggle');
+    return {
+      prev: b('prev'), next: b('next'), toggle, new: b('new'), undo: b('undo'), insert: b('insert'),
+      pro: box.querySelector('button[data-side="pro"]'), con: box.querySelector('button[data-side="con"]'),
+      icon: toggle.querySelector('.dt-icon'), label: toggle.querySelector('.dt-toggle-label'),
+    };
+  }
+
+  // A mouse click must not leave focus on a button, or the next space would press it as well as toggle.
+  function keepFocus(box) {
+    box.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+  }
+
   // The timer page for one match. env: {bells, settings, still (a screenshot: no sound hint), pinDock,
-  // emit(name, arg) to the app's listeners, onNewMatch() for 新的一场 on the end card, onEdit(formatId) for E,
+  // console (open as the console beside a projector), emit(name, arg) to the app's listeners, onNewMatch() for
+  // 新的一场 on the end card, onEdit(formatId) for E, onProjector() for O (false when no window could open),
   // blocked() true while the editor covers the timer and its keys}.
   function mountTimer(root, first, env) {
     const bells = env.bells, settings = env.settings, still = !!env.still, emit = env.emit;
@@ -5417,17 +5829,11 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     status.innerHTML = STATUS;
     root.appendChild(dock);
     root.appendChild(status);
-    const dockBtn = sel => dock.querySelector('button[data-act="' + sel + '"]');
-    const btn = {
-      prev: dockBtn('prev'), next: dockBtn('next'), toggle: dockBtn('toggle'),
-      pro: dock.querySelector('button[data-side="pro"]'), con: dock.querySelector('button[data-side="con"]'),
-      undo: dockBtn('undo'), insert: dockBtn('insert'), new: dockBtn('new'),
-    };
-    const toggleIcon = btn.toggle.querySelector('.dt-icon');
-    const toggleLabel = btn.toggle.querySelector('.dt-toggle-label');
+    const dockSet = controlSet(dock);
     const pills = { sound: status.querySelector('[data-kind="sound"]'), muted: status.querySelector('[data-kind="muted"]') };
 
     let raf = null, destroyed = false, overlay = null, armed = null, dockTimer = null, dockPinned = false;
+    let desk = null;   // the console's handle while a projector window is open
 
     function viewAt(now) {
       const v = DT.engine.view(session, now);
@@ -5441,9 +5847,15 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       emit('events', events);
     }
 
-    // ---- painting: stage, dock, status pills, the open overlay ----
+    // Toasts show on this stage and go to the projector too (the app relays 'toast').
+    function toast(message) {
+      stage.toast(message);
+      emit('toast', message);
+    }
 
-    function paintDock(v) {
+    // ---- painting: stage, dock, console, status pills, the open overlay ----
+
+    function paintControls(btn, v) {
       const st = v.stage;
       const run = st ? DT.engine.getRun(session) : null;
       const dual = !!st && st.type === 'dual';
@@ -5454,9 +5866,9 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       btn.new.hidden = v.mode !== 'end';
       const started = v.clocks.some(c => c.remaining !== c.total);
       const label = v.running ? (dual ? '换边' : '暂停') : started ? '继续' : '开始';
-      text(toggleLabel, label);
+      text(btn.label, label);
       const icon = v.running && !dual ? 'pause' : 'play';
-      if (toggleIcon.dataset.icon !== icon) { toggleIcon.dataset.icon = icon; toggleIcon.innerHTML = ICON[icon]; }
+      if (btn.icon.dataset.icon !== icon) { btn.icon.dataset.icon = icon; btn.icon.innerHTML = ICON[icon]; }
       ['pro', 'con'].forEach(side => {
         const clock = v.clocks.find(c => c.id === side);
         btn[side].disabled = !dual || !!(clock && clock.locked);
@@ -5468,13 +5880,15 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     function paintStatus() {
       attr(pills.sound, 'data-shown', !still && !bells.isUnlocked());
       attr(pills.muted, 'data-shown', !!settings.muted);
+      if (desk) desk.paintSettings();
     }
 
     function paint(now) {
       const v = viewAt(now);
       stage.update(v);
       attr(root, 'data-theme', stage.el.getAttribute('data-theme'));
-      paintDock(v);
+      paintControls(dockSet, v);
+      if (desk) desk.refresh(now, v);
       if (overlay) overlay.refresh(now, v);
     }
 
@@ -5488,16 +5902,9 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       session = fn.apply(null, [out.session, now].concat(args));
       DT.store.saveSession(session);
       bells.schedule(DT.engine.upcomingBells(session, now), now);
-      if (session.lastFeedback) stage.toast(session.lastFeedback.message);
+      if (session.lastFeedback) toast(session.lastFeedback.message);
       emit('change', session);
       paint(now);
-    }
-
-    function fullscreen() {
-      try {
-        const p = document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen();
-        if (p && p.catch) p.catch(() => {});
-      } catch (e) { /* fullscreen not allowed here */ }
     }
 
     function toggleMute() {
@@ -5507,7 +5914,13 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       paintStatus();
     }
 
-    const OTHER_ACTS = { bell: () => bells.play('ding'), mute: toggleMute, fullscreen };
+    function setVolume(volume) {
+      settings.volume = volume;
+      bells.setVolume(volume);
+      DT.store.saveSettings(settings);
+    }
+
+    const OTHER_ACTS = { bell: () => bells.play('ding'), mute: toggleMute, fullscreen: () => toggleFullscreen(root) };
 
     function act(name) {
       if (destroyed) return false;
@@ -5539,7 +5952,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
           act.apply(null, cmd.act);
         } else {
           armed = { code, at: now };
-          stage.toast(cmd.twice);
+          toast(cmd.twice);
         }
         return true;
       }
@@ -5547,6 +5960,10 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       if (cmd.editor) {
         closeOverlay();
         env.onEdit(session.format.id);
+        return true;
+      }
+      if (cmd.projector) {
+        if (!env.onProjector()) toast('没能打开投影窗口。请允许这个页面弹出窗口，再按 O');
         return true;
       }
       if (cmd.overlay) {
@@ -5670,11 +6087,11 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         let ok = false;
         try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
         ta.remove();
-        stage.toast(ok ? '已复制' : '没能复制，请手动选中表格复制');
+        toast(ok ? '已复制' : '没能复制，请手动选中表格复制');
       };
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(value).then(() => stage.toast('已复制'), fallback);
+          navigator.clipboard.writeText(value).then(() => toast('已复制'), fallback);
           return;
         }
       } catch (e) { /* fall back below */ }
@@ -5726,7 +6143,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     function openOverlay(name) {
       if (destroyed || !OVERLAYS[name]) return false;
       if (name === 'insert' && !(session.format.extras || []).length) {
-        stage.toast('这个赛制没有可插入的环节');
+        toast('这个赛制没有可插入的环节');
         return false;
       }
       closeOverlay();
@@ -5769,21 +6186,85 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       attr(root, 'data-idle', true);
     }
 
-    const DOCK_ACTS = {
+    // What a button on the dock or the console does; the double-press ones go through their keys.
+    const CONTROL_ACTS = {
       prev: () => act('prev'), next: () => act('next'), toggle: () => act('toggle'), undo: () => act('undo'),
       insert: () => openOverlay('insert'), stages: () => openOverlay('stages'), fullscreen: () => act('fullscreen'),
-      new: () => env.onNewMatch(), editor: () => key('KeyE'),
+      new: () => env.onNewMatch(), editor: () => key('KeyE'), projector: () => key('KeyO'), reset: () => key('KeyR'),
+      bell: () => act('bell'), mute: () => act('mute'),
     };
-    dock.addEventListener('click', e => {
+    function onControlClick(e) {
       const b = e.target.closest('button');
       if (!b || b.disabled) return;
       if (b.dataset.act === 'floor') act('floor', b.dataset.side);
-      else if (DOCK_ACTS[b.dataset.act]) DOCK_ACTS[b.dataset.act]();
-    });
-    // A mouse click must not leave focus on a button, or the next space would press it as well as toggle.
-    dock.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+      else if (b.dataset.act === 'adjust') act('adjust', Number(b.dataset.ms));
+      else if (CONTROL_ACTS[b.dataset.act]) CONTROL_ACTS[b.dataset.act]();
+    }
+    dock.addEventListener('click', onControlClick);
+    keepFocus(dock);
     dock.addEventListener('focusin', showDock);
     dock.addEventListener('focusout', showDock);
+
+    // ---- console: the three columns this window turns into beside a projector window (spec §5.7) ----
+
+    // The stage moves into the preview, a 16:9 size container of its own, so it keeps the projector's proportions.
+    function mountDesk() {
+      const box = el('div', 'dt-console');
+      attr(box, 'data-theme', 'hall');   // the timekeeper's desk keeps the default palette, whatever the room shows
+      box.innerHTML = CONSOLE;
+      const preview = box.querySelector('.dt-preview');
+      preview.classList.add('dt-stage-host');
+      preview.appendChild(stage.el);
+      box.querySelector('.dt-console-status').appendChild(status);
+      const controls = box.querySelector('.dt-console-controls');
+      const set = controlSet(controls);
+      const mute = controls.querySelector('button[data-act="mute"]');
+      const volume = controls.querySelector('input[name="volume"]');
+      const note = box.querySelector('.dt-console-note');
+      const noteText = box.querySelector('.dt-console-note-text');
+      const list = box.querySelector('.dt-console-scroll');
+      const refreshList = stagesOverlay(list);
+      controls.addEventListener('click', onControlClick);
+      keepFocus(controls);
+      volume.addEventListener('input', () => setVolume(Number(volume.value)));
+      volume.addEventListener('pointerup', () => volume.blur());   // so the next space reaches the timer
+      root.insertBefore(box, root.firstChild);
+      attr(root, 'data-layout', 'console');
+      let cursor = null;
+      return {
+        refresh(now, v) {
+          refreshList(now, v);
+          paintControls(set, v);
+          const tip = (v.stage && v.stage.note) || '';
+          text(noteText, tip);
+          attr(note, 'hidden', !tip);
+          if (cursor !== session.cursor) {
+            cursor = session.cursor;
+            const current = list.querySelector('[aria-current]');
+            if (current && current.scrollIntoView) current.scrollIntoView({ block: 'nearest' });
+          }
+        },
+        paintSettings() {
+          attr(mute, 'aria-pressed', settings.muted ? 'true' : 'false');
+          text(mute.querySelector('.dt-mute-label'), settings.muted ? '取消静音' : '静音');
+          if (document.activeElement !== volume) volume.value = String(settings.volume);
+        },
+        destroy() {
+          root.insertBefore(stage.el, root.firstChild);
+          root.appendChild(status);
+          box.remove();
+          attr(root, 'data-layout', null);
+        },
+      };
+    }
+
+    function setConsole(on) {
+      if (destroyed || !!on === !!desk) return;
+      if (on) desk = mountDesk();
+      else { desk.destroy(); desk = null; }
+      paintStatus();
+      paint(DT.clock.now());
+    }
 
     // ---- window listeners ----
 
@@ -5822,6 +6303,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       raf = requestAnimationFrame(frame);
     }
     frame();
+    if (env.console) setConsole(true);
     const bootNow = DT.clock.now();
     bells.schedule(DT.engine.upcomingBells(session, bootNow), bootNow);   // a resumed clock rings on time
     paintStatus();
@@ -5834,9 +6316,10 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     return {
       session: () => session,
       view: () => viewAt(DT.clock.now()),
-      key, act, openOverlay, closeOverlay,
+      key, act, openOverlay, closeOverlay, setConsole,
       destroy() {
         if (destroyed) return;
+        if (desk) setConsole(false);
         destroyed = true;
         cancelAnimationFrame(raf);
         clearTimeout(dockTimer);
@@ -5853,13 +6336,108 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     };
   }
 
+  // The projector window (spec §5.11): draws what the console sends and works out the time in between with
+  // its own clock. Every key goes to the console except F, which makes this window full screen.
+  function mountProjector(root, env) {
+    const stage = DT.render.mount(root);
+    const hint = el('div', 'dt-projector-hint');
+    hint.append('把这个窗口拖到投影屏幕上，按 ', el('kbd', null, 'F'), ' 全屏');
+    root.appendChild(hint);
+    attr(root, 'data-layout', 'projector');
+    let session = null, raf = null, destroyed = false;
+    const rung = [];   // the console reports each bell it rings; this window may have seen it first
+
+    function pulse(events) {
+      events.forEach(e => {
+        const id = [e.type, e.clock, e.key, e.at].join('|');
+        if (rung.indexOf(id) >= 0) return;
+        rung.push(id);
+        if (rung.length > RUNG_MEMORY) rung.shift();
+        stage.pulse(e);
+      });
+    }
+
+    function viewAt(now) {
+      const v = DT.engine.view(session, now);
+      if (v.mode === 'end') v.record = DT.engine.record(session, now);
+      return v;
+    }
+
+    function draw(now) {
+      if (!session || destroyed) return;
+      try {
+        const out = DT.engine.tick(session, now);   // the automatic rules, until the console's next word
+        session = out.session;
+        pulse(out.events);
+        stage.update(viewAt(now));
+        attr(root, 'data-theme', stage.el.getAttribute('data-theme'));
+      } catch (e) {
+        console.warn('收到的场次无法显示，已丢弃');
+        session = null;
+      }
+    }
+
+    function frame() {
+      draw(DT.clock.now());
+      raf = requestAnimationFrame(frame);
+    }
+
+    const end = DT.sync.createProjectorEnd({
+      target: env.window, opener: env.window.opener || null, storage: env.storage,
+      onState(m) { session = m.session; draw(DT.clock.now()); },
+      onEvents: pulse,
+      onToast: message => stage.toast(message),
+      onKey(code) {
+        attr(hint, 'hidden', true);
+        if (code === 'KeyF') toggleFullscreen(root);
+      },
+    });
+    frame();
+
+    return {
+      session: () => session,
+      view: () => (session ? viewAt(DT.clock.now()) : null),
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        cancelAnimationFrame(raf);
+        end.stop();
+        hint.remove();
+        stage.destroy();
+        ['data-theme', 'data-layout'].forEach(a => root.removeAttribute(a));
+      },
+    };
+  }
+
+  // The projector route's controller: it only shows, so the timer methods do nothing.
+  function bootProjector(root, o, host) {
+    let storage = o.storage || null;
+    if (!storage) { try { storage = host.localStorage || null; } catch (e) { storage = null; } }
+    root.classList.add('dt-app');
+    if (host === window) document.title = '投影 - 辩论计时器';
+    const handle = mountProjector(root, { window: host, storage });
+    return {
+      route: () => 'projector', session: handle.session, view: handle.view,
+      key: () => false, act: () => false, openOverlay: () => false, closeOverlay() {},
+      on: () => () => {},
+      destroy() {
+        handle.destroy();
+        root.classList.remove('dt-app');
+      },
+    };
+  }
+
   // Opens the page on its route and moves between the setup page and the timer. The returned controller
   // speaks for the timer while it is on screen; on the setup page its timer methods do nothing.
+  // o.window stands for this browser window (tests pass a stand-in); o.pollMs is how often a closed
+  // projector window is noticed.
   function boot(opts) {
     const o = opts || {};
     const root = o.root;
+    const host = o.window || window;
     if (o.clock) DT.clock.set(() => o.clock.now());
     const route = o.route ? { name: o.route } : routeOf(o.location || window.location);
+    if (route.name === 'projector') return bootProjector(root, o, host);
     const bells = o.bells || DT.bells;
     let demo = null;
     if (route.name === 'demo') {
@@ -5876,12 +6454,83 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     bells.setMuted(settings.muted);
     root.classList.add('dt-app');
 
-    const listeners = { change: [], events: [] };
+    const listeners = { change: [], events: [], toast: [] };
     let screen = null, destroyed = false;   // {name: 'setup' | 'timer', handle}
     let editor = null;                       // the format editor's handle while it covers the screen
+    let projector = null;                    // {win, link} while a projector window is open
 
-    function emit(name, arg) { listeners[name].slice().forEach(fn => fn(arg)); }
+    function emit(name, arg) {
+      listeners[name].slice().forEach(fn => fn(arg));
+      relay(name, arg);
+    }
     const timer = () => (screen && screen.name === 'timer' ? screen.handle : null);
+
+    // ---- the projector window: this page is the console while one is open (spec §5.11) ----
+
+    // The undo history stays here: it is the bulk of a session and the projector never undoes.
+    function pushState(session) {
+      const s = session || (timer() ? timer().session() : null);
+      if (!projector || !s) return;
+      projector.link.push({ type: 'state', session: Object.assign({}, s, { history: [] }),
+        settings: { volume: settings.volume, muted: settings.muted } });
+    }
+
+    function relay(name, arg) {
+      if (!projector) return;
+      if (name === 'change') pushState(arg);
+      else if (name === 'events') projector.link.push({ type: 'events', events: arg });
+      else if (name === 'toast') projector.link.push({ type: 'toast', message: arg });
+    }
+
+    // Kept per tab, so a refreshed console knows to look for its projector window.
+    function remember(open) {
+      try {
+        if (open) host.sessionStorage.setItem(PROJECTOR_FLAG, '1');
+        else host.sessionStorage.removeItem(PROJECTOR_FLAG);
+      } catch (e) { /* no session storage: a refresh just will not find the window again */ }
+    }
+
+    function connect(win) {
+      const link = DT.sync.createConsoleLink({
+        target: host, pollMs: o.pollMs, getWindow: () => win,
+        onKey(code, k) { if (timer() && !editor) timer().key(code, k); },
+        onClosed() { if (projector && projector.link === link) disconnect(); },
+      });
+      projector = { win, link };
+      remember(true);
+      if (timer()) timer().setConsole(true);
+      pushState();
+    }
+
+    function disconnect() {
+      if (!projector) return;
+      projector.link.stop();
+      projector = null;
+      remember(false);
+      if (timer()) timer().setConsole(false);
+    }
+
+    // O: open the window, or bring it forward when it is already open. False when the browser blocked it.
+    function openProjector() {
+      if (projector && !projector.win.closed) {
+        try { projector.win.focus(); } catch (e) { /* focus is a nicety */ }
+        return true;
+      }
+      disconnect();
+      const win = DT.sync.openProjector(host);
+      if (!win) return false;
+      connect(win);
+      return true;
+    }
+
+    function reclaimProjector() {
+      let open = false;
+      try { open = host.sessionStorage.getItem(PROJECTOR_FLAG) === '1'; } catch (e) { open = false; }
+      if (!open) return;
+      const win = DT.sync.findProjector(host);
+      if (win) connect(win);
+      else remember(false);
+    }
 
     function leave() {
       if (screen) screen.handle.destroy();
@@ -5909,13 +6558,17 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       });
     }
 
-    function showTimer(session, pinDock) {
+    // extra: {pinDock, console} for the demos.
+    function showTimer(session, extra) {
       leave();
+      const x = extra || {};
       const env = {
-        bells, settings, still: route.name === 'demo' && route.frozen, pinDock, emit, onNewMatch: newMatch,
-        onEdit: formatId => openEditor(formatId), blocked: () => !!editor,
+        bells, settings, still: route.name === 'demo' && route.frozen, pinDock: !!x.pinDock, emit,
+        console: !!projector || !!x.console, onNewMatch: newMatch, onEdit: formatId => openEditor(formatId),
+        onProjector: openProjector, blocked: () => !!editor,
       };
       screen = { name: 'timer', handle: mountTimer(root, session, env) };
+      pushState();
     }
 
     function newMatch() {
@@ -5960,12 +6613,13 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       screen = { name: 'setup', handle };
     }
 
+    if (!demo) reclaimProjector();
     if (demo && demo.route === 'setup') {
       if (demo.lastMatch) DT.store.saveLastMatch(demo.lastMatch);
       if (demo.session) DT.store.saveSession(demo.session);
       showSetup();
     } else if (demo) {
-      showTimer(demo.session, demo.dock);
+      showTimer(demo.session, { pinDock: demo.dock, console: demo.console });
       if (demo.editor) {
         openEditor(demo.session.format.id);
         stageEditorDemo(root, demo.editor);
@@ -5994,10 +6648,10 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         if (destroyed) return;
         destroyed = true;
         if (editor) { editor.destroy(); editor = null; }
+        if (projector) { projector.link.stop(); projector = null; }   // the window itself stays for a reload
         if (screen) screen.handle.destroy();
         root.classList.remove('dt-app');
-        listeners.change = [];
-        listeners.events = [];
+        Object.keys(listeners).forEach(k => { listeners[k] = []; });
       },
     };
   }

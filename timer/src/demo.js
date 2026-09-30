@@ -57,7 +57,8 @@
   // steps are [second, action, arg?]; `dock: true` keeps the control dock open. A `setup` scene opens the
   // setup page with the match remembered from last time; its steps, if any, are a match left unfinished.
   // An `editor` scene opens the format editor over the match (E): `expand` opens a row's details, `typo`
-  // leaves [row, text] in a duration box.
+  // leaves [row, text] in a duration box. A `console` scene shows the page as the console beside a projector
+  // window (O).
   const SINGLE = { at: 73, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle']] };
   const DUAL = { at: 137, steps: [[0, 'goto', '自由辩论'], [0, 'floor', 'pro'], [20, 'floor', 'con'], [68, 'floor', 'pro']] };
   const SCENES = {
@@ -79,6 +80,9 @@
     'setup-resume': Object.assign({ setup: true }, DUAL),   // the free debate left half way
     'editor': Object.assign({ editor: { expand: 1 } }, SINGLE),
     'editor-error': Object.assign({ editor: { typo: [0, '3分半'] } }, SINGLE),
+    // The opening speech done in 2:57, the cross-examination running with 1:12 left (spec §5.7's sketch).
+    'console': { console: true, at: 228, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle'], [177, 'toggle'],
+      [180, 'goto', '反方四辩质询正方一辩'], [180, 'toggle']] },
   };
 
   // Play the scene so that its last moment is `now`; the loop ticks before each action, as the UI does.
@@ -101,7 +105,7 @@
     if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
     const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
     if (!scene.setup) {
-      const out = { route: 'timer', session: play(scene, now), dock: !!scene.dock };
+      const out = { route: 'timer', session: play(scene, now), dock: !!scene.dock, console: !!scene.console };
       if (scene.editor) Object.assign(out, { editor: scene.editor, formats: DT.BUILTIN_FORMATS.concat([weekend()]) });
       return out;
     }
