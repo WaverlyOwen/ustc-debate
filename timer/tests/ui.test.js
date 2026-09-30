@@ -438,4 +438,40 @@
     assert.equal(t.c.view().mode, 'end');
     t.done();
   });
+
+  DT.test('ui: a held arrow key makes one undo step and saves once it settles', () => {
+    const t = boot();
+    press('Space'); press('Space'); t.clock.advance(30000);
+    const before = t.c.session().history.length;
+    press('ArrowUp');
+    for (let i = 0; i < 20; i++) { t.clock.advance(33); press('ArrowUp', { repeat: true }); }
+    assert.equal(t.c.session().history.length, before + 1);
+    assert.equal(left(t), 150000 - 660 + 21000);
+    press('KeyZ');
+    assert.equal(left(t), 150000 - 660);
+    t.clock.advance(1500); press('ArrowUp');
+    t.clock.advance(1500); press('ArrowUp');
+    assert.equal(t.c.session().history.length, before + 2, 'presses a second apart are separate steps');
+    for (let i = 0; i < 5; i++) { t.clock.advance(33); press('ArrowUp', { repeat: true }); }
+    t.done();
+    const saved = JSON.parse(t.storage.getItem('dt.session.v1'));
+    const stage = saved.timeline[saved.cursor];
+    assert.equal(saved.runs[stage.id].clocks.main.used, t.c.session().runs[stage.id].clocks.main.used, 'the last step is saved on the way out');
+  });
+
+  DT.test('ui: one frame that throws does not stop the frame loop', async () => {
+    const tick = DT.engine.tick;
+    let calls = 0;
+    DT.engine.tick = function () { if (!calls++) throw new Error('odd data'); return tick.apply(this, arguments); };
+    const warn = console.warn;
+    console.warn = () => {};
+    let t;
+    try { t = boot(); } finally { DT.engine.tick = tick; console.warn = warn; }
+    try {
+      press('Space'); press('Space');
+      t.clock.advance(5000);
+      await Promise.race([new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))), later(1000)]);
+      assert.equal(document.querySelector('.dt-clock[data-clock="main"] .dt-sec').textContent, '55');
+    } finally { t.done(); }
+  });
 })();

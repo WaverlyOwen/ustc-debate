@@ -218,8 +218,9 @@
     } finally { t.done(); }
   });
 
-  DT.test('sync: bell events and toasts reach the projector', () => {
+  DT.test('sync: bell events reach the projector, and of the toasts only what the room should see', () => {
     const t = bootConsole();
+    const toasts = () => t.proj.sent.filter(m => m.type === 'toast').map(m => m.message);
     try {
       press('KeyO');
       press('Space'); press('Space');
@@ -227,8 +228,14 @@
       press('KeyP');
       const events = t.proj.sent.filter(m => m.type === 'events');
       assert.deepEqual(events.map(m => m.events.map(e => e.key)), [['w30']]);
-      press('KeyR');
-      assert.deepEqual(t.proj.sent.filter(m => m.type === 'toast').map(m => m.message), ['再按一次 R 重置本环节']);
+      press('KeyR'); press('KeyB'); press('KeyA');
+      assert.equal(t.root.querySelector('.dt-toast').textContent, '这个环节只有一个计时器', 'the console still shows them');
+      assert.deepEqual(toasts(), [], "the timekeeper's own prompts stay on the console");
+      t.c.act('goto', t.c.session().timeline.findIndex(s => s.name === '自由辩论'));
+      press('KeyA'); t.advance(1000);
+      press('KeyG'); press('KeyG');
+      press('KeyA');
+      assert.deepEqual(toasts(), ['正方已放弃剩余时间']);
     } finally { t.done(); }
   });
 

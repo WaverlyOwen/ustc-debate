@@ -5561,6 +5561,8 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
   const DOUBLE_MS = 1500;       // the second press of R R / G G must come within this
   const DOCK_IDLE_MS = 2500;    // the dock folds away after this long without pointer movement
   const RUNG_MEMORY = 32;       // visual events the projector remembers, so one reported twice plays once
+  const MERGE_MS = 1000;        // adjusts of one clock this close together are one undo step (a held arrow key)
+  const SAVE_SOON_MS = 300;     // how long a merged adjust waits before it is saved
   const PROJECTOR_FLAG = 'dt.projector';   // sessionStorage: this tab has a projector window open (§5.11)
   const SIDE_NAME = { pro: '正方', con: '反方' };
   const LAST_MATCH = ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'];   // prefilled next time (§5.9)
@@ -5863,6 +5865,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
 
     let raf = null, destroyed = false, overlay = null, armed = null, dockTimer = null, dockPinned = false;
     let desk = null;   // the console's handle while a projector window is open
+    let lastAdjust = null, saveTimer = null;   // {key, at} of the last adjust; a save held back while a key repeats
 
     function viewAt(now) {
       const v = DT.engine.view(session, now);
@@ -5876,10 +5879,11 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       emit('events', events);
     }
 
-    // Toasts show on this stage and go to the projector too (the app relays 'toast').
-    function toast(message) {
+    // Toasts show on this stage. Only what the room should see goes to the projector too (the app relays
+    // 'toast'); the timekeeper's own slips (再按一次 R, 没有可以撤销的操作…) stay on the console.
+    function toast(message, forRoom) {
       stage.toast(message);
-      emit('toast', message);
+      if (forRoom) emit('toast', message);
     }
 
     // ---- painting: stage, dock, console, status pills, the open overlay ----
@@ -5923,20 +5927,44 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
 
     // ---- actions ----
 
+    // Now, or a moment later: a key held down would otherwise write the whole session thirty times a second.
+    function save(soon) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      if (!soon) { DT.store.saveSession(session); return; }
+      saveTimer = setTimeout(() => { saveTimer = null; DT.store.saveSession(session); }, SAVE_SOON_MS);
+    }
+
+    // The clock an adjust acts on, as the engine picks it.
+    function adjustKey(s, clockId) {
+      const st = DT.engine.currentStage(s);
+      if (!st) return null;
+      return st.id + ':' + (clockId || DT.engine.getRun(s).active || st.first || 'pro');
+    }
+
     // Every session action ticks first: a dual side that ran out must be locked before the action applies.
-    function apply(fn, args) {
+    function apply(name, args) {
       const now = DT.clock.now();
       const out = DT.engine.tick(session, now);
       pulse(out.events);
-      session = fn.apply(null, [out.session, now].concat(args));
-      DT.store.saveSession(session);
+      const before = out.session;
+      let next = SESSION_ACTS[name].apply(null, [before, now].concat(args));
+      const h0 = before.history || [], h1 = next.history || [];
+      const pushed = h1.length > 0 && h1[h1.length - 1] !== h0[h0.length - 1];
+      // Adjusts of one clock in quick succession (a held ↑ / ↓) share the undo step of the first of them.
+      const key = name === 'adjust' ? adjustKey(before, args[1]) : null;
+      const merged = pushed && !!key && !!lastAdjust && lastAdjust.key === key && now - lastAdjust.at <= MERGE_MS;
+      if (merged) next = Object.assign({}, next, { history: h1.slice(0, -1) });
+      lastAdjust = key && pushed ? { key, at: now } : null;
+      session = next;
+      save(merged);
       bells.schedule(DT.engine.upcomingBells(session, now), now);
       // A bell point the action itself crossed (time taken off a running clock, an undo) rings now.
       if (session.lastRung) {
         session.lastRung.forEach(e => { if (e.sound) bells.play(e.sound); });
         pulse(session.lastRung);
       }
-      if (session.lastFeedback) toast(session.lastFeedback.message);
+      if (session.lastFeedback) toast(session.lastFeedback.message, session.lastFeedback.code === 'locked');
       emit('change', session);
       paint(now);
     }
@@ -5959,7 +5987,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     function act(name) {
       if (destroyed) return false;
       const args = Array.prototype.slice.call(arguments, 1);
-      if (SESSION_ACTS[name]) apply(SESSION_ACTS[name], args);
+      if (SESSION_ACTS[name]) apply(name, args);
       else if (OTHER_ACTS[name]) OTHER_ACTS[name]();
       else return false;
       return true;
@@ -6331,17 +6359,22 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     // ---- frame loop ----
 
     // One frame: apply the automatic rules, keep what changed, play their visual events, repaint.
+    // The next frame is asked for first, so one frame that throws cannot stop the display for good.
     function frame() {
-      const now = DT.clock.now();
-      const out = DT.engine.tick(session, now);
-      if (out.session !== session) {
-        session = out.session;
-        DT.store.saveSession(session);
-        emit('change', session);
-      }
-      pulse(out.events);
-      paint(now);
       raf = requestAnimationFrame(frame);
+      try {
+        const now = DT.clock.now();
+        const out = DT.engine.tick(session, now);
+        if (out.session !== session) {
+          session = out.session;
+          save(false);
+          emit('change', session);
+        }
+        pulse(out.events);
+        paint(now);
+      } catch (e) {
+        console.warn('这一帧没画出来：', e);
+      }
     }
     frame();
     if (env.console) setConsole(true);
@@ -6364,6 +6397,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         destroyed = true;
         cancelAnimationFrame(raf);
         clearTimeout(dockTimer);
+        if (saveTimer) save(false);   // a held-back save goes out now
         window.removeEventListener('keydown', onKeyDown);
         window.removeEventListener('pointerdown', gesture);
         window.removeEventListener('pointermove', showDock);
