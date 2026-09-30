@@ -77,8 +77,10 @@
     });
   }
 
+  // 第 N counts every row, breaks included, as the editor and the console number them; the name says which.
   function resumeText(r) {
-    const where = r.cursor >= 0 ? '停在第 ' + (r.cursor + 1) + ' 个环节' : '还没开始第一个环节';
+    const name = r.stage ? '（' + r.stage + '）' : '';
+    const where = r.cursor >= 0 ? '停在第 ' + (r.cursor + 1) + ' 个环节' + name : '还没开始第一个环节';
     return ['上一场还没打完：', String(r.title || ''), '，' + where + '。'];
   }
 
@@ -143,7 +145,7 @@
         opt.dataset.formatId = f.id;
         const sum = summary(f);
         const meta = el('span', 'dt-setup-format-meta');
-        meta.appendChild(el('span', null, sum.stages + ' 个环节'));
+        meta.appendChild(el('span', null, sum.stages + ' 个发言环节'));
         meta.appendChild(el('span', null, '约 ' + sum.minutes + ' 分钟'));
         const bar = el('span', 'dt-setup-strip');
         bar.setAttribute('aria-hidden', 'true');
@@ -202,7 +204,7 @@
       if (page.isConnected) opt.scrollIntoView({ block: 'nearest' });
       const sum = summary(format);
       $('.dt-setup-chosen-name').textContent = format.name;
-      $('.dt-setup-meta').textContent = sum.stages + ' 个环节，约 ' + sum.minutes + ' 分钟';
+      $('.dt-setup-meta').textContent = sum.stages + ' 个发言环节，约 ' + sum.minutes + ' 分钟';
       strip($('.dt-setup-chosen .dt-setup-strip'), format);
       if (!themePicked) setTheme(format.theme);
     }

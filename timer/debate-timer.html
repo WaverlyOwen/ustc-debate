@@ -4179,8 +4179,10 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     });
   }
 
+  // 第 N counts every row, breaks included, as the editor and the console number them; the name says which.
   function resumeText(r) {
-    const where = r.cursor >= 0 ? '停在第 ' + (r.cursor + 1) + ' 个环节' : '还没开始第一个环节';
+    const name = r.stage ? '（' + r.stage + '）' : '';
+    const where = r.cursor >= 0 ? '停在第 ' + (r.cursor + 1) + ' 个环节' + name : '还没开始第一个环节';
     return ['上一场还没打完：', String(r.title || ''), '，' + where + '。'];
   }
 
@@ -4245,7 +4247,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         opt.dataset.formatId = f.id;
         const sum = summary(f);
         const meta = el('span', 'dt-setup-format-meta');
-        meta.appendChild(el('span', null, sum.stages + ' 个环节'));
+        meta.appendChild(el('span', null, sum.stages + ' 个发言环节'));
         meta.appendChild(el('span', null, '约 ' + sum.minutes + ' 分钟'));
         const bar = el('span', 'dt-setup-strip');
         bar.setAttribute('aria-hidden', 'true');
@@ -4304,7 +4306,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       if (page.isConnected) opt.scrollIntoView({ block: 'nearest' });
       const sum = summary(format);
       $('.dt-setup-chosen-name').textContent = format.name;
-      $('.dt-setup-meta').textContent = sum.stages + ' 个环节，约 ' + sum.minutes + ' 分钟';
+      $('.dt-setup-meta').textContent = sum.stages + ' 个发言环节，约 ' + sum.minutes + ' 分钟';
       strip($('.dt-setup-chosen .dt-setup-strip'), format);
       if (!themePicked) setTheme(format.theme);
     }
@@ -5870,11 +5872,13 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     return DT.engine.createSession(format, o.match || {}, now);
   }
 
-  // How the setup page names a match it can resume: its title, else the pro motion, else the format.
+  // How the setup page names a match it can resume: its title, else the pro motion, else the format; and the
+  // stage it stopped on.
   function resumeInfo(session) {
     const m = isObj(session.match) ? session.match : {};
     const title = [m.title, m.proMotion, session.format.name].map(x => String(x || '').trim()).find(x => x);
-    return { title: title || '', cursor: session.cursor };
+    const st = session.timeline[session.cursor];
+    return { title: title || '', cursor: session.cursor, stage: st ? st.name : '' };
   }
 
   // What a key does. `hold` lets a held key repeat; `twice` asks for a second press and names the toast.

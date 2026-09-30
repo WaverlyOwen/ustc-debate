@@ -522,7 +522,7 @@
       assert.equal(t.box.querySelector('.dt-editor'), null);
       const chosen = t.box.querySelector('[data-format-id][aria-selected="true"]');
       assert.equal(chosen.dataset.formatId, 'recruit-2v2', 'the format just edited is chosen');
-      assert.ok(chosen.textContent.indexOf('13 个环节') >= 0, chosen.textContent);
+      assert.ok(chosen.textContent.indexOf('13 个发言环节') >= 0, chosen.textContent);
       assert.equal(t.box.querySelector('input[name="proTeam"]').value, '物理学院');
       assert.equal(t.box.querySelector('input[name="title"]').value, '第 9 场');
       assert.equal(t.box.querySelector('.dt-setup').inert, false);

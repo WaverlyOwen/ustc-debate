@@ -217,11 +217,13 @@
     return DT.engine.createSession(format, o.match || {}, now);
   }
 
-  // How the setup page names a match it can resume: its title, else the pro motion, else the format.
+  // How the setup page names a match it can resume: its title, else the pro motion, else the format; and the
+  // stage it stopped on.
   function resumeInfo(session) {
     const m = isObj(session.match) ? session.match : {};
     const title = [m.title, m.proMotion, session.format.name].map(x => String(x || '').trim()).find(x => x);
-    return { title: title || '', cursor: session.cursor };
+    const st = session.timeline[session.cursor];
+    return { title: title || '', cursor: session.cursor, stage: st ? st.name : '' };
   }
 
   // What a key does. `hold` lets a held key repeat; `twice` asks for a second press and names the toast.

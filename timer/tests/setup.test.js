@@ -50,9 +50,11 @@
     const t = mount();
     // 招新赛 3v3: 20 stages, 3 of them breaks; 2070 s in all counting each free debate twice.
     const text = item(t, 'recruit-3v3').textContent;
-    assert.ok(text.indexOf('17 个环节') >= 0, text);
+    assert.ok(text.indexOf('17 个发言环节') >= 0, text);
     assert.ok(text.indexOf('约 35 分钟') >= 0, text);
     assert.ok(item(t, 'ustc-freshman-cup').textContent.indexOf('约 40 分钟') >= 0);
+    item(t, 'recruit-3v3').click();
+    assert.equal(t.box.querySelector('.dt-setup-meta').textContent, '17 个发言环节，约 35 分钟', "the editor's words");
     t.h.destroy();
   });
 
@@ -136,9 +138,9 @@
   });
 
   DT.test('setup: the resume banner names the match and the stage; discarding removes it', () => {
-    const t = mount({ resumable: { title: '新生赛 第 3 场', cursor: 4 } });
+    const t = mount({ resumable: { title: '新生赛 第 3 场', cursor: 4, stage: '评委打分' } });
     const banner = t.box.querySelector('[data-role="resume"]');
-    assert.ok(banner.textContent.indexOf('上一场还没打完：新生赛 第 3 场，停在第 5 个环节。') >= 0, banner.textContent);
+    assert.ok(banner.textContent.indexOf('上一场还没打完：新生赛 第 3 场，停在第 5 个环节（评委打分）。') >= 0, banner.textContent);
     t.box.querySelector('button[data-action="discard"]').click();
     assert.equal(t.box.querySelector('[data-role="resume"]'), null);
     t.h.destroy();
@@ -213,7 +215,7 @@
 
     t = bootApp(storage);
     assert.equal(t.c.route(), 'setup');
-    assert.ok(t.box.textContent.indexOf('上一场还没打完：第 7 场，停在第 5 个环节。') >= 0);
+    assert.ok(t.box.textContent.indexOf('上一场还没打完：第 7 场，停在第 5 个环节（评委打分）。') >= 0);
     t.box.querySelector('button[data-action="resume"]').click();
     assert.equal(t.c.route(), 'timer');
     assert.equal(t.c.session().cursor, 4);
