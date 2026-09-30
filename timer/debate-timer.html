@@ -240,13 +240,15 @@ body {
 /* Two layers of the same digits (spec §1.5): .dt-digits in --digits-off-field, and over it .dt-digits-on in
    --digits-on-field, each clipped to its own side of the field's edge, so the digits read on both. --cut is
    where that edge falls in the digits' own box: from its left on a single stage (the clock is centred on the
-   stage), from its top in a dual half (the clock is centred at 52% of the half, the glyphs dropped .07em). */
+   stage), from its top in a dual half (the clock is centred at 52% of the half, the glyphs dropped .07em).
+   The on-field layer reaches 1px past the edge: two clips that meet at a fractional pixel each leave that pixel
+   part transparent, and the dark ground shows through as a hairline across the digit. */
 .dt-digits-on { display: none; position: absolute; inset: 0; color: var(--digits-on-field); }
 .dt-stage[data-kind="single"] .dt-digits-on,
 .dt-half .dt-digits-on { display: flex; }
 
 .dt-stage[data-kind="single"] .dt-clock { --cut: calc((1 - var(--used)) * 100cqw - 50cqw + 50%); }
-.dt-stage[data-kind="single"] .dt-digits-on { clip-path: inset(-50% calc(100% - var(--cut)) -50% -50%); }
+.dt-stage[data-kind="single"] .dt-digits-on { clip-path: inset(-50% calc(100% - var(--cut) - 1px) -50% -50%); }
 .dt-stage[data-kind="single"] .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% -50% var(--cut)); }
 /* The field taken back toward the right-hand seat: it lies to the right of the edge. */
 .dt-stage[data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-clock,
@@ -255,7 +257,7 @@ body {
 }
 .dt-stage[data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-digits-on,
 .dt-stage[data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-digits-on {
-  clip-path: inset(-50% -50% -50% var(--cut));
+  clip-path: inset(-50% -50% -50% calc(var(--cut) - 1px));
 }
 .dt-stage[data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-digits:not(.dt-digits-on),
 .dt-stage[data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-digits:not(.dt-digits-on) {
@@ -264,7 +266,7 @@ body {
 
 .dt-half { --field-top: calc((1 - var(--remain, 1)) * 100cqh); }   /* a theme with another field geometry sets it */
 .dt-half .dt-clock { --cut: calc(var(--field-top) - 52cqh + 50% - .07em); }
-.dt-half .dt-digits-on { clip-path: inset(var(--cut) -50% -50% -50%); }
+.dt-half .dt-digits-on { clip-path: inset(calc(var(--cut) - 1px) -50% -50% -50%); }
 .dt-half .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% calc(100% - var(--cut)) -50%); }
 
 /* 「暂停」 hangs below the digits without moving them. */
@@ -476,7 +478,9 @@ body {
 .dt-record {
   align-self: center;
   border-collapse: collapse;
-  font-size: min(2.6cqh, calc(68cqh / var(--rows, 20) / 1.5));   /* the rows fill what is left above the bar */
+  /* The rows fill what is left above the bar: --record-budget is that height, less for a theme whose head or card
+     takes more of the stage (chroma's plates). */
+  font-size: min(2.6cqh, calc(var(--record-budget, 68cqh) / var(--rows, 20) / 1.5));
   line-height: 1.5;
 }
 .dt-record th, .dt-record td { padding: 0 4em 0 0; text-align: left; white-space: nowrap; }
@@ -2280,6 +2284,9 @@ body {
 .dt-stage[data-theme="chroma"] .dt-head { align-self: flex-start; padding: 1.6cqh 2.6cqh; background: var(--side-color); }
 .dt-stage[data-theme="chroma"][data-kind="dual"] .dt-head { margin-top: 8.5cqh; background: var(--plate); }
 .dt-stage[data-theme="chroma"] .dt-card { padding: 3cqh 4cqh; }
+/* The end card's record: the head's plate and the card's padding take about 12cqh more of the stage than stage.css
+   allows for, so the rows are sized to what is left, and the last row stays on the plate, off the key green. */
+.dt-stage[data-theme="chroma"] { --record-budget: 55cqh; }
 .dt-stage[data-theme="chroma"] .dt-top { align-self: stretch; padding: .8cqh 2cqh; }
 .dt-stage[data-theme="chroma"] .dt-bottom { padding: 1.4cqh 2cqh; }
 
@@ -2297,6 +2304,20 @@ body {
 .dt-stage[data-theme="chroma"][data-pro-seat="right"][data-side="pro"] .dt-clock[data-clock="main"]::before,
 .dt-stage[data-theme="chroma"][data-pro-seat="left"][data-side="con"] .dt-clock[data-clock="main"]::before {
   clip-path: inset(0 0 0 calc(var(--used) * 100%) round var(--plate-radius));
+}
+/* The warn bell point (spec §1.5): the hairline would stand on the key green, so it is a solid gold notch at the top
+   and bottom edges of the side's plate, where the plate's edge will be when the bell rings. It goes with the calm
+   phase, as the hairline does in the other themes; a stage without a warn bell (its line hidden) has none. */
+.dt-stage[data-theme="chroma"][data-kind="single"][data-phase="calm"] .dt-warnline:not([hidden]) ~ .dt-clock[data-clock="main"]::before {
+  --notch-x: calc(var(--warn-at) * 100%);
+  background:
+    linear-gradient(var(--accent), var(--accent)) var(--notch-x) 0 / 1cqh 3cqh no-repeat,
+    linear-gradient(var(--accent), var(--accent)) var(--notch-x) 100% / 1cqh 3cqh no-repeat,
+    var(--side-color);
+}
+.dt-stage[data-theme="chroma"][data-kind="single"][data-phase="calm"][data-pro-seat="right"][data-side="pro"] .dt-warnline:not([hidden]) ~ .dt-clock[data-clock="main"]::before,
+.dt-stage[data-theme="chroma"][data-kind="single"][data-phase="calm"][data-pro-seat="left"][data-side="con"] .dt-warnline:not([hidden]) ~ .dt-clock[data-clock="main"]::before {
+  --notch-x: calc((1 - var(--warn-at)) * 100%);
 }
 .dt-stage[data-theme="chroma"] .dt-half .dt-clock::before {
   clip-path: inset(0 calc((1 - var(--remain, 1)) * 100%) 0 0 round var(--plate-radius));
@@ -2876,6 +2897,8 @@ body {
 .dt-stage[data-theme="ink"] .dt-warnline {
   top: calc(var(--clock-y) + var(--stroke-box) / 2 + 1.4cqh);
   bottom: auto;
+  /* Whole on the paper even when the bell falls at the seat's edge (30 s of an hour). */
+  left: clamp(1.3cqh, calc(var(--warn-at) * 100%), calc(100% - 1.3cqh));
   width: 2.6cqh;
   height: 2.6cqh;
   margin-left: -1.3cqh;
@@ -2884,6 +2907,11 @@ body {
   -webkit-mask-image: none;
   mask-image: none;
   filter: url(#dt-ink-drop);
+}
+
+.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
+.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] .dt-warnline {
+  left: clamp(1.3cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 1.3cqh));
 }
 
 /* ---- the seal: the stage type in a small 朱文 seal before the stage name, in the app's own words ---- */
@@ -2949,6 +2977,7 @@ body {
 .dt-stage[data-theme="ink"] .dt-half:last-child { --row: 57%; }
 .dt-stage[data-theme="ink"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) {
   --ink-stroke: color-mix(in oklab, var(--side-color) 42%, var(--ground));   /* 淡墨: the waiting side */
+  --field-ground: var(--ink-stroke);   /* what its digits lie on (spec §1.5): the diluted stroke, not --side-color */
   --digits-on-field: var(--ink);
   --digits-on-halo: var(--paper-ink);   /* ink digits on the pale stroke: a paper halo, as off it */
   filter: none;
@@ -2983,9 +3012,9 @@ body {
   translate: 0 -50%;
   text-align: center;
 }
-.dt-stage[data-theme="ink"] .dt-half:first-child .dt-digits-on { clip-path: inset(-50% calc(100% - var(--cut)) -50% -50%); }
+.dt-stage[data-theme="ink"] .dt-half:first-child .dt-digits-on { clip-path: inset(-50% calc(100% - var(--cut) - 1px) -50% -50%); }
 .dt-stage[data-theme="ink"] .dt-half:first-child .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% -50% var(--cut)); }
-.dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits-on { clip-path: inset(-50% -50% -50% calc(100% - var(--cut))); }
+.dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits-on { clip-path: inset(-50% -50% -50% calc(100% - var(--cut) - 1px)); }
 .dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% var(--cut) -50% -50%); }
 .dt-stage[data-theme="ink"] .dt-half .dt-clock .dt-state { top: calc(50% + 21cqh); }
 .dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-clock { color: var(--ink); }
@@ -3497,12 +3526,17 @@ body {
 .dt-stage[data-theme="startrail"] .dt-warnline {
   top: calc(var(--meter-y) - 1.8cqh);
   bottom: auto;
+  left: clamp(1.8cqh, calc(var(--warn-at) * 100%), calc(100% - 1.8cqh));   /* whole even at the seat's edge */
   width: 3.6cqh;
   height: 3.6cqh;
   margin-left: -1.8cqh;
   clip-path: polygon(50% 0, 57% 43%, 100% 50%, 57% 57%, 50% 100%, 43% 57%, 0 50%, 43% 43%);
   -webkit-mask-image: none;
   mask-image: none;
+}
+.dt-stage[data-theme="startrail"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
+.dt-stage[data-theme="startrail"][data-pro-seat="left"][data-side="con"] .dt-warnline {
+  left: clamp(1.8cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 1.8cqh));
 }
 
 /* ---- the horizon: a low ridge and a small observatory, its slit open and one window lit, black against the town's
@@ -3542,8 +3576,10 @@ body {
 
 /* ---- free debate: two skies, each side's nebula at its own seat ---- */
 
-.dt-stage[data-theme="startrail"] .dt-half[data-side="pro"] { --glow: var(--pro-glow); }
-.dt-stage[data-theme="startrail"] .dt-half[data-side="con"] { --glow: var(--con-glow); }
+/* What a half's digits lie on (spec §1.5) is its glow at its strongest over the sky, as --side-color is on a single
+   stage, not the raw nebula colour the half's --side-color keeps. */
+.dt-stage[data-theme="startrail"] .dt-half[data-side="pro"] { --glow: var(--pro-glow); --field-ground: #5E3053; }
+.dt-stage[data-theme="startrail"] .dt-half[data-side="con"] { --glow: var(--con-glow); --field-ground: #204C72; }
 .dt-stage[data-theme="startrail"] .dt-half:first-child { --glow-x: 8%; }
 .dt-stage[data-theme="startrail"] .dt-half:last-child { --glow-x: 92%; }
 .dt-stage[data-theme="startrail"] .dt-half-field {

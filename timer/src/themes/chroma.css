@@ -40,6 +40,9 @@
 .dt-stage[data-theme="chroma"] .dt-head { align-self: flex-start; padding: 1.6cqh 2.6cqh; background: var(--side-color); }
 .dt-stage[data-theme="chroma"][data-kind="dual"] .dt-head { margin-top: 8.5cqh; background: var(--plate); }
 .dt-stage[data-theme="chroma"] .dt-card { padding: 3cqh 4cqh; }
+/* The end card's record: the head's plate and the card's padding take about 12cqh more of the stage than stage.css
+   allows for, so the rows are sized to what is left, and the last row stays on the plate, off the key green. */
+.dt-stage[data-theme="chroma"] { --record-budget: 55cqh; }
 .dt-stage[data-theme="chroma"] .dt-top { align-self: stretch; padding: .8cqh 2cqh; }
 .dt-stage[data-theme="chroma"] .dt-bottom { padding: 1.4cqh 2cqh; }
 
@@ -57,6 +60,20 @@
 .dt-stage[data-theme="chroma"][data-pro-seat="right"][data-side="pro"] .dt-clock[data-clock="main"]::before,
 .dt-stage[data-theme="chroma"][data-pro-seat="left"][data-side="con"] .dt-clock[data-clock="main"]::before {
   clip-path: inset(0 0 0 calc(var(--used) * 100%) round var(--plate-radius));
+}
+/* The warn bell point (spec §1.5): the hairline would stand on the key green, so it is a solid gold notch at the top
+   and bottom edges of the side's plate, where the plate's edge will be when the bell rings. It goes with the calm
+   phase, as the hairline does in the other themes; a stage without a warn bell (its line hidden) has none. */
+.dt-stage[data-theme="chroma"][data-kind="single"][data-phase="calm"] .dt-warnline:not([hidden]) ~ .dt-clock[data-clock="main"]::before {
+  --notch-x: calc(var(--warn-at) * 100%);
+  background:
+    linear-gradient(var(--accent), var(--accent)) var(--notch-x) 0 / 1cqh 3cqh no-repeat,
+    linear-gradient(var(--accent), var(--accent)) var(--notch-x) 100% / 1cqh 3cqh no-repeat,
+    var(--side-color);
+}
+.dt-stage[data-theme="chroma"][data-kind="single"][data-phase="calm"][data-pro-seat="right"][data-side="pro"] .dt-warnline:not([hidden]) ~ .dt-clock[data-clock="main"]::before,
+.dt-stage[data-theme="chroma"][data-kind="single"][data-phase="calm"][data-pro-seat="left"][data-side="con"] .dt-warnline:not([hidden]) ~ .dt-clock[data-clock="main"]::before {
+  --notch-x: calc((1 - var(--warn-at)) * 100%);
 }
 .dt-stage[data-theme="chroma"] .dt-half .dt-clock::before {
   clip-path: inset(0 calc((1 - var(--remain, 1)) * 100%) 0 0 round var(--plate-radius));

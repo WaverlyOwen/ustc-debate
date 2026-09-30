@@ -109,12 +109,17 @@
 .dt-stage[data-theme="startrail"] .dt-warnline {
   top: calc(var(--meter-y) - 1.8cqh);
   bottom: auto;
+  left: clamp(1.8cqh, calc(var(--warn-at) * 100%), calc(100% - 1.8cqh));   /* whole even at the seat's edge */
   width: 3.6cqh;
   height: 3.6cqh;
   margin-left: -1.8cqh;
   clip-path: polygon(50% 0, 57% 43%, 100% 50%, 57% 57%, 50% 100%, 43% 57%, 0 50%, 43% 43%);
   -webkit-mask-image: none;
   mask-image: none;
+}
+.dt-stage[data-theme="startrail"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
+.dt-stage[data-theme="startrail"][data-pro-seat="left"][data-side="con"] .dt-warnline {
+  left: clamp(1.8cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 1.8cqh));
 }
 
 /* ---- the horizon: a low ridge and a small observatory, its slit open and one window lit, black against the town's
@@ -154,8 +159,10 @@
 
 /* ---- free debate: two skies, each side's nebula at its own seat ---- */
 
-.dt-stage[data-theme="startrail"] .dt-half[data-side="pro"] { --glow: var(--pro-glow); }
-.dt-stage[data-theme="startrail"] .dt-half[data-side="con"] { --glow: var(--con-glow); }
+/* What a half's digits lie on (spec §1.5) is its glow at its strongest over the sky, as --side-color is on a single
+   stage, not the raw nebula colour the half's --side-color keeps. */
+.dt-stage[data-theme="startrail"] .dt-half[data-side="pro"] { --glow: var(--pro-glow); --field-ground: #5E3053; }
+.dt-stage[data-theme="startrail"] .dt-half[data-side="con"] { --glow: var(--con-glow); --field-ground: #204C72; }
 .dt-stage[data-theme="startrail"] .dt-half:first-child { --glow-x: 8%; }
 .dt-stage[data-theme="startrail"] .dt-half:last-child { --glow-x: 92%; }
 .dt-stage[data-theme="startrail"] .dt-half-field {

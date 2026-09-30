@@ -23,7 +23,14 @@
     if (m) return m[1].split('').map(c => parseInt(c + c, 16));
     m = s.match(/rgba?\(\s*([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)/);
     if (m) return [m[1], m[2], m[3]].map(Number);
-    throw new Error('cannot parse colour ' + s);
+    // Anything else the browser computes (color-mix gives color(srgb …) or oklab): as a canvas paints it.
+    const c = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+    c.fillStyle = '#010203';
+    c.fillStyle = s;
+    if (c.fillStyle === '#010203' && s !== '#010203') throw new Error('cannot parse colour ' + s);
+    c.fillRect(0, 0, 1, 1);
+    const d = c.getImageData(0, 0, 1, 1).data;
+    return [d[0], d[1], d[2]];
   }
   function lum(c) {
     const [r, g, b] = c.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
@@ -82,23 +89,218 @@
   // and the top bar >= 4.5:1 on both grounds they can sit on (--text-field and --text-deep, which default to
   // --side-color and --side-deep), or on their own plate. Translucent inks are composited before measuring.
   DT.test('themes: digits, titles, speaker and top bar keep their contrast on every theme and side', () => {
+    const failures = [];
+    const need = (ok, msg) => { if (!ok) failures.push(msg); };
     eachStage((root, where) => {
       const field = resolve(root, '--side-color'), deep = resolve(root, '--side-deep');
       const on = flat(resolve(root, '--digits-on-field'), field), off = flat(resolve(root, '--digits-off-field'), deep);
-      assert.ok(contrast(on, field) >= 3, where + ': digits on field ' + contrast(on, field).toFixed(2));
-      assert.ok(contrast(off, deep) >= 3, where + ': digits off field ' + contrast(off, deep).toFixed(2));
+      need(contrast(on, field) >= 3, where + ': digits on field ' + contrast(on, field).toFixed(2));
+      need(contrast(off, deep) >= 3, where + ': digits off field ' + contrast(off, deep).toFixed(2));
       const grounds = [resolve(root, '--text-field'), resolve(root, '--text-deep')];
       TEXT.forEach(([name, sel]) => {
         const el = root.querySelector(sel);
-        assert.ok(el.textContent.trim(), where + ': ' + name + ' has text');
+        need(el.textContent.trim(), where + ': ' + name + ' has no text');
         const ink = getComputedStyle(el).color;
         const plate = plateOf(el, root);
         (plate ? [plate] : grounds).forEach(g => {
           const c = contrast(flat(ink, g), g);
-          assert.ok(c >= 4.5, where + ': ' + name + ' ' + ink + ' on ' + g + ' ' + c.toFixed(2));
+          need(c >= 4.5, where + ': ' + name + ' ' + ink + ' on ' + g + ' ' + c.toFixed(2));
         });
       });
     });
+    assert.ok(!failures.length, failures.length + ' failures, across every theme:\n' + failures.join('\n'));
+  });
+
+  // The same rule beyond the calm single stage: overtime, and the free debate idle and running (the speaking half and
+  // the waiting one). Measured on the digit layers as drawn (their computed colour, which overtime changes), each
+  // against the grounds it can lie on: a layer clipped to the field on --field-ground (default --side-color: a theme
+  // whose field is another colour, like ink's diluted waiting stroke, says so), a layer off it on --side-deep, and a
+  // theme's single layer on both. A layer the field no longer reaches (overtime: nothing is left of it) is skipped.
+  // Every failure in every theme is collected before the test fails, so one theme cannot hide another's.
+  DT.test('themes: the digits keep 3:1 in overtime and in free debate, idle and running, on every theme', () => {
+    const failures = [];
+    const S = name => F().stages.find(x => x.name === name).secs;
+    const states = [
+      ['over', seat => { const m = Object.assign({}, MATCH, { proSeat: seat });
+        const s = E.toggle(E.goto(E.createSession(F(), m, T0, { theme: '?' }), idx('反方四辩结辩'), T0), T0);
+        return [s, T0 + (S('反方四辩结辩') + 9) * 1000]; }],
+      ['dual idle', seat => [E.goto(E.createSession(F(), Object.assign({}, MATCH, { proSeat: seat }), T0, { theme: '?' }), idx('自由辩论'), T0), T0]],
+      ['dual running', seat => { let s = E.goto(E.createSession(F(), Object.assign({}, MATCH, { proSeat: seat }), T0, { theme: '?' }), idx('自由辩论'), T0);
+        s = E.floor(E.floor(s, 'pro', T0), 'con', T0 + 20000);
+        return [s, T0 + 70000]; }],
+    ];
+    const ground = (el, v) => {
+      const probe = document.createElement('i');
+      probe.style.color = v;
+      el.appendChild(probe);
+      const c = getComputedStyle(probe).color;
+      probe.remove();
+      return c;
+    };
+    DT.THEMES.forEach(t => states.forEach(([state, make]) => ['left', 'right'].forEach(seat => {
+      const [s0, at] = make(seat);
+      const s = Object.assign({}, s0, { theme: t.id });
+      const h = R.mount(host());
+      h.update(E.view(s, at));
+      const root = document.querySelector('.dt-stage');
+      root.classList.remove('is-entering');
+      try {
+        const clocks = root.dataset.kind === 'dual'
+          ? Array.from(root.querySelectorAll('.dt-half')).map(half => [half, half.querySelector('.dt-clock')])
+          : [[root, root.querySelector('.dt-clock[data-clock="main"]')]];
+        clocks.forEach(([scope, clock]) => {
+          if (scope.hasAttribute && scope.hasAttribute('data-locked')) return;
+          const where = t.id + ' / ' + state + ' / ' + seat + (scope === root ? '' : ' / ' + scope.dataset.side +
+            (scope.hasAttribute('data-active') ? ' speaking' : ' waiting'));
+          const field = ground(scope, 'var(--field-ground, var(--side-color))'), deep = ground(scope, 'var(--side-deep)');
+          const onEl = clock.querySelector('.dt-digits-on'), offEl = clock.querySelector('.dt-digits:not(.dt-digits-on)');
+          const two = getComputedStyle(onEl).display !== 'none';
+          const reached = state !== 'over';
+          const checks = two ? [[offEl, deep, 'off the field']].concat(reached ? [[onEl, field, 'on the field']] : [])
+            : [[offEl, deep, 'off the field']].concat(reached ? [[offEl, field, 'on the field']] : []);
+          checks.forEach(([layer, g, which]) => {
+            const ink = flat(getComputedStyle(layer).color, g);
+            const c = contrast(ink, g);
+            if (c < 3) failures.push(where + ': digits ' + which + ' ' + ink + ' on ' + g + ' ' + c.toFixed(2));
+          });
+        });
+      } finally { h.destroy(); }
+    })));
+    assert.ok(!failures.length, failures.length + ' failures:\n' + failures.join('\n'));
+  });
+
+  // The record on the end card is sized to what is left above the bottom bar, so its last row (often an overtime
+  // one) is never drawn over the bar or, in chroma, off its plate onto the key green.
+  DT.test('themes: the end card record fits above the bottom bar in every theme, at both projector sizes', () => {
+    const failures = [];
+    [[1920, 1080], [1366, 768]].forEach(([w, hgt]) => DT.THEMES.forEach(t => {
+      const box = document.getElementById('sandbox');
+      box.innerHTML = '<div class="dt-stage-host" style="width:' + w + 'px;height:' + hgt + 'px"></div>';
+      const h = R.mount(box.firstChild);
+      const s = DT.demo.build('end', T0, { theme: t.id }).session;
+      h.update(Object.assign(E.view(s, T0), { record: E.record(s, T0) }));   // as ui.js adds it on the end card
+      const root = box.querySelector('.dt-stage');
+      root.classList.remove('is-entering');
+      try {
+        const where = t.id + ' ' + w + '×' + hgt;
+        const rows = root.querySelectorAll('.dt-record tr');
+        const last = rows[rows.length - 1].getBoundingClientRect();
+        const bar = root.querySelector('.dt-bottom').getBoundingClientRect();
+        if (last.bottom > bar.top) failures.push(where + ': the last row ends at ' + last.bottom + ', the bar starts at ' + bar.top);
+        const card = root.querySelector('.dt-card');
+        if (/^rgb\(/.test(getComputedStyle(card).backgroundColor)) {
+          const c = card.getBoundingClientRect();
+          if (last.bottom > c.bottom) failures.push(where + ': the last row runs off its plate: ' + last.bottom + ' > ' + c.bottom);
+        }
+        if (root.getBoundingClientRect().bottom < bar.bottom - 0.5) failures.push(where + ': the bar is pushed off the stage');
+      } finally { h.destroy(); }
+    }));
+    assert.ok(!failures.length, failures.join('\n'));
+  });
+
+  // Spec §1.5: the warn bell point shows in every theme; near the seat (30 s of an hour) a theme's mark stays whole on
+  // the stage rather than half off its edge.
+  DT.test('themes: the warn bell mark stays whole on the stage when it falls near the seat', () => {
+    const failures = [];
+    const long = JSON.parse(JSON.stringify(F()));
+    long.stages[0].secs = 3600;
+    DT.THEMES.forEach(t => [['pro', 'left'], ['pro', 'right']].forEach(([, seat]) => {
+      const m = Object.assign({}, MATCH, { proSeat: seat });
+      const s = E.toggle(E.goto(E.createSession(long, m, T0, { theme: t.id }), 0, T0), T0);
+      const h = R.mount(host());
+      h.update(E.view(s, T0 + 73000));
+      const root = document.querySelector('.dt-stage');
+      root.style.setProperty('--warn-at', '0.002');   // nearer still: 30 s of a four-hour stage
+      try {
+        const line = root.querySelector('.dt-warnline');
+        const cs = getComputedStyle(line);
+        if (line.hidden || cs.display === 'none') return;
+        const r = line.getBoundingClientRect(), b = root.getBoundingClientRect();
+        if (r.left < b.left - 0.5 || r.right > b.right + 0.5) failures.push(t.id + ' / ' + seat + ': ' + r.left + '–' + r.right + ' of ' + b.left + '–' + b.right);
+      } finally { h.destroy(); }
+    }));
+    assert.ok(!failures.length, failures.join('\n'));
+  });
+
+  // Chroma hides the hairline (it would stand on the key green); the warn point is a solid gold notch on the side's
+  // plate instead, at the top and bottom edges, where the plate's edge will be when the bell rings.
+  DT.test('themes: chroma marks the warn bell point with a gold notch on the plate', () => {
+    ['left', 'right'].forEach(seat => ['正方一辩开篇立论', '反方一辩开篇立论'].forEach(stage => {
+      const h = R.mount(host());
+      h.update(viewAt(stage, 'chroma', seat));
+      const root = document.querySelector('.dt-stage');
+      const where = stage + ' / ' + seat;
+      const plate = getComputedStyle(root.querySelector('.dt-clock[data-clock="main"]'), '::before');
+      const gold = resolve(root, '--accent');
+      const notches = plate.backgroundImage.split(/,\s*(?=linear-gradient)/).filter(g => /linear-gradient/.test(g));
+      assert.equal(notches.length, 2, where + ': ' + plate.backgroundImage);
+      notches.forEach(n => assert.ok(n.indexOf(gold) >= 0, where + ': solid gold ' + n));
+      assert.equal(plate.backgroundColor, resolve(root, '--side-color'), where + ': on the side\'s plate');
+      const warnAt = parseFloat(root.style.getPropertyValue('--warn-at'));
+      const fromRight = (seat === 'left') !== (stage.charAt(0) === '正');
+      const x = plate.backgroundPositionX.split(',')[0].trim();
+      const want = (fromRight ? 1 - warnAt : warnAt) * 100;
+      assert.near(parseFloat(x), want, 0.2, where + ': at the warn point: ' + x);
+      h.destroy();
+    }));
+    // No warn bell, no notch; and none once the bell has rung.
+    const h = R.mount(host());
+    const v = viewAt('正方一辩开篇立论', 'chroma');
+    h.update(Object.assign({}, v, { warnAt: null }));
+    const root = document.querySelector('.dt-stage');
+    assert.equal(getComputedStyle(root.querySelector('.dt-clock[data-clock="main"]'), '::before').backgroundImage, 'none');
+    h.destroy();
+  });
+
+  // Two layers of digits meet at the field's edge; clipped exactly there, the pixel they share is part transparent in
+  // both and a dark hairline runs through the digit. The on-field layer reaches a pixel past the edge.
+  DT.test('themes: the two digit layers overlap by a pixel at the field edge, so no seam runs through a digit', () => {
+    const visible = el => {
+      const r = el.getBoundingClientRect();
+      const m = /^inset\((.*)\)$/.exec(getComputedStyle(el).clipPath);
+      assert.ok(m, 'an inset clip: ' + getComputedStyle(el).clipPath);
+      const parts = [];
+      let depth = 0, cur = '';
+      for (const c of m[1].trim()) {
+        if (c === '(') depth++;
+        else if (c === ')') depth--;
+        if (/\s/.test(c) && depth === 0) { if (cur) parts.push(cur); cur = ''; } else cur += c;
+      }
+      if (cur) parts.push(cur);
+      const [top, right, bottom, left] = [parts[0], parts[1] || parts[0], parts[2] || parts[0], parts[3] || parts[1] || parts[0]];
+      const len = (s, axis) => {
+        const wasStatic = getComputedStyle(el).position === 'static';
+        if (wasStatic) el.style.position = 'relative';   // so the probe's percentages are of this box
+        const probe = document.createElement('i');
+        probe.style.cssText = 'position:absolute;left:0;top:0;' + (axis === 'x' ? 'height:1px;width:' : 'width:1px;height:') + s;
+        el.appendChild(probe);
+        const b = probe.getBoundingClientRect();
+        probe.remove();
+        if (wasStatic) el.style.position = '';
+        return axis === 'x' ? b.width : b.height;
+      };
+      // A negative inset (the -50% margins) comes out as a zero-size probe; they are never the edge that matters.
+      return { left: r.left + len(left, 'x'), right: r.right - len(right, 'x'), top: r.top + len(top, 'y'), bottom: r.bottom - len(bottom, 'y') };
+    };
+    [['left', '正方一辩开篇立论', 'right'], ['left', '反方一辩开篇立论', 'left'], ['right', '正方一辩开篇立论', 'left']].forEach(([seat, stage, fieldEnd]) => {
+      const h = R.mount(host());
+      h.update(viewAt(stage, 'hall', seat));
+      const root = document.querySelector('.dt-stage');
+      const on = visible(root.querySelector('.dt-clock[data-clock="main"] .dt-digits-on'));
+      const off = visible(root.querySelector('.dt-clock[data-clock="main"] .dt-digits:not(.dt-digits-on)'));
+      const overlap = fieldEnd === 'right' ? on.right - off.left : off.right - on.left;
+      assert.near(overlap, 1, 0.3, seat + ' / ' + stage + ': the layers overlap by ' + overlap);
+      h.destroy();
+    });
+    const h = R.mount(host());
+    let s = E.goto(E.createSession(F(), MATCH, T0, { theme: 'hall' }), idx('自由辩论'), T0);
+    s = E.floor(s, 'pro', T0);
+    h.update(E.view(s, T0 + 125000));   // about half of 4:00 left: the field's top edge runs through the digits
+    const half = document.querySelector('.dt-half[data-side="pro"]');
+    const on = visible(half.querySelector('.dt-digits-on')), off = visible(half.querySelector('.dt-digits:not(.dt-digits-on)'));
+    assert.ok(on.top > half.querySelector('.dt-digits-on').getBoundingClientRect().top, 'the edge crosses the digits');
+    assert.near(off.bottom - on.top, 1, 0.3, 'dual: the layers overlap by ' + (off.bottom - on.top));
+    h.destroy();
   });
 
   // --text-field / --text-deep may leave their defaults only when that is true on screen, so the check above
