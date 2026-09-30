@@ -124,18 +124,49 @@
     });
   });
 
-  // The half of the dial that shows is the whole time: the sector's angle is the time left × 180°, anchored at the
-  // floor, so its free edge falls like a gauge's needle and the last of the time lies against the seat.
-  DT.test('theme construct: the sector\'s angle is the time left and its edge falls toward the floor', () => {
+  // The half of the dial that shows is the whole time: the sector's angle is the time left × 180°. It is a fan about
+  // the clock's horizontal axis that closes onto that axis, so however little time is left it still runs from the
+  // hub behind the digits to a rim on the stage, and the room stays the speaking side's to the last second.
+  DT.test('theme construct: the sector\'s angle is the time left and it closes onto the clock\'s axis', () => {
     SEATINGS.forEach(([name, seat, from]) => {
-      [30, 90].forEach(secs => {
-        const { stage, root } = mountPoster(singleAt(name, secs, seat));
+      [30, 90, 100, 170].forEach(secs => {
+        const { stage, root } = mountPoster(singleAt(name, secs, seat), 1920, 1080);
         const where = name + ' / ' + seat + ' / ' + secs + ' s';
+        if (root.dataset.phase === 'over') { stage.destroy(); return; }
         const field = root.querySelector('.dt-field');
         const sweep = angle(field, 'var(--construct-sweep)');
         assert.near(sweep, (1 - used(root)) * 180, 0.6, where + ': the time left × 180°');
         const start = angle(field, 'var(--dial-from)');
-        assert.near(start, from === 'left' ? 180 - sweep : 180, 0.01, where + ': anchored at the floor');
+        assert.near(start, (from === 'left' ? 90 : 270) - sweep / 2, 0.01, where + ': centred on the horizontal');
+        // The axis is the digits' centre line, and the rim where it meets it is on the stage.
+        const b = field.getBoundingClientRect();
+        const d = root.querySelector('.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect();
+        const y = pos(field, 'var(--dial-y)', 'y'), x = pos(field, 'var(--dial-x)'), r = pos(field, 'var(--construct-r)');
+        assert.near(y, (d.top + d.bottom) / 2 - b.top, 0.03 * b.height, where + ': level with the digits');
+        const rim = from === 'left' ? x + r : x - r;
+        assert.ok(rim > 0 && rim < b.width, where + ': its rim on the axis is on the stage: ' + rim);
+        stage.destroy();
+      });
+    });
+  });
+
+  // A single stage's digits sit inside the dial, clear of its scale at the rim, even five characters wide.
+  DT.test('theme construct: the digits sit inside the dial, clear of its scale', () => {
+    [[1920, 1080], [1366, 768]].forEach(([w, h]) => {
+      SEATINGS.forEach(([name, seat, from]) => {
+        const { stage, root } = mountPoster(singleAt(name, 30, seat), w, h);
+        const where = w + ' / ' + name + ' / ' + seat;
+        root.querySelectorAll('.dt-clock[data-clock="main"] .dt-min').forEach(m => { m.textContent = '58'; });
+        const field = root.querySelector('.dt-field');
+        const b = field.getBoundingClientRect();
+        const d = root.querySelector('.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect();
+        const cx = b.left + pos(field, 'var(--dial-x)'), cy = b.top + pos(field, 'var(--dial-y)', 'y');
+        const inner = pos(field, 'var(--construct-r)') - 0.032 * h;   // the inner edge of the tick band
+        [[d.left, d.top], [d.right, d.top], [d.left, d.bottom], [d.right, d.bottom]].forEach(([px_, py]) => {
+          assert.ok(Math.hypot(px_ - cx, py - cy) < inner, where + ': a corner inside the scale');
+        });
+        const mid = (d.left + d.right) / 2 - b.left;
+        assert.ok(from === 'left' ? mid < b.width / 2 : mid > b.width / 2, where + ': moved toward the hub: ' + mid);
         stage.destroy();
       });
     });
@@ -187,29 +218,36 @@
     stage.destroy();
   });
 
-  // The warn bell point is a mark of the dial: a yellow ray from the hub at the angle the needle will have when the
-  // warn bell rings.
-  DT.test('theme construct: the warn bell point is a yellow ray of the dial', () => {
+  // The warn bell point is two marks of the dial: yellow notches across the rim on the rays where the fan's edges
+  // will be when the warn bell rings, kept out of the bottom bar.
+  DT.test('theme construct: the warn bell point is two yellow notches at the dial\'s rim', () => {
     SEATINGS.forEach(([name, seat, from]) => {
-      const { stage, root } = mountPoster(singleAt(name, 60, seat));
+      const { stage, root } = mountPoster(singleAt(name, 60, seat), 1920, 1080);
       const where = name + ' / ' + seat;
-      const ray = root.querySelector('.dt-warnline');
-      const cs = getComputedStyle(ray);
-      assert.ok(!ray.hidden && cs.display !== 'none' && cs.opacity !== '0', where);
-      const accent = rgba(resolve(root, '--accent'));
-      const stops = cs.backgroundImage.match(/rgba?\([^)]*\)/g) || [];
-      assert.ok(stops.some(s => rgba(s).every((v, i) => Math.abs(v - accent[i]) <= 1)), where + ': yellow: ' + cs.backgroundImage);
-      assert.equal(cs.maskImage || 'none', 'none', where + ': not faded as the hairline is');
+      const line = root.querySelector('.dt-warnline');
+      const lcs = getComputedStyle(line);
+      assert.ok(!line.hidden && lcs.display !== 'none' && lcs.opacity !== '0', where);
+      const mask = lcs.maskImage || lcs.webkitMaskImage || '';
+      assert.ok(/linear-gradient/.test(mask), where + ': cut short of the bottom bar: ' + mask);
       const field = root.querySelector('.dt-field');
-      const box = root.getBoundingClientRect();
-      assert.near(px(cs.left), pos(field, 'var(--dial-x)'), 1, where + ': from the dial\'s centre');
-      assert.near(px(cs.top) + px(cs.marginTop) + px(cs.height) / 2, pos(field, 'var(--dial-y)', 'y'), 1, where);
-      assert.ok(px(cs.height) >= 0.005 * box.height && px(cs.height) < 0.02 * box.height, where + ': a ray: ' + cs.height);
+      const accent = rgba(resolve(root, '--accent'));
       const warnAt = parseFloat(root.style.getPropertyValue('--warn-at'));
-      // The ray points east rotated clockwise: toward the floor, as far round as the needle at the warn bell.
-      const want = from === 'left' ? 90 - warnAt * 180 : 90 + warnAt * 180;
-      assert.near(angle(ray, cs.rotate), want, 0.1, where + ': at the warn angle');
-      assert.ok(/^0px/.test(cs.transformOrigin), where + ': turning about the centre: ' + cs.transformOrigin);
+      const axis = from === 'left' ? 0 : 180;
+      const r = pos(field, 'var(--construct-r)');
+      [['::before', -1], ['::after', 1]].forEach(([which, sign]) => {
+        const cs = pseudo(line, which);
+        const at = where + ' ' + which;
+        assert.ok(shown(cs), at);
+        const stops = cs.backgroundImage.match(/rgba?\([^)]*\)/g) || [];
+        assert.ok(stops.some(c => rgba(c).every((v, i) => Math.abs(v - accent[i]) <= 1)), at + ': yellow: ' + cs.backgroundImage);
+        assert.equal(rgba(stops[0] || 'red')[3], 0, at + ': clear from the hub: ' + cs.backgroundImage);
+        assert.near(px(cs.left), pos(field, 'var(--dial-x)'), 1, at + ': from the dial\'s centre');
+        assert.near(px(cs.top) + px(cs.marginTop) + px(cs.height) / 2, pos(field, 'var(--dial-y)', 'y'), 1, at);
+        assert.ok(px(cs.height) >= 0.005 * 1080 && px(cs.height) < 0.02 * 1080, at + ': a ray: ' + cs.height);
+        assert.ok(px(cs.width) > r, at + ': across the rim: ' + cs.width);
+        assert.ok(/^0px/.test(cs.transformOrigin), at + ': turning about the centre: ' + cs.transformOrigin);
+        assert.near(angle(line, cs.rotate), axis + sign * warnAt * 90, 0.1, at + ': where the fan\'s edge is at the bell');
+      });
       stage.destroy();
     });
   });
@@ -247,7 +285,8 @@
       assert.ok(/counter\(dt-construct-stage, decimal-leading-zero\)/.test(n.content), where + ': ' + n.content);
       assert.ok(px(n.fontSize) >= 0.2 * 1080, where + ': large: ' + n.fontSize);
       assert.equal(n.position, 'absolute', where);
-      assert.equal(from === 'left' ? n.right : n.left, '0px', where + ': on the side away from the dial');
+      // Half into the outer grid column on the side away from the dial, clear of its rim.
+      assert.near(px(from === 'left' ? n.right : n.left), -1920 / 24, 1, where + ': on the side away from the dial');
       // The current segment is still marked, now by a yellow frame.
       const seg = getComputedStyle(cur);
       assert.ok(seg.outlineStyle === 'solid' && sameColour(seg.outlineColor, resolve(root, '--accent')), where + ': ' + seg.outline);
@@ -302,7 +341,7 @@
         else assert.ok(x > b.width, where + ': outside the right edge: ' + x);
         const remain = parseFloat(h.style.getPropertyValue('--remain'));
         assert.near(angle(f, 'var(--construct-sweep)'), remain * 180, 0.6, where + ': the time left × 180°');
-        assert.near(angle(f, 'var(--dial-from)'), i === 0 ? 180 - remain * 180 : 180, 0.6, where + ': anchored at the floor');
+        assert.near(angle(f, 'var(--dial-from)'), (i === 0 ? 90 : 270) - remain * 90, 0.6, where + ': centred on the horizontal');
       });
       const active = root.querySelector('.dt-half[data-active] .dt-half-field');
       const waiting = root.querySelector('.dt-half:not([data-active]) .dt-half-field');

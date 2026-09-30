@@ -2303,10 +2303,12 @@ body {
 /* === themes/construct.css === */
 /* @theme id=construct name=构成 desc=构成主义几何海报，巨大的扇形表盘从本方席位一侧转回，适合暗场投影 tone=dark */
 /* 构成: a constructivist poster. The time left is a sector of a giant dial whose centre lies just outside the speaking
-   side's seat edge; the half of the dial that shows is the whole time, so the sector's angle is the time left × 180°
-   and its free edge falls to the floor like a gauge's needle (spec §2.5). A fine grid, the stage's number in the
-   running order set large, the top bar turned against the edges and a thick diagonal band make up the rest of the
-   sheet. Red, blue and a yellow for the warn bell and overtime, on a warm graphite ground. All of it is CSS. */
+   side's seat edge, level with the digits; the half of the dial that shows is the whole time, so the sector's angle
+   is the time left × 180° (spec §2.5). It is a fan about the clock's axis that closes onto that axis as the time
+   runs, so to the last second it runs behind the digits to the rim and the room stays the speaking side's. A fine
+   grid, the stage's number in the running order set large, the top bar turned against the edges and a thick
+   diagonal band make up the rest of the sheet. Red, blue and a yellow for the warn bell and overtime, on a warm
+   graphite ground. All of it is CSS. */
 [data-theme="construct"] {
   --pro: #BF2A1D;           /* constructivist red: the cream type still reads 4.9:1 on it */
   --pro-deep: var(--ground);
@@ -2335,7 +2337,7 @@ body {
   padding-left: calc(100cqw / 12);
   padding-right: calc(100cqw / 12);
   --dial-out: 7cqh;         /* how far outside the seat edge the dial's centre lies */
-  --dial-y: 60cqh;
+  --dial-y: 55cqh;          /* the main digits' centre line (stage.css --clock-y) */
   --construct-r: 146cqh;    /* its rim arcs past the widest digits, on the far side from the seat */
   --hub-r: 15cqh;
   --hub-ring: transparent calc(100% - .5cqh - 1px), var(--ink) calc(100% - .5cqh), var(--ink) calc(100% - 1px), transparent 100%;
@@ -2348,7 +2350,7 @@ body {
   --pro-x: calc(100% + var(--dial-out));
   --con-x: calc(-1 * var(--dial-out));
 }
-/* The sector is repainted when the needle moves half a degree (a second of a three-minute stage), not every frame. */
+/* The sector is repainted when its angle moves half a degree (a second of a three-minute stage), not every frame. */
 @supports (width: round(nearest, 1px, 1px)) {
   .dt-stage[data-theme="construct"] { --construct-sweep: round(nearest, calc((1 - var(--used)) * 180deg), .5deg); }
 }
@@ -2356,11 +2358,11 @@ body {
 /* ---- the dial ---- */
 
 /* A disc of the side's colour at the hub, ringed in cream as the dial's pivot, which stays when the time is up so the
-   room still sees whose floor it is; and the sector of time left; all cut to the dial's rim. From the left seat the
-   sector is anchored at the floor and opens counter-clockwise; --dial-from is where its free edge is. */
+   room still sees whose floor it is; and the sector of time left; all cut to the dial's rim. The sector is centred
+   on the horizontal through the hub (east from the left seat); --dial-from is its upper edge. */
 .dt-stage[data-theme="construct"] :is(.dt-field, .dt-half-field) {
   --dial-x: calc(-1 * var(--dial-out));
-  --dial-from: calc(180deg - var(--construct-sweep));
+  --dial-from: calc(90deg - var(--construct-sweep) / 2);
   background:
     radial-gradient(circle calc(var(--hub-r) + .5cqh) at var(--dial-x) var(--dial-y), var(--hub-ring)),
     radial-gradient(circle var(--hub-r) at var(--dial-x) var(--dial-y), var(--side-color) calc(100% - 1px), transparent 100%),
@@ -2371,12 +2373,12 @@ body {
 /* [data-mode] ranks this with stage.css's per-seat clip-path rules, which it replaces: the sector turns back to the
    seat instead of being cut back. */
 .dt-stage[data-theme="construct"][data-mode] .dt-field { clip-path: none; }
-/* From the right-hand seat: the mirror, anchored at the floor and opening clockwise. */
+/* From the right-hand seat: the mirror, centred on the westward horizontal. */
 .dt-stage[data-theme="construct"][data-pro-seat="right"][data-side="pro"] .dt-field,
 .dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-field,
 .dt-stage[data-theme="construct"] .dt-half:last-child .dt-half-field {
   --dial-x: calc(100% + var(--dial-out));
-  --dial-from: 180deg;
+  --dial-from: calc(270deg - var(--construct-sweep) / 2);
 }
 
 /* The dial's scale: a tick every 3° and the rim, along the edge of the whole half-disc, so the empty part still reads
@@ -2397,38 +2399,59 @@ body {
 }
 .dt-stage[data-theme="construct"][data-phase="over"] .dt-field::before { --tick: var(--accent); }
 
-/* The one orchestrated moment: a new stage's sector sweeps open from the floor. The attributes rank it above
+/* The one orchestrated moment: a new stage's sector fans open from the clock's axis. The attributes rank it above
    stage.css's per-seat sweeps, which it replaces. No `to` frame: it ends on the live angle. */
 .dt-stage[data-theme="construct"][data-mode][data-side].is-entering :is(.dt-field, .dt-half-field) {
   animation: dt-construct-open 560ms var(--ease-out);
 }
 @keyframes dt-construct-open { from { --construct-sweep: 0deg; } }
 
-/* ---- the warn bell point: a yellow ray of the dial, where the needle will be when it rings ---- */
+/* ---- the warn bell point: two yellow notches at the rim, where the fan's edges will be when it rings ---- */
 
+/* The line itself is a layer over the whole stage, cut short of the bottom bar so the notches never cross the progress
+   bar. Its pseudo-elements are the two rays from the hub, drawn only across the rim: from inside the scale to a
+   little past it, clear of the digits even when the bell is close to the axis. */
 .dt-stage[data-theme="construct"] .dt-warnline {
-  top: var(--dial-y);
-  right: auto;
-  bottom: auto;
-  left: calc(-1 * var(--dial-out));
-  width: var(--construct-r);
-  height: .8cqh;
-  margin: -.4cqh 0 0;
-  background: linear-gradient(to right, transparent calc(var(--hub-r) + 1.5cqh), var(--accent) 0);
-  transform-origin: 0 50%;
-  rotate: calc(90deg - var(--warn-at) * 180deg);
-  -webkit-mask-image: none;
-  mask-image: none;
+  inset: 0;
+  width: auto;
+  margin: 0;
+  background: none;
+  --warn-mask: linear-gradient(to bottom, #000 calc(100% - 12cqh), transparent calc(100% - 12cqh));
+  -webkit-mask-image: var(--warn-mask);
+  mask-image: var(--warn-mask);
+  --warn-x: calc(-1 * var(--dial-out));
+  --warn-axis: 0deg;
 }
 .dt-stage[data-theme="construct"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
 .dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-warnline {
-  left: calc(100% + var(--dial-out));
-  rotate: calc(90deg + var(--warn-at) * 180deg);
+  left: 0;                  /* stage.css places the hairline from the right-hand seat by its left edge */
+  --warn-x: calc(100% + var(--dial-out));
+  --warn-axis: 180deg;
 }
+.dt-stage[data-theme="construct"] .dt-warnline::before,
+.dt-stage[data-theme="construct"] .dt-warnline::after {
+  content: "";
+  position: absolute;
+  left: var(--warn-x);
+  top: var(--dial-y);
+  width: calc(var(--construct-r) + 3cqh);
+  height: .8cqh;
+  margin-top: -.4cqh;
+  background: linear-gradient(to right, transparent calc(100% - 12cqh), var(--accent) calc(100% - 12cqh));
+  transform-origin: 0 50%;
+}
+.dt-stage[data-theme="construct"] .dt-warnline::before { rotate: calc(var(--warn-axis) - var(--warn-at) * 90deg); }
+.dt-stage[data-theme="construct"] .dt-warnline::after { rotate: calc(var(--warn-axis) + var(--warn-at) * 90deg); }
 
-/* ---- digits: one cream layer, which reads on the red, the blue and the ground as the needle crosses them ---- */
+/* ---- digits: one cream layer, which reads on the red, the blue and the ground as the fan's edges cross them ---- */
 
 .dt-stage[data-theme="construct"] .dt-digits-on { display: none; }
+/* A single stage's clock sits a little toward its hub, inside the fan and clear of the dial's scale at the rim. */
+.dt-stage[data-theme="construct"][data-kind="single"] .dt-clock[data-clock="main"] { translate: calc(-50% - 4cqw) -50%; }
+.dt-stage[data-theme="construct"][data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-clock[data-clock="main"],
+.dt-stage[data-theme="construct"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-clock[data-clock="main"] {
+  translate: calc(-50% + 4cqw) -50%;
+}
 .dt-stage[data-theme="construct"][data-kind][data-pro-seat][data-side] .dt-clock .dt-digits:not(.dt-digits-on),
 .dt-stage[data-theme="construct"] .dt-half .dt-digits:not(.dt-digits-on) { clip-path: none; }
 
@@ -2477,10 +2500,10 @@ body {
 .dt-stage[data-theme="construct"][data-mode="stage"]:not([data-kind="dual"]) .dt-seg[data-state="current"]::before {
   content: counter(dt-construct-stage, decimal-leading-zero);
   position: absolute;
-  right: 0;
+  right: calc(-100cqw / 24);   /* half into the outer grid column, under the turned label, clear of the rim */
   bottom: 30cqh;
   font-family: var(--font-digits);
-  font-size: 30cqh;
+  font-size: 24cqh;
   font-variation-settings: "wght" 600, "wdth" 78;
   line-height: .72;
   letter-spacing: -.02em;
@@ -2490,7 +2513,7 @@ body {
 .dt-stage[data-theme="construct"][data-pro-seat="right"][data-side="pro"] .dt-seg[data-state="current"]::before,
 .dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-seg[data-state="current"]::before {
   right: auto;
-  left: 0;
+  left: calc(-100cqw / 24);
 }
 
 /* ---- type ---- */
@@ -2529,7 +2552,7 @@ body {
 
 .dt-stage[data-theme="construct"] .dt-half {
   --half-ground: transparent;   /* the ground shows between the two dials */
-  --dial-y: 60cqh;
+  --dial-y: 52cqh;          /* a half's digits' centre line (stage.css) */
   --hub-r: 10cqh;
   --construct-r: 74cqh;
   --construct-sweep: calc(var(--remain, 1) * 180deg);
