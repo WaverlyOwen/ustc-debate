@@ -538,10 +538,108 @@
     assert.equal(storage.getItem('dt.session.v1'), null, 'the plain timer\'s key is left alone');
     assert.equal(JSON.parse(storage.getItem('dt.m.' + preset.id + '.session.v1')).cursor, 3);
     t = bootPreset(storage, preset);
+    assert.equal(t.c.route(), 'ask', 'a match left part way asks before it goes on');
+    assert.ok(t.box.textContent.indexOf('决赛') >= 0);
+    t.box.querySelector('button[data-action="resume"]').click();
     assert.equal(t.c.route(), 'timer');
     assert.equal(t.c.session().cursor, 3);
     t.done();
     assert.equal(DT.store.loadSession(), null, 'destroy leaves the plain keys in use again');
+  });
+
+  // A rehearsal left in the file (run, then the window closed) must not come back as the real match.
+  DT.test('ui: a match file with a match left part way offers 继续上次 or 重新开始这一场', () => {
+    let now = T0; DT.clock.set(() => now);
+    const storage = memStorage();
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
+    let t = bootPreset(storage, preset);
+    press('Space'); press('Space');   // the first stage is running
+    const rehearsal = t.c.session().id;
+    t.done();
+    now += 3 * 3600 * 1000;           // match day
+    DT.clock.set(() => now);
+    t = bootPreset(storage, preset);
+    try {
+      assert.equal(t.c.route(), 'ask');
+      const resume = t.box.querySelector('button[data-action="resume"]');
+      const restart = t.box.querySelector('button[data-action="restart"]');
+      assert.equal(resume.textContent, '继续上次');
+      assert.equal(restart.textContent, '重新开始这一场');
+      assert.equal(document.activeElement, resume, 'Enter goes on, as a reload in the middle of the match wants');
+      press('Space');
+      assert.equal(t.c.route(), 'ask', "the timer's keys do nothing until one is chosen");
+      restart.click();
+      assert.equal(t.c.route(), 'timer');
+      assert.ok(t.c.session().id !== rehearsal, 'a new match');
+      assert.equal(t.c.session().cursor, -1);
+      assert.deepEqual(t.c.session().runs, {});
+      assert.equal(t.c.session().match.proMotion, '甲方辩题');
+      assert.equal(JSON.parse(storage.getItem('dt.m.' + preset.id + '.session.v1')).id, t.c.session().id);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a match file whose match was never begun opens straight on its title card', () => {
+    DT.clock.set(() => T0);
+    const storage = memStorage();
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
+    let t = bootPreset(storage, preset);
+    const first = t.c.session().id;
+    t.done();
+    t = bootPreset(storage, preset);
+    try {
+      assert.equal(t.c.route(), 'timer');
+      assert.equal(t.c.session().id, first);
+      assert.equal(t.c.session().cursor, -1);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a match taken back to its title card still asks, since it has runs', () => {
+    DT.clock.set(() => T0);
+    const storage = memStorage();
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
+    let t = bootPreset(storage, preset);
+    press('Space'); press('Space'); press('ArrowLeft');
+    assert.equal(t.c.session().cursor, -1);
+    t.done();
+    t = bootPreset(storage, preset);
+    try { assert.equal(t.c.route(), 'ask'); } finally { t.done(); }
+  });
+
+  DT.test('ui: in a match file 放弃并新开 on the setup page goes back to a fresh title card of the match', () => {
+    DT.clock.set(() => T0);
+    const storage = memStorage();
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
+    const t = bootPreset(storage, preset);
+    try {
+      press('Space'); press('Space'); press('ArrowLeft');
+      const old = t.c.session().id;
+      press('Escape');
+      assert.equal(t.c.route(), 'setup');
+      t.box.querySelector('button[data-action="discard"]').click();
+      assert.equal(t.c.route(), 'timer');
+      assert.ok(t.c.session().id !== old);
+      assert.equal(t.c.session().cursor, -1);
+      assert.equal(t.c.session().match.title, '决赛');
+      assert.equal(JSON.parse(storage.getItem('dt.m.' + preset.id + '.session.v1')).id, t.c.session().id);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a different match started from a match file ends with 新的一场, back to the setup page', () => {
+    DT.clock.set(() => T0);
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
+    const t = bootPreset(memStorage(), preset);
+    try {
+      press('KeyE', { shiftKey: true });
+      t.box.querySelector('[data-format-id="ustc-freshman-cup"]').click();
+      t.box.querySelector('input[name="title"]').value = '友谊赛';
+      t.box.querySelector('button[data-action="start"]').click();
+      assert.equal(t.c.session().match.title, '友谊赛');
+      t.c.act('goto', t.c.session().timeline.length);
+      const btn = t.box.querySelector('.dt-dock button[data-act="new"]');
+      assert.equal(btn.textContent, '新的一场');
+      btn.click();
+      assert.equal(t.c.route(), 'setup');
+    } finally { t.done(); }
   });
 
   DT.test('ui: in a match file the end card restarts the same match on a fresh title card', () => {
@@ -565,15 +663,20 @@
     } finally { t.done(); }
   });
 
-  DT.test('ui: Shift+E and Esc on the title card open the setup page; later E still opens the editor', () => {
+  DT.test('ui: Shift+E on the title card opens the setup page, and Esc does in a match file; later E still opens the editor', () => {
     let t = boot();
     press('KeyE', { shiftKey: true });
     assert.equal(t.c.route(), 'setup');
     t.done();
     t = boot();
     press('Escape');
-    assert.equal(t.c.route(), 'setup');
+    assert.equal(t.c.route(), 'timer', 'in the plain timer Esc only closes overlays (main spec)');
     t.done();
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
+    const m = bootPreset(memStorage(), preset);
+    press('Escape');
+    assert.equal(m.c.route(), 'setup', "a match file's Esc leads to the plain setup page (new spec §4.1)");
+    m.done();
     t = boot();
     press('KeyH'); press('Escape');
     assert.equal(t.c.route(), 'timer', 'Esc closes an open overlay first');

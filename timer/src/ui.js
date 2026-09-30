@@ -44,7 +44,7 @@
     [['F'], '全屏'],
     [['M'], '静音'],
     [['H', '?'], '帮助'],
-    [['Esc'], '关闭覆盖层；开场卡上没有覆盖层时：回到开赛页'],
+    [['Esc'], '关闭覆盖层；导出的专用文件里，开场卡上没有覆盖层时：回到开赛页'],
   ];
 
   const ICON = {
@@ -304,8 +304,8 @@
   // The timer page for one match. env: {bells, settings, still (a screenshot: no sound hint), pinDock,
   // console (open as the console beside a projector), emit(name, arg) to the app's listeners, onNewMatch() for
   // 新的一场 on the end card and newLabel to call it something else, onEdit(formatId) for E, onSetup() for
-  // Shift+E or Esc on the title card, onProjector() for O (false when no window could open), blocked() true
-  // while the editor covers the timer and its keys}.
+  // Shift+E on the title card (and Esc there when matchFile: this page is a match file), onProjector() for O
+  // (false when no window could open), blocked() true while the editor covers the timer and its keys}.
   function mountTimer(root, first, env) {
     const bells = env.bells, settings = env.settings, still = !!env.still, emit = env.emit;
     let session = first;
@@ -463,11 +463,12 @@
       const cmd = command(code, !!k.shiftKey);
       if (!cmd) return false;
       if (k.repeat && !cmd.hold) return true;   // swallowed, so a held space neither repeats nor scrolls
-      // On the title card, with nothing open over it, Esc and Shift+E go back to the setup page (new spec §4.1).
+      // On the title card, with nothing open over it, Shift+E goes back to the setup page; so does Esc in a match
+      // file (new spec §4.1). In the plain timer Esc only closes overlays, as the main spec has it.
       const toSetup = session.cursor < 0 && !!env.onSetup;
       if (cmd.close) {
         if (overlay) closeOverlay();
-        else if (toSetup) env.onSetup();
+        else if (toSetup && env.matchFile) env.onSetup();
         else return false;
         return true;
       }
@@ -1008,7 +1009,7 @@
     root.classList.add('dt-app');
 
     const listeners = { change: [], events: [], toast: [] };
-    let screen = null, destroyed = false;   // {name: 'setup' | 'timer', handle}
+    let screen = null, destroyed = false;   // {name: 'setup' | 'ask' | 'timer', handle}
     let editor = null;                       // the format editor's handle while it covers the screen
     let projector = null;                    // {win, link} while a projector window is open
 
@@ -1111,13 +1112,23 @@
       });
     }
 
+    // The file's own match, as the preset set it up (not another one started from the setup page in this file).
+    function presetMatch(session) {
+      if (!preset || !session || !session.format || session.format.id !== preset.format.id) return false;
+      if (session.theme !== preset.theme) return false;
+      const m = isObj(session.match) ? session.match : {};
+      return ['title'].concat(LAST_MATCH).every(k => (m[k] || '') === (preset.match[k] || ''));
+    }
+
     // extra: {pinDock, console} for the demos.
     function showTimer(session, extra) {
       leave();
       const x = extra || {};
+      const own = presetMatch(session);
       const env = {
         bells, settings, still: route.name === 'demo' && route.frozen, pinDock: !!x.pinDock, emit,
-        console: !!projector || !!x.console, onNewMatch: newMatch, newLabel: preset ? RESTART_LABEL : null,
+        console: !!projector || !!x.console, matchFile: !!preset,
+        onNewMatch: () => newMatch(own), newLabel: own ? RESTART_LABEL : null,
         onEdit: formatId => openEditor(formatId), onSetup: () => showSetup(), onProjector: openProjector,
         blocked: () => !!editor,
       };
@@ -1132,13 +1143,30 @@
       return session;
     }
 
-    // The match is over, so there is nothing to resume: a match file starts its own match again, the plain
-    // timer goes back to the setup page.
-    function newMatch() {
+    // The match is over, so there is nothing to resume: a match file's own match starts again, anything else
+    // goes back to the setup page.
+    function newMatch(again) {
       DT.store.clearSession();
-      if (preset) showTimer(presetSession(DT.clock.now()));
+      if (again) showTimer(presetSession(DT.clock.now()));
       else showSetup();
     }
+
+    // A match file's match left part way: go on, or start it again from a fresh title card (new spec §4.3).
+    function showAsk(saved) {
+      leave();
+      const handle = DT.setup.ask(root, {
+        resumable: resumeInfo(saved),
+        onResume() {
+          unlockSound();
+          showTimer(saved);
+        },
+        onRestart() { newMatch(true); },
+      });
+      screen = { name: 'ask', handle };
+    }
+
+    // Begun means past the title card, or with any clock run: a match only opened and closed is not asked about.
+    const begun = s => s.cursor >= 0 || Object.keys(s.runs).length > 0;
 
     // `typed`: what was on the page before the editor, with the format last looked at in the editor chosen.
     function showSetup(typed) {
@@ -1168,7 +1196,11 @@
           unlockSound();
           showTimer(saved);
         },
-        onDiscard() { DT.store.clearSession(); },
+        // In a match file the discarded match makes way for the file's own, on a fresh title card.
+        onDiscard() {
+          if (preset) newMatch(true);
+          else DT.store.clearSession();
+        },
         onEdit() {
           const before = setupDraft(root);
           openEditor(before.formatId, id => {
@@ -1196,7 +1228,9 @@
       }
     } else if (preset) {
       const now = DT.clock.now();
-      showTimer(resumable(DT.store.loadSession(), now) || presetSession(now));
+      const saved = resumable(DT.store.loadSession(), now);
+      if (saved && begun(saved)) showAsk(saved);
+      else showTimer(saved || presetSession(now));
     } else if (route.name === 'timer') {
       const now = DT.clock.now();
       showTimer(resumable(DT.store.loadSession(), now) || newSession(o, now));

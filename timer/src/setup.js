@@ -359,5 +359,39 @@
     };
   }
 
-  DT.setup = { mount };
+  // A match file that finds its match left part way (new spec §4.3) asks before it goes on: the file may have
+  // been tried out before match day. Going on is the default, so Enter after a reload mid-match is all it takes.
+  function ask(root, opts) {
+    const o = opts || {};
+    const page = el('div', 'dt-setup dt-setup-ask');
+    const head = el('header', 'dt-setup-head');
+    head.appendChild(el('h1', null, '辩论计时器'));
+    head.appendChild(el('p', null, '这个文件里的比赛上次没有打完'));
+    const banner = el('section', 'dt-setup-resume');
+    banner.dataset.role = 'resume';
+    const p = el('p');
+    const parts = resumeText(o.resumable || {});
+    p.appendChild(document.createTextNode('上次打到一半：'));
+    p.appendChild(el('strong', null, parts[1]));
+    p.appendChild(document.createTextNode(parts[2]));
+    const acts = el('div', 'dt-setup-resume-acts');
+    const resume = button('继续上次', 'resume', true);
+    const restart = button('重新开始这一场', 'restart');
+    resume.addEventListener('click', () => { if (o.onResume) o.onResume(); });
+    restart.addEventListener('click', () => { if (o.onRestart) o.onRestart(); });
+    acts.appendChild(resume);
+    acts.appendChild(restart);
+    const words = el('div', 'dt-setup-ask-words');
+    words.appendChild(p);
+    words.appendChild(el('p', 'dt-setup-hint', '重新开始会丢掉上次的计时，从开场卡重新来过'));
+    banner.appendChild(words);
+    banner.appendChild(acts);
+    page.appendChild(head);
+    page.appendChild(banner);
+    root.appendChild(page);
+    resume.focus();
+    return { el: page, destroy() { page.remove(); } };
+  }
+
+  DT.setup = { mount, ask };
 })(window.DT = window.DT || {});

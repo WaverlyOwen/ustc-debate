@@ -110,6 +110,10 @@
 .dt-setup-resume p { letter-spacing: .06em; }
 .dt-setup-resume strong { font-family: var(--font-title); font-weight: 600; letter-spacing: .08em; }
 .dt-setup-resume-acts { display: flex; gap: .6em; }
+/* A match file's question on opening a match left part way: the banner alone, larger, in the middle of the page. */
+.dt-setup.dt-setup-ask > * { max-width: 900px; }
+.dt-setup-ask .dt-setup-resume { padding: 1.1em 1.1em 1.1em 1.6em; font-size: 1.12em; }
+.dt-setup-ask-words { display: flex; flex-direction: column; gap: .3em; }
 
 .dt-setup-body {
   flex: 0 1 auto;
