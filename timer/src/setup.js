@@ -25,23 +25,24 @@
     '<label class="dt-setup-side" data-side="con"><span>反方</span>' +
     '<input class="dt-input dt-input-title" type="text" name="conMotion" autocomplete="off" placeholder="反方的表述，可不填"></label>' +
     '</fieldset>' +
-    '<fieldset class="dt-setup-row dt-setup-teams"><legend class="dt-setup-label">队名</legend>' +
+    // The two team boxes sit as the sides will on the projector, left to right; the button between them swaps
+    // the seats. The radios hold the seat for the form (and for ui.js's draft) and are not shown.
+    '<fieldset class="dt-setup-row dt-setup-teams"><legend class="dt-setup-label">队名与座位</legend>' +
+    '<div class="dt-setup-seating">' +
     '<label class="dt-setup-side" data-side="pro"><span>正方</span>' +
     '<input class="dt-input" type="text" name="proTeam" autocomplete="off" maxlength="40" placeholder="不填就显示「正方」"></label>' +
+    '<button type="button" class="dt-setup-swap" data-action="swap-seats">' +
+    '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M3 7h13M12 3l4 4-4 4M17 13H4M8 9l-4 4 4 4"/></svg>' +
+    '</button>' +
     '<label class="dt-setup-side" data-side="con"><span>反方</span>' +
     '<input class="dt-input" type="text" name="conTeam" autocomplete="off" maxlength="40" placeholder="不填就显示「反方」"></label>' +
+    '</div>' +
+    '<span hidden><input type="radio" name="proSeat" value="left" tabindex="-1">' +
+    '<input type="radio" name="proSeat" value="right" tabindex="-1"></span>' +
     '</fieldset>' +
-    '<div class="dt-setup-pair">' +
-    '<fieldset class="dt-setup-row"><legend class="dt-setup-label">正方坐在</legend><div class="dt-setup-seat">' +
-    '<div class="dt-choices">' +
-    '<label class="dt-choice"><input type="radio" name="proSeat" value="left"><span>左边</span></label>' +
-    '<label class="dt-choice"><input type="radio" name="proSeat" value="right"><span>右边</span></label></div>' +
-    '<span class="dt-setup-seats" aria-hidden="true"><i data-side="pro">正</i><i data-side="con">反</i></span>' +
-    '</div></fieldset>' +
     '<fieldset class="dt-setup-row"><legend class="dt-setup-label">主题</legend>' +
     '<div class="dt-setup-themes" role="radiogroup" aria-label="主题"></div>' +
     '<p class="dt-setup-hint dt-setup-theme-desc"></p></fieldset>' +
-    '</div>' +
     '<footer class="dt-setup-foot">' +
     '<button type="button" class="dt-button dt-setup-start" data-action="start" data-primary>开始这一场</button>' +
     '</footer></section></div>';
@@ -262,9 +263,25 @@
     PREFILL.forEach(k => { if (typeof last[k] === 'string') field(k).value = last[k]; });
     const seat = last.proSeat === 'right' ? 'right' : 'left';
     page.querySelector('input[name="proSeat"][value="' + seat + '"]').checked = true;
-    const seats = $('.dt-setup-seats');
-    function paintSeat() { seats.dataset.seat = page.querySelector('input[name="proSeat"]:checked').value; }
+    const seating = $('.dt-setup-seating');
+    const swap = $('.dt-setup-swap');
+    const seatNow = () => page.querySelector('input[name="proSeat"]:checked').value;
+    // The boxes are moved in the page, not just drawn in the other order, so Tab and Enter go left to right too.
+    function paintSeat() {
+      const right = seatNow() === 'right';
+      const pro = field('proTeam').parentNode, con = field('conTeam').parentNode;
+      seating.insertBefore(right ? con : pro, swap);
+      seating.appendChild(right ? pro : con);
+      seating.dataset.seat = right ? 'right' : 'left';
+      const label = '左右交换（现在正方坐在' + (right ? '右' : '左') + '边）';
+      swap.setAttribute('aria-label', label);
+      swap.title = label;
+    }
     page.querySelectorAll('input[name="proSeat"]').forEach(r => r.addEventListener('change', paintSeat));
+    swap.addEventListener('click', () => {
+      page.querySelector('input[name="proSeat"][value="' + (seatNow() === 'right' ? 'left' : 'right') + '"]').checked = true;
+      paintSeat();
+    });
     paintSeat();
 
     function start() {
@@ -278,12 +295,14 @@
 
     // Enter steps through the text boxes and starts the match from the last one.
     // An Enter that ends an input-method composition only commits the text.
+    // The order is the page's, so the team boxes are taken left to right, whichever side sits on the left.
     page.addEventListener('keydown', e => {
-      const i = texts.indexOf(e.target);
-      if (i < 0 || ENTER.indexOf(e.code) < 0 || e.isComposing || e.keyCode === 229) return;
+      if (texts.indexOf(e.target) < 0 || ENTER.indexOf(e.code) < 0 || e.isComposing || e.keyCode === 229) return;
       e.preventDefault();
-      if (i === texts.length - 1) start();
-      else texts[i + 1].focus();
+      const order = texts.slice().sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+      const i = order.indexOf(e.target);
+      if (i === order.length - 1) start();
+      else order[i + 1].focus();
     });
 
     if (o.onEdit) {

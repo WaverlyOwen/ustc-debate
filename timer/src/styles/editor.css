@@ -22,31 +22,6 @@
 .dt-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .dt-input-title { font-family: var(--font-title); font-size: 1.06em; letter-spacing: .06em; }
 
-/* A row of radio choices drawn as buttons; the radio stays over its label, invisible but clickable. */
-.dt-choices { display: flex; flex-wrap: wrap; gap: .45em; }
-.dt-choice {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: .6em;
-  padding: .5em 1.05em;
-  border: 1px solid var(--panel-line);
-  border-radius: .45em;
-  color: var(--ink-dim);
-  letter-spacing: .12em;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
-}
-.dt-choice input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.dt-choice:hover { background: var(--panel-hover); color: var(--ink); }
-.dt-choice:has(input:checked) {
-  border-color: color-mix(in oklab, var(--ink) 55%, transparent);
-  background: color-mix(in oklab, var(--ink) 12%, transparent);
-  color: var(--ink);
-}
-.dt-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
-
 /* A format's shape: one segment per stage, as long as the stage, in the stage's side colour. */
 .dt-setup-strip { display: flex; gap: 2px; height: .3em; }
 .dt-setup-strip i {
@@ -69,7 +44,7 @@
   gap: clamp(14px, 2.6vh, 32px);
   height: 100%;
   overflow: auto;
-  padding: clamp(18px, 5vh, 64px) clamp(16px, 5vw, 96px) clamp(18px, 4.5vh, 56px);
+  padding: clamp(18px, 4vh, 64px) clamp(16px, 5vw, 96px) clamp(18px, 4.5vh, 56px);
   background: radial-gradient(120% 90% at 50% 25%, transparent 55%, rgb(0 0 0 / .22)), var(--ground);
   color: var(--ink);
   font-family: var(--font-ui);
@@ -78,6 +53,8 @@
   font-synthesis: none;
 }
 .dt-setup > * { flex: none; width: 100%; max-width: 1320px; margin-inline: auto; }
+/* Wider on big screens, so the match panel is about 950px across and the theme thumbnails can be read. */
+@media (min-width: 1600px) { .dt-setup > * { max-width: 1520px; } }
 .dt-setup :where(h1, h2, p) { margin: 0; }
 .dt-setup :where(button) {
   margin: 0;
@@ -194,7 +171,7 @@
   align-self: start;
   display: flex;
   flex-direction: column;
-  gap: clamp(.75em, 1.6vh, 1.2em);   /* tighter on short screens */
+  gap: clamp(.75em, 1.3vh, 1.2em);   /* tighter on short screens */
   min-width: 0;
   max-height: 100%;
   overflow: auto;
@@ -208,8 +185,18 @@
   background: var(--panel);
   box-shadow: var(--panel-shadow);
 }
-.dt-setup-chosen { padding-bottom: clamp(.8em, 1.8vh, 1.2em); border-bottom: 1px solid var(--panel-line); }
+/* The format's name with its size beside it on one line (a long name pushes the size under it), its shape below. */
+.dt-setup-chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1.3em;
+  padding-bottom: clamp(.8em, 1.8vh, 1.2em);
+  border-bottom: 1px solid var(--panel-line);
+}
 .dt-setup-chosen-name {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   font-family: var(--font-title);
   font-size: 1.65em;
@@ -219,12 +206,46 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.dt-setup-meta { margin: .25em 0 .85em; letter-spacing: .08em; color: var(--ink-dim); }
-.dt-setup-chosen .dt-setup-strip { height: .5em; gap: 3px; }
+.dt-setup-meta { letter-spacing: .08em; color: var(--ink-dim); }
+.dt-setup-chosen .dt-setup-strip { flex: 1 0 100%; height: .5em; gap: 3px; margin-top: clamp(.6em, 1.4vh, .9em); }
 
 .dt-setup-row { display: flex; flex-direction: column; gap: .5em; min-width: 0; margin: 0; padding: 0; border: 0; }
 .dt-setup-row > legend { margin-bottom: .5em; padding: 0; }
-.dt-setup-teams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5em 1.4em; }
+.dt-setup .dt-input { padding-block: .45em; }   /* a little slimmer than the editor's, for the theme grid's sake */
+/* Wide screens: each row's label in a column on its left. The panel has the width to spare and not the height,
+   and the rows it saves let two rows of large theme thumbnails fit at 1920×1080. A floated legend is not the
+   fieldset's rendered legend, so it is laid out as a grid item like the rest. */
+@media (min-width: 1600px) {
+  .dt-setup-match .dt-setup-row { display: grid; grid-template-columns: 5.4em minmax(0, 1fr); align-items: start; gap: .5em 1.2em; }
+  .dt-setup-match .dt-setup-row > .dt-setup-label { float: left; grid-column: 1; margin: 0; padding-top: .9em; }
+  .dt-setup-match .dt-setup-row > :not(.dt-setup-label) { grid-column: 2; }
+  .dt-setup-match .dt-setup-row:has(> .dt-setup-themes) > .dt-setup-label { padding-top: .1em; }   /* level with the thumbnails' top */
+}
+/* The team boxes in seat order, left to right as on the projector, with the swap button between them. */
+.dt-setup-seating { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: .5em .8em; }
+.dt-setup-swap {
+  display: grid;
+  place-items: center;
+  width: 2.3em;
+  height: 2.3em;
+  border: 1px solid var(--panel-line);
+  border-radius: 50%;
+  color: var(--ink-dim);
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.dt-setup-swap:hover { border-color: color-mix(in oklab, var(--ink) 45%, transparent); background: var(--panel-hover); color: var(--ink); }
+.dt-setup-swap svg {
+  width: 1.05em;
+  height: 1.05em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: rotate 200ms ease;
+}
+/* The arrows turn with each swap, so the click visibly did something even before the eye finds the boxes. */
+.dt-setup-seating[data-seat="right"] .dt-setup-swap svg { rotate: 180deg; }
 
 /* A side's label with its colour bar, then the box. */
 .dt-setup-side { display: grid; grid-template-columns: 3.4em minmax(0, 1fr); align-items: center; }
@@ -241,34 +262,13 @@
 }
 .dt-setup-side[data-side="con"] > span::before { background: var(--con); }
 
-.dt-setup-pair { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.2em 2.6em; }
-.dt-setup-seat { display: flex; flex-wrap: wrap; align-items: center; gap: .6em 1em; }
-/* How the projection will seat the two sides. */
-.dt-setup-seats {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--panel-line);
-  border-radius: .35em;
-  background: color-mix(in oklab, var(--ground) 72%, transparent);
-}
-.dt-setup-seats i {
-  display: grid;
-  place-items: center;
-  width: 2.3em;
-  height: 1.7em;
-  border-radius: .2em;
-  background: var(--pro);
-  color: var(--ink);
-  font-size: .8em;
-  font-style: normal;
-}
-.dt-setup-seats i[data-side="con"] { background: var(--con); }
-.dt-setup-seats[data-seat="right"] i[data-side="pro"] { order: 1; }
-
 /* Theme thumbnails (spec §3.1): each is the real stage in that theme, four to a row, the name under it.
-   The chosen one wears a gold ring; keyboard focus adds the page's focus outline around the whole cell. */
+   The chosen one wears a gold ring; keyboard focus adds the page's focus outline around the whole cell.
+   On a short, wide screen (1366×768) all eight go in one row, so the grid fits above the footer. */
 .dt-setup-themes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75em .7em; }
+@media (max-height: 860px) and (min-width: 1200px) {
+  .dt-setup-themes { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: .6em .55em; }
+}
 .dt-setup-theme {
   display: flex;
   flex-direction: column;
@@ -332,6 +332,23 @@
   border-top: 1px solid var(--panel-line);
   background: var(--panel);
 }
+/* When the panel has more below the footer, the rows fade into it instead of being cut by its rule. It is
+   drawn only while the panel can scroll (a scroll-linked animation has no effect otherwise), and it clears
+   as the end comes into view. */
+.dt-setup-foot::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 2.5em;
+  background: linear-gradient(transparent, var(--panel));
+  pointer-events: none;
+  opacity: 0;
+  animation: dt-setup-more linear both;
+  animation-timeline: scroll(nearest block);
+}
+@keyframes dt-setup-more { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
 .dt-setup-foot [data-action="edit"] { margin-right: auto; }
 .dt-setup .dt-button:hover { background: var(--panel-hover); }
 /* Primary: solid ink, the loudest thing on this page and the only solid button. */
@@ -340,12 +357,13 @@
 .dt-setup-start { padding: .7em 2.4em; font-size: 1.06em; letter-spacing: .3em; }
 
 @media (max-width: 760px) {
-  .dt-setup-body, .dt-setup-pair { grid-template-columns: minmax(0, 1fr); }
+  .dt-setup-body { grid-template-columns: minmax(0, 1fr); }
   .dt-setup-list { max-height: 40vh; }
   /* One column: the whole page scrolls, as before, with the footer at the end of the panel. */
   .dt-setup-body { flex: none; }
   .dt-setup-match { max-height: none; overflow: visible; }
   .dt-setup-foot { position: static; }
+  .dt-setup-foot::before { display: none; }
 }
 
 /* ---- format editor ---- */

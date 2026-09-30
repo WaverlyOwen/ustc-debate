@@ -79,6 +79,39 @@
     t.h.destroy();
   });
 
+  DT.test('setup: the team boxes sit in seat order and the button between them swaps the seats', () => {
+    const t = mount();
+    const order = () => Array.from(t.box.querySelectorAll('.dt-setup-teams input[type="text"]')).map(e => e.name);
+    const swap = t.box.querySelector('.dt-setup-teams button[data-action="swap-seats"]');
+    assert.deepEqual(order(), ['proTeam', 'conTeam']);
+    assert.ok(swap.getAttribute('aria-label').indexOf('正方坐在左边') >= 0, swap.getAttribute('aria-label'));
+    swap.click();
+    assert.deepEqual(order(), ['conTeam', 'proTeam'], 'the left box is the side sitting on the left');
+    assert.ok(swap.getAttribute('aria-label').indexOf('正方坐在右边') >= 0);
+    assert.equal(t.box.querySelector('input[name="proSeat"]:checked').value, 'right');
+    // Enter takes the boxes as laid out: the left one (反方) to the right one (正方), and that one starts.
+    input(t, 'conTeam').focus();
+    keydown(input(t, 'conTeam'), 'Enter');
+    assert.equal(document.activeElement, input(t, 'proTeam'));
+    keydown(input(t, 'proTeam'), 'Enter');
+    assert.equal(t.calls[0][2].proSeat, 'right');
+    swap.click();
+    assert.deepEqual(order(), ['proTeam', 'conTeam']);
+    t.h.destroy();
+    const u = mount({ lastMatch: { proSeat: 'right' } });
+    assert.deepEqual(Array.from(u.box.querySelectorAll('.dt-setup-teams input[type="text"]')).map(e => e.name),
+      ['conTeam', 'proTeam'], 'a remembered right seat opens with 反方 on the left');
+    u.h.destroy();
+  });
+
+  DT.test('setup: the theme grid has a row of its own, full width of the panel', () => {
+    const t = mount();
+    const row = t.box.querySelector('.dt-setup-themes').closest('.dt-setup-row');
+    assert.equal(row.parentNode, t.box.querySelector('.dt-setup-match'));
+    assert.equal(row.querySelector('input'), null, 'nothing else shares the row');
+    t.h.destroy();
+  });
+
   DT.test('setup: the theme follows the format until one is picked', () => {
     const daylight = Object.assign(JSON.parse(JSON.stringify(DT.BUILTIN_FORMATS[1])), { theme: 'daylight' });
     const formats = [DT.BUILTIN_FORMATS[0], daylight];
