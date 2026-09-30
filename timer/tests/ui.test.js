@@ -386,4 +386,56 @@
     t.done();
     DT.bells._setContextFactory(null); DT.bells._resetForTests();
   });
+  // ---- final review ----
+
+  const run = t => DT.engine.getRun(t.c.session());
+  const left = t => DT.engine.remaining(run(t), 'main', DT.clock.now());
+  const later = ms => new Promise(r => setTimeout(r, ms));
+
+  DT.test('ui: clicking the current row of the stage list leaves its running clock alone', () => {
+    const t = boot();
+    press('Space'); press('Space'); t.clock.advance(5000);
+    const history = t.c.session().history.length;
+    t.c.openOverlay('stages');
+    document.querySelector('.dt-overlay[data-name="stages"] button[data-index="0"]').click();
+    assert.ok(run(t).running);
+    assert.equal(t.c.session().history.length, history);
+    assert.equal(document.querySelector('.dt-overlay'), null, 'the list still closes');
+    t.done();
+  });
+
+  DT.test('ui: taking time off a running clock past the 30 s point rings it at once', () => {
+    const t = boot();
+    const events = [];
+    t.c.on('events', list => list.forEach(e => events.push(e.key)));
+    press('Space'); press('Space');
+    t.clock.advance(148000);
+    press('ArrowDown', { shiftKey: true });
+    assert.deepEqual(t.bells.log.played, ['ding']);
+    assert.deepEqual(events, ['w30']);
+    t.done();
+  });
+
+  DT.test('ui: undoing a mistaken switch rings the bell the speaker passed in the meantime', () => {
+    const t = boot();
+    freeDebate(t);
+    const secs = DT.engine.currentStage(t.c.session()).secs;
+    press('KeyA'); t.clock.advance(secs * 1000 - 35000);   // pro has 0:35 left
+    press('KeyL'); t.clock.advance(8000);
+    press('KeyZ');
+    assert.deepEqual(t.bells.log.played, ['ding']);
+    assert.equal(run(t).active, 'pro');
+    t.done();
+  });
+
+  DT.test('ui: nothing can be inserted on the end card', () => {
+    const t = boot({ formatId: 'ustc-school-cup-2025' });
+    t.c.act('goto', t.c.session().timeline.length);
+    assert.equal(document.querySelector('.dt-dock button[data-act="insert"]').disabled, true);
+    press('KeyX');
+    assert.equal(document.querySelector('.dt-overlay'), null);
+    assert.equal(toastText(), '比赛已经结束');
+    assert.equal(t.c.view().mode, 'end');
+    t.done();
+  });
 })();

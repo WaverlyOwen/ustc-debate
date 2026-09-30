@@ -348,7 +348,7 @@
         btn[side].disabled = !dual || !!(clock && clock.locked);
       });
       btn.undo.disabled = !(session.history && session.history.length);
-      btn.insert.disabled = !v.extras.length;
+      btn.insert.disabled = !v.extras.length || v.mode === 'end';
     }
 
     function paintStatus() {
@@ -376,6 +376,11 @@
       session = fn.apply(null, [out.session, now].concat(args));
       DT.store.saveSession(session);
       bells.schedule(DT.engine.upcomingBells(session, now), now);
+      // A bell point the action itself crossed (time taken off a running clock, an undo) rings now.
+      if (session.lastRung) {
+        session.lastRung.forEach(e => { if (e.sound) bells.play(e.sound); });
+        pulse(session.lastRung);
+      }
       if (session.lastFeedback) toast(session.lastFeedback.message);
       emit('change', session);
       paint(now);
@@ -472,7 +477,10 @@
             const state = el('span', 'dt-row-state');
             [el('span', 'dt-row-index', String(i + 1)), el('i', 'dt-row-side'), el('span', 'dt-row-name', st.name),
               el('span', 'dt-row-plan', planned(st)), state].forEach(c => b.appendChild(c));
-            b.addEventListener('click', () => { act('goto', i); closeOverlay(); });
+            b.addEventListener('click', () => {
+              if (i !== session.cursor) act('goto', i);   // the current row: a click must not stop its clock
+              closeOverlay();
+            });
             li.appendChild(b);
             list.appendChild(li);
             return { b, state };
@@ -618,6 +626,10 @@
       if (destroyed || !OVERLAYS[name]) return false;
       if (name === 'insert' && !(session.format.extras || []).length) {
         toast('这个赛制没有可插入的环节');
+        return false;
+      }
+      if (name === 'insert' && session.cursor >= session.timeline.length) {
+        toast('比赛已经结束');
         return false;
       }
       closeOverlay();

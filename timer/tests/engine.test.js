@@ -372,4 +372,72 @@
     DT.clock.reset();
     assert.ok(DT.clock.now() > 1e12);
   });
+  // ---- final review ----
+
+  DT.test('engine: going to the stage already on screen leaves its clock running', () => {
+    const s = E.toggle(at(0), T0);
+    const g = E.goto(s, 0, T0 + 5000);
+    assert.ok(E.getRun(g).running);
+    assert.equal(g.history.length, s.history.length, 'nothing to undo');
+    assert.equal(rem(g, 'main', T0 + 5000), 175000);
+    assert.ok(E.getRun(E.goto(E.toggle(at(3), T0), 3, T0 + 5000)).running);
+  });
+
+  DT.test('engine: taking time off a running clock rings the bell points it crosses, now', () => {
+    let s = E.toggle(at(0), T0);
+    s = E.tick(s, T0 + 148000).session;            // 0:32 left
+    s = E.adjust(s, -5000, T0 + 148000);           // 0:27: the 30 s point is behind it
+    assert.deepEqual(s.lastRung.map(e => [e.type, e.clock, e.key, e.sound, e.at - T0]), [['warn', 'main', 'w30', 'ding', 148000]]);
+    assert.ok(E.getRun(s).fired.main.indexOf('w30') >= 0);
+    assert.equal(E.tick(s, T0 + 148100).events.length, 0, 'tick does not report it again');
+    assert.deepEqual(E.upcomingBells(s, T0 + 148000).map(b => b.sound), ['double']);
+    assert.equal(E.adjust(s, -1000, T0 + 149000).lastRung, null, 'the next action does not ring it again');
+    const end = E.adjust(E.tick(s, T0 + 174000).session, -5000, T0 + 174000);   // 0:01 -> over
+    assert.deepEqual(end.lastRung.map(e => [e.key, e.sound]), [['end', 'double']]);
+    // A paused clock that is set past a bell point stays silent (spec §3.2).
+    let p = E.toggle(E.tick(E.toggle(at(0), T0), T0 + 148000).session, T0 + 148000);
+    p = E.adjust(p, -5000, T0 + 149000);
+    assert.equal(p.lastRung, null);
+  });
+
+  DT.test('engine: undoing a mistaken switch rings the bells the speaking side crossed meanwhile', () => {
+    let s = E.toggle(at(3), T0);                   // free debate, pro speaks
+    s = E.tick(s, T0 + 205000).session;            // pro 0:35
+    s = E.toggle(s, T0 + 205000);                  // switched to con by mistake
+    s = E.tick(s, T0 + 213000).session;
+    s = E.undo(s, T0 + 213000);                    // pro spoke on: its 30 s point passed at 210 s
+    assert.deepEqual(s.lastRung.map(e => [e.type, e.clock, e.key, e.sound]), [['warn', 'pro', 'w30', 'ding']]);
+    assert.ok(E.getRun(s).fired.pro.indexOf('w30') >= 0);
+    assert.equal(E.tick(s, T0 + 213100).events.length, 0);
+    // Pro ran out in the undone window: the end bell rings late and the floor has passed to con.
+    let t = E.toggle(at(3), T0);
+    t = E.tick(t, T0 + 238000).session;            // pro 0:02
+    t = E.toggle(t, T0 + 238000);
+    t = E.undo(E.tick(t, T0 + 243000).session, T0 + 243000);
+    assert.deepEqual(t.lastRung.filter(e => e.sound).map(e => [e.clock, e.key, e.sound]), [['pro', 'end', 'double']]);
+    const r = E.getRun(t);
+    assert.equal(r.active, 'con'); assert.ok(r.locked.pro); assert.ok(r.running);
+  });
+
+  DT.test('engine: undo does not ring again a bell that already rang', () => {
+    let s = E.toggle(at(0), T0);
+    s = E.adjust(s, 1000, T0 + 100000);
+    const out = E.tick(s, T0 + 151000);            // the 30 s point rings at 151 s
+    assert.deepEqual(out.events.map(e => e.key), ['w30']);
+    const u = E.undo(out.session, T0 + 152000);    // back to before the +1 s: the point is behind it
+    assert.equal(u.lastRung, null);
+    assert.ok(E.getRun(u).fired.main.indexOf('w30') >= 0);
+  });
+
+  DT.test('engine: nothing is inserted on the end card; the title card inserts before the first stage', () => {
+    const s = E.goto(E.createSession(fx(), MATCH, T0), 99, T0);
+    const r = E.insertExtra(s, '奇袭', 0, 'pro', T0);
+    assert.equal(r.lastFeedback.code, 'ended');
+    assert.equal(r.lastFeedback.message, '比赛已经结束');
+    assert.equal(r.timeline.length, s.timeline.length);
+    assert.equal(E.view(r, T0).mode, 'end');
+    const t = E.insertExtra(E.createSession(fx(), MATCH, T0), '奇袭', 0, 'pro', T0);
+    assert.equal(t.cursor, -1);
+    assert.equal(t.timeline[0].name, '正方奇袭质询');
+  });
 })();

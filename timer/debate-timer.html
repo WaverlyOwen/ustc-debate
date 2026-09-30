@@ -2870,6 +2870,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       extrasUsed,
       history: [],
       lastFeedback: null,
+      lastRung: null,   // bells the last action rang on the spot: [{type, clock, key, at, sound}] or null
     };
   }
 
@@ -2893,6 +2894,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
   function begin(session) {
     const snap = clone(strip(session));
     snap.lastFeedback = null;
+    snap.lastRung = null;
     const s = clone(snap);
     s.history = (session.history || []).concat([snap]).slice(-HISTORY_MAX);
     return s;
@@ -2903,6 +2905,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     const s = clone(strip(session));
     s.history = (session.history || []).slice();
     s.lastFeedback = code ? { code, message } : null;
+    s.lastRung = null;
     return s;
   }
 
@@ -2975,15 +2978,23 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         }
         run.done = false;
       }
-      // Re-arm bell points now above the remaining time; silently spend those below it on a stopped clock.
+      // Re-arm bell points now above the remaining time and spend those it has passed. A stopped clock passes
+      // them silently (spec §3.2); a running one rings the latest of them now, since tick would find it stale.
       const live = run.running && run.active === id;
       const fired = run.fired[id];
-      bellPoints(effectiveBells(s.format, st)).forEach(p => {
+      const bells = effectiveBells(s.format, st);
+      let crossed = null;
+      bellPoints(bells).forEach(p => {
         const i = fired.indexOf(p.key);
         if (left > p.ms) { if (i >= 0) fired.splice(i, 1); }
-        else if (!live && i < 0) fired.push(p.key);
+        else if (i < 0) { fired.push(p.key); crossed = p; }
       });
+      if (live && crossed) s.lastRung = [rung(crossed, id, bells, now)];
     });
+  }
+
+  function rung(point, clock, bells, now) {
+    return { type: point.type, clock, key: point.key, at: now, sound: soundOf(point, bells) };
   }
 
   function yieldTime(session, now) {
@@ -3020,8 +3031,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
   function goto(session, index, now) {
     const target = Math.max(-1, Math.min(session.timeline.length, index));
     const st = currentStage(session);
-    const running = !!(st && getRun(session).running);
-    if (target === session.cursor && !running) return noop(session);
+    if (target === session.cursor) return noop(session);   // the stage on screen: a running clock keeps running
     const s = begin(session);
     if (st && s.runs[st.id]) stop(s.runs[st.id], now);
     s.cursor = target;
@@ -3036,6 +3046,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     const g = (session.format.extras || []).find(x => x.group === group);
     const variant = g && g.variants[variantIndex];
     if (!variant || !SIDE_NAME[side]) return noop(session);
+    if (session.cursor >= session.timeline.length) return refuse(session, 'ended', '比赛已经结束');
     const st = currentStage(session);
     if (st && getRun(session).running) return refuse(session, 'running', '先暂停再插入');
     const used = (session.extrasUsed[group] || {})[side] || 0;
@@ -3056,12 +3067,27 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
     return s;
   }
 
+  // "As if that press never happened": the restored clock ran on through the undone moments, so a bell point
+  // it crossed then rings now, late rather than never, unless it already rang before the undo.
   function undo(session, now) {
     const h = session.history || [];
     if (!h.length) return refuse(session, 'nothing-to-undo', '没有可以撤销的操作');
-    const s = clone(h[h.length - 1]);
-    s.history = h.slice(0, -1);
-    s.lastFeedback = null;
+    const back = clone(h[h.length - 1]);
+    back.history = h.slice(0, -1);
+    back.lastFeedback = null;
+    back.lastRung = null;
+    const out = advance(back, now, Infinity);
+    const s = out.session;   // built from `back`, which is already this call's own copy
+    const st = currentStage(s);
+    const before = st && session.runs[st.id];
+    const bells = st && effectiveBells(s.format, st);
+    const latest = {};
+    out.events.forEach(e => {
+      if (e.type === 'switch' || (before && (before.fired[e.clock] || []).indexOf(e.key) >= 0)) return;
+      latest[e.clock] = e;
+    });
+    const list = Object.keys(latest).map(id => rung(latest[id], id, bells, now));
+    s.lastRung = list.length ? list : null;
     return s;
   }
 
@@ -3069,7 +3095,10 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
 
   // Apply the automatic rules up to `now` and report visual events in time order.
   // Returns the input session itself when nothing changed.
-  function tick(session, now) {
+  function tick(session, now) { return advance(session, now, STALE_MS); }
+
+  // tick with a choice of how late a crossed bell point may still be reported.
+  function advance(session, now, staleMs) {
     const st = currentStage(session);
     const r0 = st && session.runs[st.id];
     if (!r0 || !r0.running) return { session, events: [] };
@@ -3087,7 +3116,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         if (at > now || run.fired[id].indexOf(p.key) >= 0) return;
         run.fired[id].push(p.key);
         changed = true;
-        if (now - at <= STALE_MS) events.push({ type: p.type, clock: id, key: p.key, at });
+        if (now - at <= staleMs) events.push({ type: p.type, clock: id, key: p.key, at });
       });
       if (endAt > now || run.kind === 'single') break;
       changed = true;
@@ -5874,7 +5903,7 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
         btn[side].disabled = !dual || !!(clock && clock.locked);
       });
       btn.undo.disabled = !(session.history && session.history.length);
-      btn.insert.disabled = !v.extras.length;
+      btn.insert.disabled = !v.extras.length || v.mode === 'end';
     }
 
     function paintStatus() {
@@ -5902,6 +5931,11 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       session = fn.apply(null, [out.session, now].concat(args));
       DT.store.saveSession(session);
       bells.schedule(DT.engine.upcomingBells(session, now), now);
+      // A bell point the action itself crossed (time taken off a running clock, an undo) rings now.
+      if (session.lastRung) {
+        session.lastRung.forEach(e => { if (e.sound) bells.play(e.sound); });
+        pulse(session.lastRung);
+      }
       if (session.lastFeedback) toast(session.lastFeedback.message);
       emit('change', session);
       paint(now);
@@ -5998,7 +6032,10 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
             const state = el('span', 'dt-row-state');
             [el('span', 'dt-row-index', String(i + 1)), el('i', 'dt-row-side'), el('span', 'dt-row-name', st.name),
               el('span', 'dt-row-plan', planned(st)), state].forEach(c => b.appendChild(c));
-            b.addEventListener('click', () => { act('goto', i); closeOverlay(); });
+            b.addEventListener('click', () => {
+              if (i !== session.cursor) act('goto', i);   // the current row: a click must not stop its clock
+              closeOverlay();
+            });
             li.appendChild(b);
             list.appendChild(li);
             return { b, state };
@@ -6144,6 +6181,10 @@ DT.THEMES = [{"id": "chroma", "name": "绿幕", "desc": "纯绿底，数字放�
       if (destroyed || !OVERLAYS[name]) return false;
       if (name === 'insert' && !(session.format.extras || []).length) {
         toast('这个赛制没有可插入的环节');
+        return false;
+      }
+      if (name === 'insert' && session.cursor >= session.timeline.length) {
+        toast('比赛已经结束');
         return false;
       }
       closeOverlay();

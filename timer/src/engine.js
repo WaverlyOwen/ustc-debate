@@ -111,6 +111,7 @@
       extrasUsed,
       history: [],
       lastFeedback: null,
+      lastRung: null,   // bells the last action rang on the spot: [{type, clock, key, at, sound}] or null
     };
   }
 
@@ -134,6 +135,7 @@
   function begin(session) {
     const snap = clone(strip(session));
     snap.lastFeedback = null;
+    snap.lastRung = null;
     const s = clone(snap);
     s.history = (session.history || []).concat([snap]).slice(-HISTORY_MAX);
     return s;
@@ -144,6 +146,7 @@
     const s = clone(strip(session));
     s.history = (session.history || []).slice();
     s.lastFeedback = code ? { code, message } : null;
+    s.lastRung = null;
     return s;
   }
 
@@ -216,15 +219,23 @@
         }
         run.done = false;
       }
-      // Re-arm bell points now above the remaining time; silently spend those below it on a stopped clock.
+      // Re-arm bell points now above the remaining time and spend those it has passed. A stopped clock passes
+      // them silently (spec §3.2); a running one rings the latest of them now, since tick would find it stale.
       const live = run.running && run.active === id;
       const fired = run.fired[id];
-      bellPoints(effectiveBells(s.format, st)).forEach(p => {
+      const bells = effectiveBells(s.format, st);
+      let crossed = null;
+      bellPoints(bells).forEach(p => {
         const i = fired.indexOf(p.key);
         if (left > p.ms) { if (i >= 0) fired.splice(i, 1); }
-        else if (!live && i < 0) fired.push(p.key);
+        else if (i < 0) { fired.push(p.key); crossed = p; }
       });
+      if (live && crossed) s.lastRung = [rung(crossed, id, bells, now)];
     });
+  }
+
+  function rung(point, clock, bells, now) {
+    return { type: point.type, clock, key: point.key, at: now, sound: soundOf(point, bells) };
   }
 
   function yieldTime(session, now) {
@@ -261,8 +272,7 @@
   function goto(session, index, now) {
     const target = Math.max(-1, Math.min(session.timeline.length, index));
     const st = currentStage(session);
-    const running = !!(st && getRun(session).running);
-    if (target === session.cursor && !running) return noop(session);
+    if (target === session.cursor) return noop(session);   // the stage on screen: a running clock keeps running
     const s = begin(session);
     if (st && s.runs[st.id]) stop(s.runs[st.id], now);
     s.cursor = target;
@@ -277,6 +287,7 @@
     const g = (session.format.extras || []).find(x => x.group === group);
     const variant = g && g.variants[variantIndex];
     if (!variant || !SIDE_NAME[side]) return noop(session);
+    if (session.cursor >= session.timeline.length) return refuse(session, 'ended', '比赛已经结束');
     const st = currentStage(session);
     if (st && getRun(session).running) return refuse(session, 'running', '先暂停再插入');
     const used = (session.extrasUsed[group] || {})[side] || 0;
@@ -297,12 +308,27 @@
     return s;
   }
 
+  // "As if that press never happened": the restored clock ran on through the undone moments, so a bell point
+  // it crossed then rings now, late rather than never, unless it already rang before the undo.
   function undo(session, now) {
     const h = session.history || [];
     if (!h.length) return refuse(session, 'nothing-to-undo', '没有可以撤销的操作');
-    const s = clone(h[h.length - 1]);
-    s.history = h.slice(0, -1);
-    s.lastFeedback = null;
+    const back = clone(h[h.length - 1]);
+    back.history = h.slice(0, -1);
+    back.lastFeedback = null;
+    back.lastRung = null;
+    const out = advance(back, now, Infinity);
+    const s = out.session;   // built from `back`, which is already this call's own copy
+    const st = currentStage(s);
+    const before = st && session.runs[st.id];
+    const bells = st && effectiveBells(s.format, st);
+    const latest = {};
+    out.events.forEach(e => {
+      if (e.type === 'switch' || (before && (before.fired[e.clock] || []).indexOf(e.key) >= 0)) return;
+      latest[e.clock] = e;
+    });
+    const list = Object.keys(latest).map(id => rung(latest[id], id, bells, now));
+    s.lastRung = list.length ? list : null;
     return s;
   }
 
@@ -310,7 +336,10 @@
 
   // Apply the automatic rules up to `now` and report visual events in time order.
   // Returns the input session itself when nothing changed.
-  function tick(session, now) {
+  function tick(session, now) { return advance(session, now, STALE_MS); }
+
+  // tick with a choice of how late a crossed bell point may still be reported.
+  function advance(session, now, staleMs) {
     const st = currentStage(session);
     const r0 = st && session.runs[st.id];
     if (!r0 || !r0.running) return { session, events: [] };
@@ -328,7 +357,7 @@
         if (at > now || run.fired[id].indexOf(p.key) >= 0) return;
         run.fired[id].push(p.key);
         changed = true;
-        if (now - at <= STALE_MS) events.push({ type: p.type, clock: id, key: p.key, at });
+        if (now - at <= staleMs) events.push({ type: p.type, clock: id, key: p.key, at });
       });
       if (endAt > now || run.kind === 'single') break;
       changed = true;
