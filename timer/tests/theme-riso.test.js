@@ -393,4 +393,59 @@
     assert.ok(!shown(pseudo(root.querySelector('.dt-deco'), '::before')), 'not on a speaking stage');
     stage.destroy();
   });
+
+  // A clock that is not running keeps a solid colon: stage.css's faded .55 colon with both drums' shadows would sink
+  // into dots of its own size and value, so an idle clock would read '4 00'. The 暂停 line already says it waits.
+  DT.test('theme riso: a clock that is not running prints a solid colon without the misregistration', () => {
+    const idle = seat => E.view(session('自由辩论', seat), T0);
+    ['left', 'right'].forEach(seat => {
+      [['dual-idle', idle(seat), ['pro', 'con']], ['dual', dualAt(30, seat), ['pro']]].forEach(([what, view, waiting]) => {
+        const { stage, root } = mountPoster(view, 1920, 1080);
+        waiting.forEach(side => {
+          const clock = root.querySelector('.dt-half[data-side="' + side + '"] .dt-clock');
+          assert.equal(clock.getAttribute('data-running'), 'false', what + ' / ' + seat + ' ' + side);
+          const cs = getComputedStyle(clock.querySelector('.dt-digits:not(.dt-digits-on) .dt-colon'));
+          assert.equal(cs.opacity, '1', what + ' / ' + seat + ' ' + side + ': solid');
+          assert.equal(cs.textShadow, 'none', what + ' / ' + seat + ' ' + side + ': no fringes');
+          same(cs.color, rgba(resolve(root, '--overprint')), 1, what + ' / ' + seat + ' ' + side + ': overprint');
+        });
+        stage.destroy();
+      });
+    });
+    // The running clock keeps the breathing, misregistered colon.
+    const { stage, root } = mountPoster(dualAt(30), 1920, 1080);
+    const run = root.querySelector('.dt-half[data-active] .dt-clock');
+    assert.equal(run.getAttribute('data-running'), 'true');
+    const colon = run.querySelector('.dt-digits:not(.dt-digits-on) .dt-colon');
+    assert.equal(shadows(getComputedStyle(colon).textShadow).length, 2, 'running: both drums');
+    assert.ok(/dt-breathe/.test(getComputedStyle(colon).animationName), 'running: breathes');
+    stage.destroy();
+  });
+
+  // Main spec §5.4: the end card marks overtime. The accent is the overprint here, so the rows are marked the riso
+  // way: a highlighter stroke of red ink under the navy text, which still reads at 4.5:1 on the tinted band.
+  DT.test('theme riso: overtime rows of the record carry a stroke of red ink', () => {
+    let s = E.toggle(session(OPENING), T0);
+    const t = T0 + 200000;   // 3:00 planned, 3:20 used
+    s = E.goto(s, 99, t);
+    const { stage, root } = mountPoster(Object.assign(E.view(s, t), { record: E.record(s, t) }), 1920, 1080);
+    assert.equal(root.dataset.mode, 'end');
+    const paper = rgba(getComputedStyle(root).backgroundColor);
+    const over = root.querySelector('.dt-record tr[data-over]');
+    assert.ok(over, 'an overtime row');
+    Array.from(over.cells).forEach((td, i) => {
+      const bs = getComputedStyle(td).boxShadow;
+      if (i < 2) { assert.equal(bs, 'none', 'name and plan unmarked'); return; }
+      assert.ok(/inset/.test(bs), 'a stroke under cell ' + i + ': ' + bs);
+      const m = /^((?:rgba?|color)\([^)]*\))/.exec(bs) || /((?:rgba?|color)\([^)]*\))/.exec(bs);
+      const ink = rgba(m[1]);
+      assert.near(ink[3], 0.6, 0.02, 'a tint of the ink');
+      same('rgb(' + ink.slice(0, 3) + ')', RED, 1, 'red ink');
+      const band = RED.map((v, k) => ink[3] * v + (1 - ink[3]) * paper[k]);
+      const c = contrast(getComputedStyle(td).color, 'rgb(' + band.map(Math.round) + ')');
+      assert.ok(c >= 4.5, 'the text reads on the band: ' + c.toFixed(2));
+    });
+    root.querySelectorAll('.dt-record tr:not([data-over]) td').forEach(td => assert.equal(getComputedStyle(td).boxShadow, 'none', 'no stroke on time kept'));
+    stage.destroy();
+  });
 })();

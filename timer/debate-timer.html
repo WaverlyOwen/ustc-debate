@@ -3249,6 +3249,9 @@ body {
 /* After the warn bell the second drum skips the colon: it prints in the side's ink alone. */
 .dt-stage[data-theme="riso"] .dt-clock[data-phase="warn"] .dt-colon,
 .dt-stage[data-theme="riso"] .dt-clock[data-phase="count"] .dt-colon { color: var(--own-ink); text-shadow: none; }
+/* A clock that is not running prints its colon solid and in register: stage.css's faded colon with both drums' edges
+   would sink into dots of its own size and value, and an idle clock would read '4 00'. The 暂停 line says it waits. */
+.dt-stage[data-theme="riso"] .dt-clock:not([data-running="true"]) .dt-colon { opacity: 1; text-shadow: none; }
 
 .dt-stage[data-theme="riso"] .dt-backdrop,
 .dt-stage[data-theme="riso"] .dt-clock { will-change: transform; }
@@ -3386,6 +3389,11 @@ body {
 .dt-stage[data-theme="riso"] .dt-teams { font-weight: 700; }
 .dt-stage[data-theme="riso"] .dt-teams span[data-side="pro"] { --own-ink: var(--pro); --other-ink: var(--con); }
 .dt-stage[data-theme="riso"] .dt-teams span[data-side="con"] { --own-ink: var(--con); --other-ink: var(--pro); }
+/* End card: the accent is the overprint, so overtime is marked the riso way, a highlighter stroke of red ink under the
+   navy figures (main spec §5.4). The text still reads at 4.5:1 on the tinted band. */
+.dt-stage[data-theme="riso"] .dt-record tr[data-over] td:nth-child(n+3) {
+  box-shadow: inset 0 -.55em 0 color-mix(in srgb, var(--pro) 60%, transparent);
+}
 
 /* The title card and the break are the poster's picture: a halftone disc of each ink rising from its side's seat,
    the pro drum on the deco under the text and the con drum on the one over it, each printed onto the paper. The dots
