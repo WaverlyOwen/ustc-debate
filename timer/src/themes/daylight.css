@@ -10,7 +10,7 @@
   --ink-dim: rgb(21 23 27 / .58);
   --accent: #B7791F;
   --on-side: #F7F4EE;
-  --font-digits: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
   --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
   --backdrop: none;

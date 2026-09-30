@@ -156,6 +156,27 @@ class MissingSourceTests(unittest.TestCase):
         self.assertIn("__loadErrors", run_js_tests.test_page(""))
 
 
+class FontTests(unittest.TestCase):
+    """Edge loads the system Bahnschrift as named faces and ignores font-variation-settings on it; an
+    @font-face with axis ranges over local("Bahnschrift") gives the digits their continuous tension (spec 5.3)."""
+
+    def test_the_digit_face_declares_both_axes_and_leads_every_digit_stack(self):
+        import re
+        base = (build.SRC / "styles" / "base.css").read_text(encoding="utf-8")
+        face = re.search(r"@font-face\s*\{([^}]*)\}", base)
+        self.assertIsNotNone(face)
+        body = face.group(1)
+        self.assertIn('font-family: "DT Digits"', body)
+        self.assertIn('local("Bahnschrift")', body)
+        self.assertRegex(body, r"font-weight:\s*300 700")
+        self.assertRegex(body, r"font-stretch:\s*75% 100%")
+        for p in [build.SRC / "styles" / "base.css"] + sorted((build.SRC / "themes").glob("*.css")):
+            stacks = re.findall(r"--font-digits:\s*([^;]+);", p.read_text(encoding="utf-8"))
+            self.assertTrue(stacks, p.name)
+            for stack in stacks:
+                self.assertTrue(stack.startswith('"DT Digits", "Bahnschrift"'), f"{p.name}: {stack}")
+
+
 class InlineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

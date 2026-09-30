@@ -9,6 +9,16 @@
 /* === styles/base.css === */
 /* base.css: the theme variable contract with 堂 (hall) defaults, a small reset, and the stage's size basis. */
 
+/* The digits' face. Edge loads the system Bahnschrift as a set of named faces and then ignores
+   font-variation-settings on it, so the digits never tense up. Declared here with its axis ranges, the same
+   font varies continuously in weight and width (spec §5.3). Every theme's --font-digits leads with it. */
+@font-face {
+  font-family: "DT Digits";
+  src: local("Bahnschrift");
+  font-weight: 300 700;
+  font-stretch: 75% 100%;
+}
+
 /* The contract every theme defines (spec §5.6). These defaults are hall's values. */
 :root {
   --pro: #B8322A;
@@ -19,7 +29,7 @@
   --ink: #F4EFE4;
   --ink-dim: rgb(244 239 228 / .6);
   --accent: #E4B04A;
-  --font-digits: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
   --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
   --backdrop: none;
@@ -1762,7 +1772,7 @@ body {
   --ink: #F4EFE4;
   --ink-dim: #D8D2C6;       /* solid: translucent text would pick up the key colour */
   --accent: #E4B04A;
-  --font-digits: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
   --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
   --backdrop: none;
@@ -1843,7 +1853,7 @@ body {
   --ink-dim: rgb(21 23 27 / .58);
   --accent: #B7791F;
   --on-side: #F7F4EE;
-  --font-digits: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
   --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
   --backdrop: none;
@@ -1902,7 +1912,7 @@ body {
   --ink: #F4EFE4;
   --ink-dim: rgb(244 239 228 / .6);
   --accent: #E4B04A;
-  --font-digits: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
   --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
   --backdrop: none;
