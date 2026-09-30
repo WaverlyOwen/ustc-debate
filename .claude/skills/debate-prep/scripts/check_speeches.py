@@ -157,6 +157,8 @@ def load_bands(fmt):
             bands["奇袭申论"] = (secs, lo, hi)
         elif "立论" in blob:
             bands["立论"] = (secs, lo, hi)
+        elif "申论" in blob:
+            bands["申论"] = (secs, lo, hi)
         elif "驳论" in blob:
             bands["驳论"] = (secs, lo, hi)
             if reserve:
@@ -173,6 +175,8 @@ def load_bands(fmt):
         elif "结辩" in blob:
             bands.setdefault("结辩·反四", (secs, lo, hi))
     need = {"立论", "驳论", "小结", "结辩·反四", "结辩·正四"}
+    if fmt not in BUILTIN_BANDS:
+        return bands, chains or BUILTIN_CHAINS, "format file"   # formats without 驳论 / 小结 (招新赛) are complete as written
     if not need <= set(bands):
         missing = need - set(bands)
         fallback = BUILTIN_BANDS.get(fmt, {})
@@ -184,13 +188,18 @@ def load_bands(fmt):
 
 
 def detect_format(files):
-    """Look only at the ## headings: the school cup gives 质询 to 二辩, 对辩 to 四辩, and has 奇袭."""
+    """Fallback when the folder name says nothing. The recruit formats have 申论 (3v3 has a 三辩申论)
+    or, for 1v1, only 对辩 and 结辩; the school cup gives 质询 to 二辩, 对辩 to 四辩, and has 奇袭."""
     for path in files:
         try:
             text = _tex.read(path)
         except OSError:
             continue
         heads = " ".join(_tex.heading(t, m) for _, t, m, _ in _tex.sections(text))
+        if "申论" in heads and "奇袭" not in heads:
+            return "recruit-3v3" if re.search(r"[正反]三申论", heads) else "recruit-2v2"
+        if "对辩" in heads and "结辩" in heads and not re.search(r"驳论|盘问|小结|申论|自由辩", heads):
+            return "recruit-1v1"
         if re.search(r"奇袭", heads) or re.search(r"[正反]四对辩", heads) or re.search(r"[正反]二质询", heads):
             return "ustc-school-cup-2025"
     return "ustc-freshman-cup"
@@ -207,7 +216,7 @@ def classify(heading, is_kit=False):
     if is_kit:
         if "奇袭" in h and "申论" in h:
             return "奇袭申论"
-        for key in ("立论", "驳论", "小结"):
+        for key in ("立论", "申论", "驳论", "小结"):
             if key in h:
                 return key
         if "结辩" in h:
@@ -220,6 +229,8 @@ def classify(heading, is_kit=False):
         return "奇袭申论"
     if "立论" in h and "稿" in h:
         return "立论"
+    if "申论" in h and "稿" in h:
+        return "申论"
     if "驳论" in h and "稿" in h:
         return "驳论·留临场位" if reserve else "驳论"
     if "小结" in h and "稿" in h:
