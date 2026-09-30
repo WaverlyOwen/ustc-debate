@@ -83,14 +83,15 @@
     const daylight = Object.assign(JSON.parse(JSON.stringify(DT.BUILTIN_FORMATS[1])), { theme: 'daylight' });
     const formats = [DT.BUILTIN_FORMATS[0], daylight];
     const t = mount({ formats });
-    const theme = id => t.box.querySelector('input[name="theme"][value="' + id + '"]');
-    assert.equal(theme('hall').checked, true);
+    const theme = id => t.box.querySelector('[role="radio"][data-theme-id="' + id + '"]');
+    const checked = id => theme(id).getAttribute('aria-checked') === 'true';
+    assert.equal(checked('hall'), true);
     item(t, daylight.id).click();
-    assert.equal(theme('daylight').checked, true);
+    assert.equal(checked('daylight'), true);
     theme('hall').click();
     item(t, formats[0].id).click();
     item(t, daylight.id).click();
-    assert.equal(theme('hall').checked, true, 'a picked theme stays');
+    assert.equal(checked('hall'), true, 'a picked theme stays');
     t.box.querySelector('button[data-action="start"]').click();
     assert.equal(t.calls[0][3], 'hall');
     t.h.destroy();
@@ -101,6 +102,88 @@
     const t = mount({ formats: [odd] });
     t.box.querySelector('button[data-action="start"]').click();
     assert.equal(t.calls[0][3], 'hall');
+    t.h.destroy();
+  });
+
+  DT.test('setup: the theme grid shows a live thumbnail for every theme', () => {
+    const themes = [{ id: 'hall', name: '堂', desc: 'a', tone: 'dark' }, { id: 'daylight', name: '昼', desc: 'b', tone: 'light' }, { id: 'chroma', name: '绿幕', desc: 'c', tone: 'dark' }];
+    const t = mount({ themes });
+    const cells = t.box.querySelectorAll('[role="radio"][data-theme-id]');
+    assert.equal(cells.length, 3);
+    cells.forEach(c => assert.ok(c.querySelector('.dt-stage[data-theme="' + c.dataset.themeId + '"]')));
+    cells[1].click();
+    assert.equal(cells[1].getAttribute('aria-checked'), 'true');
+    t.box.querySelector('button[data-action="start"]').click();
+    assert.equal(t.calls[0][3], 'daylight');
+    t.h.destroy();
+  });
+  DT.test('setup: arrow keys move through the theme grid', () => {
+    const themes = [{ id: 'hall', name: '堂', desc: 'a', tone: 'dark' }, { id: 'daylight', name: '昼', desc: 'b', tone: 'light' }];
+    const t = mount({ themes });
+    const first = t.box.querySelector('[data-theme-id="hall"]');
+    first.focus();
+    first.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight', key: 'ArrowRight', bubbles: true }));
+    assert.equal(t.box.querySelector('[data-theme-id="daylight"]').getAttribute('aria-checked'), 'true');
+    t.h.destroy();
+  });
+
+  // Six themes, so the grid has a second row to move into.
+  const SIX = ['hall', 'daylight', 'chroma', 't4', 't5', 't6'].map((id, i) => ({ id, name: '主题' + i, desc: 'desc ' + id, tone: 'dark' }));
+  const cell = (t, id) => t.box.querySelector('[role="radio"][data-theme-id="' + id + '"]');
+  const checkedTheme = t => t.box.querySelector('[role="radio"][aria-checked="true"]').dataset.themeId;
+
+  DT.test('setup: the thumbnail is the opening speech, running, 40% used', () => {
+    const t = mount();
+    const stage = cell(t, 'daylight').querySelector('.dt-stage');
+    assert.equal(stage.dataset.kind, 'single');
+    assert.equal(stage.dataset.side, 'pro');
+    assert.equal(stage.dataset.running, 'true');
+    assert.equal(stage.querySelector('.dt-title').textContent, '正方一辩开篇立论');
+    assert.equal(parseFloat(stage.style.getPropertyValue('--used')).toFixed(2), '0.40');
+    assert.equal(cell(t, 'daylight').querySelector('.dt-stage-host').getAttribute('aria-hidden'), 'true', 'read by its name only');
+    assert.ok(cell(t, 'daylight').textContent.indexOf('昼') >= 0);
+    t.h.destroy();
+  });
+
+  DT.test('setup: the theme grid is one tab stop, moves by rows and wraps along a row', () => {
+    const t = mount({ themes: SIX });
+    const tabbable = () => Array.from(t.box.querySelectorAll('[role="radio"]')).filter(c => c.tabIndex === 0).map(c => c.dataset.themeId);
+    assert.equal(t.box.querySelector('.dt-setup-themes').getAttribute('role'), 'radiogroup');
+    assert.deepEqual(tabbable(), ['hall']);
+    cell(t, 'hall').focus();
+    assert.equal(keydown(cell(t, 'hall'), 'ArrowDown').defaultPrevented, true);
+    const below = cell(t, checkedTheme(t));
+    assert.ok(below.offsetTop > cell(t, 'hall').offsetTop, 'down goes to the next row');
+    assert.ok(Math.abs(below.offsetLeft - cell(t, 'hall').offsetLeft) < 2, 'down keeps the column');
+    assert.equal(document.activeElement, below, 'focus follows the choice');
+    assert.deepEqual(tabbable(), [below.dataset.themeId]);
+    keydown(below, 'ArrowUp');
+    assert.equal(checkedTheme(t), 'hall');
+    keydown(cell(t, 'hall'), 'ArrowUp');
+    assert.equal(checkedTheme(t), 'hall', 'nothing above the first row');
+    keydown(cell(t, 'hall'), 'ArrowLeft');
+    assert.equal(checkedTheme(t), 't6', 'left from the first wraps to the last');
+    keydown(cell(t, 't6'), 'Home');
+    assert.equal(checkedTheme(t), 'hall');
+    keydown(cell(t, 'hall'), 'End');
+    assert.equal(checkedTheme(t), 't6');
+    t.box.querySelector('button[data-action="start"]').click();
+    assert.equal(t.calls[0][3], 't6');
+    t.h.destroy();
+  });
+
+  DT.test('setup: the line under the grid describes the theme pointed at, then the chosen one again', () => {
+    const t = mount({ themes: SIX });
+    const desc = () => t.box.querySelector('.dt-setup-theme-desc').textContent;
+    assert.equal(desc(), 'desc hall');
+    cell(t, 'chroma').dispatchEvent(new MouseEvent('mouseenter'));
+    assert.equal(desc(), 'desc chroma');
+    cell(t, 'chroma').dispatchEvent(new MouseEvent('mouseleave'));
+    assert.equal(desc(), 'desc hall');
+    cell(t, 't4').dispatchEvent(new FocusEvent('focus'));
+    assert.equal(desc(), 'desc t4');
+    cell(t, 't4').dispatchEvent(new FocusEvent('blur'));
+    assert.equal(desc(), 'desc hall');
     t.h.destroy();
   });
 
@@ -184,10 +267,10 @@
     try {
       assert.equal(t.c.route(), 'setup');
       assert.equal(t.c.session(), null);
-      assert.equal(t.box.querySelector('.dt-stage'), null);
+      assert.equal(t.box.querySelector(':not(.dt-setup-thumb) > .dt-stage'), null, 'no timer stage, only thumbnails');
       t.box.querySelector('[data-format-id="ustc-freshman-cup"]').click();
       const pro = t.box.querySelector('input[name="proTeam"]'); pro.value = '物理学院';
-      t.box.querySelector('input[name="theme"][value="daylight"]').click();
+      t.box.querySelector('[data-theme-id="daylight"]').click();
       t.box.querySelector('button[data-action="start"]').click();
       assert.equal(t.c.route(), 'timer');
       assert.equal(t.box.querySelector('.dt-setup'), null);
@@ -253,7 +336,7 @@
       assert.equal(btn.hidden, false);
       btn.click();
       assert.equal(t.c.route(), 'setup');
-      assert.equal(t.box.querySelector('.dt-stage'), null);
+      assert.equal(t.box.querySelector(':not(.dt-setup-thumb) > .dt-stage'), null, 'no timer stage, only thumbnails');
       assert.equal(t.box.querySelector('.dt-dock'), null);
       assert.equal(storage.getItem('dt.session.v1'), null);
       assert.equal(t.box.querySelector('[data-role="resume"]'), null);
@@ -267,6 +350,8 @@
       assert.equal(t.box.querySelector('input[name="proTeam"]').value, '物理学院');
       assert.equal(t.box.querySelector('[data-format-id="ustc-freshman-cup"]').getAttribute('aria-selected'), 'true');
       assert.equal(t.box.querySelector('[data-role="resume"]'), null);
+      const cells = t.box.querySelectorAll('.dt-setup-themes [role="radio"][data-theme-id]');
+      assert.deepEqual(Array.from(cells).map(c => c.dataset.themeId).sort(), DT.THEMES.map(x => x.id).sort());
     } finally { t.done(); }
     t = bootApp(null, '?demo=setup-resume&frozen=1');
     try {

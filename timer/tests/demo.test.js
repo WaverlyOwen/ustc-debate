@@ -126,7 +126,7 @@
     const t = bootDemo('');
     try {
       assert.equal(t.c.route(), 'setup');
-      assert.equal(t.box.querySelector('.dt-stage'), null);
+      assert.equal(t.box.querySelector(':not(.dt-setup-thumb) > .dt-stage'), null, 'no timer stage, only thumbnails');
       const chosen = t.box.querySelector('[data-format-id][aria-selected="true"]');
       assert.equal(chosen.dataset.formatId, DT.BUILTIN_FORMATS[0].id);
       assert.deepEqual(t.writes, []);

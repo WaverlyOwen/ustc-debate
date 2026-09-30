@@ -4,6 +4,8 @@
   const TEXT_FIELDS = ['title', 'proMotion', 'conMotion', 'proTeam', 'conTeam'];
   const PREFILL = ['proMotion', 'conMotion', 'proTeam', 'conTeam'];   // the match title is new every time
   const ENTER = ['Enter', 'NumpadEnter'];
+  // What every theme thumbnail shows (spec §3.1): this stage of this format, running with this much used.
+  const SAMPLE = { format: 'ustc-freshman-cup', stage: '正方一辩开篇立论', used: 0.4 };
   let mounts = 0;   // keeps option ids unique if the page is mounted again
 
   // Static markup only; format names and match text go in through textContent and value.
@@ -37,7 +39,8 @@
     '<span class="dt-setup-seats" aria-hidden="true"><i data-side="pro">正</i><i data-side="con">反</i></span>' +
     '</div></fieldset>' +
     '<fieldset class="dt-setup-row"><legend class="dt-setup-label">主题</legend>' +
-    '<div class="dt-choices dt-setup-themes"></div><p class="dt-setup-hint dt-setup-theme-desc"></p></fieldset>' +
+    '<div class="dt-setup-themes" role="radiogroup" aria-label="主题"></div>' +
+    '<p class="dt-setup-hint dt-setup-theme-desc"></p></fieldset>' +
     '</div>' +
     '<footer class="dt-setup-foot">' +
     '<button type="button" class="dt-button dt-setup-start" data-action="start" data-primary>开始这一场</button>' +
@@ -82,6 +85,15 @@
     const name = r.stage ? '（' + r.stage + '）' : '';
     const where = r.cursor >= 0 ? '停在第 ' + (r.cursor + 1) + ' 个环节' + name : '还没开始第一个环节';
     return ['上一场还没打完：', String(r.title || ''), '，' + where + '。'];
+  }
+
+  // The sample stage played out from a fixed moment, so every thumbnail and every screenshot shows one frame.
+  function sampleView() {
+    const E = DT.engine;
+    let s = E.createSession(DT.BUILTIN_FORMATS.find(f => f.id === SAMPLE.format), {}, 0);
+    const i = s.timeline.findIndex(x => x.name === SAMPLE.stage);
+    s = E.toggle(E.goto(s, i, 0), 0);
+    return E.view(s, s.timeline[i].secs * 1000 * SAMPLE.used);
   }
 
   function mount(root, opts) {
@@ -161,36 +173,66 @@
       list.appendChild(box);
     });
 
-    // ---- themes ----
+    // ---- themes: a grid of thumbnails, each the real stage in that theme; one tab stop, arrows move ----
     const themeBox = $('.dt-setup-themes');
     const themeDesc = $('.dt-setup-theme-desc');
-    themes.forEach(th => {
-      const label = el('label', 'dt-choice');
-      const radio = el('input');
-      radio.type = 'radio';
-      radio.name = 'theme';
-      radio.value = th.id;
-      const swatch = el('span', 'dt-setup-swatch');
-      swatch.setAttribute('data-theme', th.id);   // the theme's own variables paint the swatch
-      swatch.setAttribute('aria-hidden', 'true');
-      swatch.appendChild(el('i')).dataset.side = 'pro';
-      swatch.appendChild(el('i')).dataset.side = 'con';
-      label.appendChild(radio);
-      label.appendChild(swatch);
-      label.appendChild(el('span', null, th.name || th.id));
-      if (th.desc) label.title = th.desc;
-      themeBox.appendChild(label);
+    const sample = sampleView();
+    const thumbs = [];
+    const cells = themes.map(th => {
+      const cell = el('button', 'dt-setup-theme');
+      cell.type = 'button';
+      cell.setAttribute('role', 'radio');
+      cell.setAttribute('aria-checked', 'false');
+      cell.tabIndex = -1;
+      cell.dataset.themeId = th.id;
+      const host = el('span', 'dt-setup-thumb');
+      host.setAttribute('aria-hidden', 'true');   // the cell is read by its name
+      const thumb = DT.render.mount(host, { thumbnail: true });
+      thumb.update(Object.assign({}, sample, { theme: th.id }));
+      thumbs.push(thumb);
+      cell.appendChild(host);
+      cell.appendChild(el('span', 'dt-setup-theme-name', th.name || th.id));
+      themeBox.appendChild(cell);
+      return cell;
     });
-    // Compared as values, not put into a selector: an imported format's theme id can be any string.
-    const themeRadio = id => Array.from(themeBox.querySelectorAll('input')).find(r => r.value === id) || null;
+    let chosen = null;         // the chosen theme's cell
     let themePicked = false;   // the theme follows the chosen format until the timekeeper picks one
-    function setTheme(id) {
-      const radio = themeRadio(id) || themeRadio('hall') || themeBox.querySelector('input');
-      radio.checked = true;
-      const th = themes.find(x => x.id === radio.value);
-      themeDesc.textContent = (th && th.desc) || '';
+    // Compared as values, not put into a selector: an imported format's theme id can be any string.
+    const cellOf = id => cells.find(c => c.dataset.themeId === id) || null;
+    const describe = cell => { themeDesc.textContent = themes[cells.indexOf(cell)].desc || ''; };
+    function setTheme(id, focus) {
+      chosen = cellOf(id) || cellOf('hall') || cells[0];
+      cells.forEach(c => {
+        c.setAttribute('aria-checked', String(c === chosen));
+        c.tabIndex = c === chosen ? 0 : -1;
+      });
+      describe(chosen);
+      if (focus) chosen.focus();
     }
-    themeBox.addEventListener('change', e => { themePicked = true; setTheme(e.target.value); });
+    function pickTheme(i, focus) {
+      themePicked = true;
+      setTheme(cells[i].dataset.themeId, focus);
+    }
+    cells.forEach((cell, i) => {
+      cell.addEventListener('click', () => pickTheme(i));
+      // The line under the grid describes the theme pointed at or focused, then the chosen one again.
+      ['mouseenter', 'focus'].forEach(type => cell.addEventListener(type, () => describe(cell)));
+      ['mouseleave', 'blur'].forEach(type => cell.addEventListener(type, () => describe(chosen)));
+    });
+    // ←→ step through the grid, wrapping round; ↑↓ keep the column and change the row, as laid out.
+    themeBox.addEventListener('keydown', e => {
+      const i = cells.indexOf(e.target), n = cells.length;
+      if (i < 0 || e.altKey || e.ctrlKey || e.metaKey) return;
+      const cols = cells.filter(c => c.offsetTop === cells[0].offsetTop).length || 1;
+      const moves = {
+        ArrowRight: (i + 1) % n, ArrowLeft: (i - 1 + n) % n, Home: 0, End: n - 1,
+        ArrowDown: i + cols < n ? i + cols : i, ArrowUp: i - cols >= 0 ? i - cols : i,
+      };
+      if (!(e.code in moves)) return;
+      e.preventDefault();
+      pickTheme(moves[e.code], true);
+    });
+    setTheme('hall');   // until a format is chosen
 
     // ---- selection ----
     let current = -1;
@@ -230,7 +272,7 @@
       const match = {};
       TEXT_FIELDS.forEach(k => { match[k] = field(k).value.trim(); });
       match.proSeat = page.querySelector('input[name="proSeat"]:checked').value;
-      o.onStart(options[current].format, match, themeBox.querySelector('input:checked').value);
+      o.onStart(options[current].format, match, chosen.dataset.themeId);
     }
     $('button[data-action="start"]').addEventListener('click', start);
 
@@ -259,7 +301,10 @@
 
     return {
       el: page,
-      destroy() { page.remove(); },
+      destroy() {
+        thumbs.forEach(t => t.destroy());
+        page.remove();
+      },
     };
   }
 
