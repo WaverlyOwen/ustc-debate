@@ -92,6 +92,23 @@ class ErrorTests(unittest.TestCase):
             shutil.rmtree(tmp)
 
 
+class MissingDirTests(unittest.TestCase):
+    def test_missing_or_empty_formats_dir_fails_and_writes_nothing(self):
+        before = build.BUILTIN_JS.read_text(encoding="utf-8")
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            with self.assertRaises(build.FormatError):
+                build.parse_all(tmp / "nope")
+            with self.assertRaises(build.FormatError):
+                build.parse_all(tmp)
+            for d in (tmp / "nope", tmp):
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(build.main(["--formats-dir", str(d)]), 1)
+            self.assertEqual(build.BUILTIN_JS.read_text(encoding="utf-8"), before)
+        finally:
+            shutil.rmtree(tmp)
+
+
 class CheckTests(unittest.TestCase):
     def test_check_passes_on_a_fresh_build_and_fails_after_an_edit(self):
         original = build.BUILTIN_JS.read_text(encoding="utf-8")

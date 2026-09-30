@@ -159,7 +159,11 @@ def parse_format(path):
 
 
 def parse_all(formats_dir):
+    if not Path(formats_dir).is_dir():
+        raise FormatError(f"找不到赛制目录：{formats_dir}")
     files = sorted(p for p in Path(formats_dir).glob("*.md") if not p.name.startswith("_"))
+    if not files:
+        raise FormatError(f"赛制目录里没有赛制文件（*.md）：{formats_dir}")
     return [parse_format(p) for p in files]
 
 
