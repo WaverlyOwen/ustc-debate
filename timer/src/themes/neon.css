@@ -1,0 +1,58 @@
+/* @theme id=neon name=霓虹 desc=亮色霓虹辉光，高对比度，适合现代化场景 tone=dark */
+/* 霓虹: Modern neon glow theme with luminous accents and high contrast. */
+[data-theme="neon"] {
+  --pro: #FF006E;
+  --pro-deep: #8A0040;
+  --con: #00D9FF;
+  --con-deep: #004D66;
+  --ground: #0A0E27;
+  --ink: #FFFFFF;
+  --ink-dim: rgb(255 255 255 / .5);
+  --accent: #FFBE0B;
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  --backdrop: none;
+}
+
+/* Neon glow effect with bright field and subtle lighting */
+.dt-stage[data-theme="neon"] .dt-field,
+.dt-stage[data-theme="neon"] .dt-half-field {
+  background: var(--side-deep);
+  box-shadow: inset 0 0 40px var(--side-deep), inset 0 0 60px rgb(0 0 0 / .4);
+}
+
+/* Neon glow on digits */
+.dt-stage[data-theme="neon"] .dt-digits {
+  text-shadow:
+    0 0 15px var(--side-color),
+    0 0 30px var(--side-color),
+    0 0 50px color-mix(in oklab, var(--side-color) 50%, var(--accent)),
+    0 .015em .06em rgb(0 0 0 / .4);
+  filter: drop-shadow(0 0 8px var(--side-color));
+}
+
+/* Neon decoration with radial glow */
+.dt-stage[data-theme="neon"] .dt-deco {
+  background: radial-gradient(130% 95% at 50% 42%, color-mix(in oklab, var(--side-color) 60%, transparent) 0%, rgb(0 0 0 / .5) 52%);
+  box-shadow: 0 0 80px color-mix(in oklab, var(--side-color) 30%, transparent);
+}
+
+/* Neon on stage */
+.dt-stage[data-theme="neon"] { background: var(--ground); }
+
+/* Neon title text with glow */
+.dt-stage[data-theme="neon"] .dt-title {
+  color: var(--accent);
+  text-shadow:
+    0 0 20px var(--accent),
+    0 0 40px color-mix(in oklab, var(--accent) 50%, var(--side-color));
+}
+
+/* Dim waiting side in dual mode */
+.dt-stage[data-theme="neon"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-clock {
+  filter: saturate(.3) brightness(.5);
+}
+.dt-stage[data-theme="neon"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-half-field {
+  filter: saturate(.3) brightness(.5);
+}

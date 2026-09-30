@@ -1,0 +1,100 @@
+/* @theme id=marble name=大理石 desc=优雅大理石纹理，流畅渐变，适合高端场景 tone=dark */
+/* 大理石: Elegant marble stone aesthetic with flowing gradient patterns. */
+[data-theme="marble"] {
+  --pro: #E74C3C;
+  --pro-deep: #6B1D1D;
+  --con: #3498DB;
+  --con-deep: #1A3A52;
+  --ground: #2C3E50;
+  --ink: #ECF0F1;
+  --ink-dim: rgb(236 240 241 / .6);
+  --accent: #F39C12;
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  --backdrop: none;
+}
+
+/* Marble field with flowing gradient patterns */
+.dt-stage[data-theme="marble"] .dt-field,
+.dt-stage[data-theme="marble"] .dt-half-field {
+  background: linear-gradient(45deg,
+    color-mix(in oklab, var(--side-deep) 100%, transparent) 0%,
+    color-mix(in oklab, var(--side-deep) 85%, var(--ground)) 25%,
+    color-mix(in oklab, var(--side-deep) 70%, var(--ground)) 50%,
+    color-mix(in oklab, var(--side-deep) 85%, var(--ground)) 75%,
+    color-mix(in oklab, var(--side-deep) 100%, transparent) 100%);
+}
+
+/* Marble swirl effect with multiple gradients */
+.dt-stage[data-theme="marble"] .dt-half-field {
+  background:
+    radial-gradient(ellipse 60% 80% at 30% 40%,
+      color-mix(in oklab, var(--side-deep) 40%, transparent) 0%,
+      transparent 50%),
+    linear-gradient(135deg,
+      color-mix(in oklab, var(--side-deep) 100%, transparent) 0%,
+      color-mix(in oklab, var(--side-deep) 75%, var(--ground)) 100%);
+}
+
+/* Marble digits with subtle shimmer */
+.dt-stage[data-theme="marble"] .dt-digits {
+  text-shadow:
+    0 0 1px color-mix(in oklab, var(--ink) 30%, var(--side-color)),
+    0 .015em .06em rgb(0 0 0 / .3),
+    inset 0 1px 2px color-mix(in oklab, var(--ink) 20%, transparent);
+  filter: brightness(1.05);
+}
+
+/* Marble decoration with organic swirls */
+.dt-stage[data-theme="marble"] .dt-deco {
+  background: radial-gradient(circle at 30% 50%,
+    color-mix(in oklab, var(--side-color) 50%, transparent) 0%,
+    color-mix(in oklab, var(--side-color) 20%, transparent) 30%,
+    transparent 60%),
+  radial-gradient(circle at 70% 60%,
+    color-mix(in oklab, var(--side-deep) 40%, transparent) 0%,
+    transparent 50%);
+}
+
+/* Marble stage background */
+.dt-stage[data-theme="marble"] {
+  background: linear-gradient(135deg,
+    #2C3E50 0%,
+    #34495E 25%,
+    #2C3E50 50%,
+    #1F2E3D 75%,
+    #2C3E50 100%);
+}
+
+/* Marble title with elegant styling */
+.dt-stage[data-theme="marble"] .dt-title {
+  color: var(--accent);
+  text-shadow:
+    0 .02em .08em rgb(0 0 0 / .5),
+    0 0 2px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+/* Marble team labels */
+.dt-stage[data-theme="marble"] .dt-team {
+  color: var(--ink);
+  text-shadow: 0 .01em .04em rgb(0 0 0 / .4);
+}
+
+/* Marble state text */
+.dt-stage[data-theme="marble"] .dt-state {
+  text-shadow: 0 .01em .04em rgb(0 0 0 / .4);
+}
+
+/* Dim waiting side with marble gradient fade */
+.dt-stage[data-theme="marble"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) {
+  filter: brightness(.65) saturate(.4);
+}
+
+/* Light falls from above on marble surface */
+.dt-stage[data-theme="marble"] .dt-field,
+.dt-stage[data-theme="marble"] .dt-half-field {
+  box-shadow:
+    inset 0 -20px 40px rgb(0 0 0 / .2),
+    inset 0 20px 40px rgb(255 255 255 / .05);
+}
