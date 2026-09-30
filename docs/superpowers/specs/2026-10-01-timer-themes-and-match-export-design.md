@@ -62,7 +62,7 @@ DT.themes = {
 投影在讲堂里，最后一排也要看清。无论背景多花：
 
 - 数字与它可能落在的每一种背景之间的对比度 ≥ 3:1（大字标准），标题与发言人 ≥ 4.5:1。纹理的不透明度要低到不破坏这一点
-- 为了能自动检查，变量契约新增两个变量（`base.css` 默认都等于 `--ink`）：`--digits-on-field`（数字落在本方色场上时的颜色）与 `--digits-off-field`（落在色场收回后露出的底上时的颜色）。主题必须如实设置，`stage.css` 与主题的数字规则也必须用它们。`tests/themes.test.js` 对每个主题、正反两方、两种席位检查：`--digits-on-field` 对 `--side-color` ≥ 3:1，`--digits-off-field` 对 `--side-deep` ≥ 3:1，标题、发言人与顶栏的文字色对 `--text-field` 与 `--text-deep` **两者**都 ≥ 4.5:1（文字自带不透明底板时改对底板检查；半透明的文字色先叠到背景上再算；纹理的影响由截图评审把关）
+- 为了能自动检查，变量契约新增两个变量（`base.css` 默认都等于 `--ink`）：`--digits-on-field`（数字落在本方色场上时的颜色）与 `--digits-off-field`（落在色场收回后露出的底上时的颜色）。主题必须如实设置，`stage.css` 与主题的数字规则也必须用它们。`tests/themes.test.js` 对每个主题、正反两方、两种席位检查：`--digits-on-field` 对 `--side-color` ≥ 3:1，`--digits-off-field` 对 `--side-deep` ≥ 3:1，标题、发言人与顶栏的文字色对 `--text-field` 与 `--text-deep` **两者**都 ≥ 4.5:1（文字自带不透明底板时改对底板检查；半透明的文字色先叠到背景上再算；纹理的影响由截图评审把关）。同一测试还对超时、自由辩（未开始、进行中的发言方与等待方）按数字各层实际的计算颜色检查 ≥ 3:1：落在色场上的一层对 `--field-ground`（默认 `--side-color`；色场不是平涂本方色的主题如实设置，如「墨」等待方的淡墨、「星轨」双方环节的星云光晕），色场外的一层对 `--side-deep`；全部主题的失败汇总后一次报出
 - 文字所在的两种底：`--text-field`、`--text-deep`（`base.css` 默认分别等于 `--side-color`、`--side-deep`）。色场到不了顶栏和标题的主题（如「昼」的横带）把它们指向真正的底色；测试会核对这一点：`--text-field` 不等于 `--side-color` 时色场的范围不得碰到标题区与顶栏，`--text-deep` 不等于 `--side-deep` 时它必须等于舞台的背景色
 - 发言人一行用自己的变量 `--speaker-ink`（默认 `--ink`），和标题的层次靠字号与字距拉开，不靠透明度
 - 数字、标题、底栏文字永远在装饰层之上。z 轴顺序：backdrop → canvas → `.dt-deco`（色场之下的装饰，如「昼」的横带轨道）→ field / 双方的两半 → `.dt-deco-over`（色场之上的装饰：印章、记号、颗粒）→ 提示铃线 → 文字。双方环节每一半的底色取 `--half-ground`（默认 `--side-deep`），有画师的主题可以设为 `transparent`，让 canvas 在双方环节里也看得见
@@ -177,12 +177,12 @@ DT.themes = {
 }
 ```
 
-**怎么拿到"当前页面的完整源码"**：构建产物只有一个 `<style>` 和一个主 `<script>`（外加可能已有的 `#dt-preset`）。`DT.preset.sourceParts()` 在**启动时**（任何 DOM 被应用改动之前）读取：`document.querySelector('head > style').textContent`、主脚本的 `textContent`（主脚本打上 `id="dt-main"`，由 `build.py` 写入）、`<title>`、`<html lang>`。`DT.preset.buildHtml(parts, preset)` 用这些拼出一个新的完整文档：
+**怎么拿到"当前页面的完整源码"**：构建产物只有一个 `<style>` 和一个主 `<script>`（外加可能已有的 `#dt-preset`）。`DT.preset.sourceParts()` 在**启动时**（任何 DOM 被应用改动之前）读取：样式表的 `textContent`（样式表打上 `id="dt-style"`，按 id 找，不取 head 里的第一个 `<style>`，以免拿到别处插进来的样式）、主脚本的 `textContent`（主脚本打上 `id="dt-main"`，两个 id 都由 `build.py` 写入，导出的文件同样带上）、`<title>`、`<html lang>`。`DT.preset.buildHtml(parts, preset)` 用这些拼出一个新的完整文档：
 
 ```
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" …><title>{场次名}：辩论计时器</title>
-<style>{style}</style></head>
+<style id="dt-style">{style}</style></head>
 <body data-dt-autoboot><div id="app"></div>
 <script type="application/json" id="dt-preset">{预设 JSON，其中 "</" 一律写成 "<\/"}</script>
 <script id="dt-main">{main}</script></body></html>
