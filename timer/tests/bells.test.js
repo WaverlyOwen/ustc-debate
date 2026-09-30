@@ -1,0 +1,74 @@
+(function () {
+  const B = DT.bells;
+  function fakeCtx() {
+    const started = [];
+    function param() { return { value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {} }; }
+    function node(kind) {
+      return { kind, frequency: param(), gain: param(), Q: param(), type: '', buffer: null,
+        connect() { return this; }, disconnect() { this.disconnected = true; },
+        start(t) { this.startAt = t; started.push(this); }, stop(t) { this.stopAt = t; } };
+    }
+    return {
+      currentTime: 10, state: 'running', destination: node('dest'), sampleRate: 48000, started,
+      resume() { this.state = 'running'; return Promise.resolve(); },
+      createOscillator: () => node('osc'), createGain: () => node('gain'), createBiquadFilter: () => node('filter'),
+      createBufferSource: () => node('buf'),
+      createBuffer: (ch, len) => ({ getChannelData: () => new Float32Array(len) }),
+    };
+  }
+  let ctx;
+  function fresh() { ctx = fakeCtx(); B._setContextFactory(() => ctx); B._resetForTests(); }
+
+  DT.test('bells: schedule places sounds on the audio clock, not on timers', () => {
+    fresh(); DT.clock.set(() => 5000); B.unlock();
+    B.schedule([{ at: 7500, sound: 'ding', clock: 'main' }], 5000);
+    const starts = ctx.started.map(n => n.startAt);
+    assert.ok(starts.length >= 3);
+    starts.forEach(t => assert.near(t, 12.5, 0.01));
+    DT.clock.reset();
+  });
+
+  DT.test('bells: schedule dedupes, skips the past and replaces the previous plan', () => {
+    fresh(); DT.clock.set(() => 0); B.unlock();
+    B.schedule([{ at: 1000, sound: 'ding' }, { at: 1000, sound: 'ding' }, { at: -5000, sound: 'ding' }], 0);
+    const first = ctx.started.length;
+    assert.ok(first >= 3);
+    B.schedule([{ at: 2000, sound: 'tick' }], 0);
+    ctx.started.slice(0, first).forEach(n => assert.ok(n.stopAt !== undefined, 'old nodes stopped'));
+    DT.clock.reset();
+  });
+
+  DT.test('bells: double and triple strike two and three times', () => {
+    fresh(); DT.clock.set(() => 0); B.unlock();
+    B.schedule([{ at: 0, sound: 'ding' }], 0); const one = ctx.started.length; B.cancelAll();
+    ctx.started.length = 0; B.schedule([{ at: 0, sound: 'double' }], 0); assert.equal(ctx.started.length, one * 2);
+    ctx.started.length = 0; B.schedule([{ at: 0, sound: 'triple' }], 0); assert.equal(ctx.started.length, one * 3);
+    DT.clock.reset();
+  });
+
+  DT.test('bells: nothing plays before unlock, then the future part is scheduled', () => {
+    fresh(); DT.clock.set(() => 0);
+    B.schedule([{ at: 1000, sound: 'ding' }, { at: 9000, sound: 'double' }], 0);
+    assert.equal(ctx.started.length, 0);
+    assert.equal(B.isUnlocked(), false);
+    DT.clock.set(() => 5000); B.unlock();
+    assert.ok(B.isUnlocked());
+    assert.ok(ctx.started.length > 0);
+    ctx.started.forEach(n => assert.ok(n.startAt >= 10 + 3.9, 'only the 9000 ms bell'));
+    DT.clock.reset();
+  });
+
+  DT.test('bells: mute and volume drive the master gain', () => {
+    fresh(); DT.clock.set(() => 0); B.unlock();
+    B.setVolume(0.5); assert.near(B._master().gain.value, 0.5, 1e-9);
+    B.setMuted(true); assert.equal(B._master().gain.value, 0);
+    B.setMuted(false); assert.near(B._master().gain.value, 0.5, 1e-9);
+    DT.clock.reset();
+  });
+
+  DT.test('bells: every named sound can be played', () => {
+    fresh(); DT.clock.set(() => 0); B.unlock();
+    B.SOUNDS.forEach(name => { const n = ctx.started.length; B.play(name); assert.ok(ctx.started.length > n, name); });
+    DT.clock.reset();
+  });
+})();
