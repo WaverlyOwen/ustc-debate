@@ -15,9 +15,11 @@
 2. **文档类只加不删**。`debate.cls` 只能新增宏，不删宏，也不改已有宏的参数。万一非改不可，先把旧类冻结到 `assets/latex/v<N>/debate.cls`，`build_pdf.py` 会给 vN 的辩题用这份。
 3. **赛制目录跟着赛制文件走**。`check_speeches.py` 先按路径里的赛制目录选赛制，认不出来时再看标题。
 4. **升级旧辩题就是重做**。把它复制到新版本的目录里按新写法重写，旧目录原样保留，不在原地改写法。在旧辩题上陪练、压字数、打磨单篇，都按它自己版本的写法做。
-5. **每个主版本在 git 里有标签** `debate-prep-v<N>`。要完整复现某个旧版本的全部脚本：`git worktree add ../debate-prep-v1 debate-prep-v1`。
+5. **每个主版本对应一个 git 提交**，写在下面各版本的标题下，也可以打成标签 `debate-prep-v<N>`。要完整复现某个旧版本的全部脚本：`git worktree add ../debate-prep-v1 <提交>`。
 
 ## v3.0（当前）
+
+提交：`88e9dbf` 及以后。
 
 回应型发言改成套件，不再让稿子替对方说话。
 
@@ -28,11 +30,13 @@
 - 新规则 `desk-dash`：备赛文档与速查里会被念出口的句子不许有破折号（`check_voice.py --desk`）
 - 辩题目录改成 `prep/v<主版本>/<赛制目录名>/<题>/`，检查脚本从路径读版本和赛制
 - 打法指南补上第 11 节「奇袭」
-- 删除 Markdown 迁移工具 `md2tex.py`：所有辩题都已经是 LaTeX。v1 的 Markdown 文档要迁移，就从 `debate-prep-v2` 标签里取这个脚本
+- 删除 Markdown 迁移工具 `md2tex.py`：所有辩题都已经是 LaTeX。v1 的 Markdown 文档要迁移，就从 v2 的提交里取这个脚本：`git show 59145b3:.claude/skills/debate-prep/scripts/md2tex.py`
 
 辩题：暂无。
 
 ## v2.0
+
+提交：`59145b3`。
 
 源文件改成 LaTeX，写在自带的 `debate.cls` 上，用 XeLaTeX 编译；所有检查脚本改读 `.tex`。成段讲稿都是定稿。
 
@@ -40,4 +44,4 @@
 
 ## v1.0
 
-Markdown 源文件，经 HTML 由 Chrome 打印成 PDF。已不再维护，标签是 `debate-prep-v1`。
+Markdown 源文件，经 HTML 由 Chrome 打印成 PDF。已不再维护。提交：`18a22df`。
