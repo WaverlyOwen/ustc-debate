@@ -47,7 +47,8 @@ timer/
 │   ├── setup.js             # 开赛页：选赛制、填辩题队名、恢复上一场
 │   ├── editor.js            # 赛制编辑器
 │   ├── sync.js              # 投影窗口：打开、同步状态、转发按键
-│   ├── ui.js                # 应用装配：路由、键盘、控制条、环节列表、帮助、插入奇袭、本场记录、演示态
+│   ├── demo.js              # 演示态：?demo=<名字> 的固定场景，截图与视觉验收用
+│   ├── ui.js                # 应用装配：路由、键盘、控制条、环节列表、帮助、插入奇袭、本场记录
 │   ├── styles/
 │   │   ├── base.css         # 字体、全局变量契约、公共组件
 │   │   ├── stage.css        # 投影画面的版式与动画
@@ -69,7 +70,7 @@ timer/
 ```
 
 **脚本顺序**（`build.py` 的 `ORDER` 常量是唯一真源，`src/index.html` 与测试页都照它）：
-`builtin-formats.js, engine.js, store.js, bells.js, render.js, setup.js, editor.js, sync.js, ui.js`。样式顺序：`base.css, stage.css, console.css, editor.css, themes/*.css`（主题按文件名排序）。
+`builtin-formats.js, engine.js, store.js, bells.js, render.js, setup.js, editor.js, sync.js, demo.js, ui.js`。样式顺序：`base.css, stage.css, console.css, editor.css, themes/*.css`（主题按文件名排序）。
 
 每个 JS 文件的形状：
 
@@ -147,7 +148,7 @@ timer/
 
 `break` 环节的有效铃声固定为 `{warn: [], countdown: 0, end: "chime"}`，不受赛制默认值影响，但可以用环节自己的 `bells` 覆盖。
 
-有效铃声 = 内置默认 ← 赛制 `bells` ← 环节 `bells`，逐字段覆盖。`DT.store.effectiveBells(format, stage)` 负责合并。
+有效铃声 = 内置默认 ← 赛制 `bells` ← 环节 `bells`，逐字段覆盖。`DT.engine.effectiveBells(format, stage)` 负责合并（放在引擎里，引擎因此不依赖 store）；`DT.engine.DEFAULT_BELLS` 是内置默认。
 
 **ExtraGroup**（奇袭这类"任意环节结束后可插入、每方限次"的环节）
 
@@ -240,6 +241,9 @@ DT.engine = {
   tick(session, now) → { session, events }   // 推进自动规则、产出视觉事件
   upcomingBells(session, now) → [{ at, sound, clock }]   // 供 bells.js 预排
   record(session, now) → [{ index, name, side, type, planned, used, over, yielded }]  // 本场记录
+  fmt(ms) → string                          // 见 3.4
+  effectiveBells(format, stage) → Bells     // 见 2.1
+  DEFAULT_BELLS                             // { warn: [30], countdown: 0, end: 'double' }
 }
 ```
 
@@ -584,6 +588,10 @@ PageUp / PageDown 让翻页笔能换环节。
 
 所有读写包在 try/catch 里；读到坏数据时丢弃并在控制台警告，不让页面白屏。
 
+## 5.13 时钟注入
+
+所有读时间的地方都走 `DT.clock.now()`（默认 `performance.timeOrigin + performance.now()`）。测试与 `?demo=…&frozen=1` 把它换成固定值或可推进的假时钟：`DT.clock.set(fn)`。`ui.js` 的 rAF 循环、按键处理、心跳都用它。
+
 ## 6. 构建（build.py）
 
 ```
@@ -632,8 +640,8 @@ python timer/build.py --formats-dir <dir>   # 默认 ../.claude/skills/debate-pr
 
 **必须覆盖的行为**（每条至少一个测试）：
 
-- engine：单方开始 / 暂停 / 继续的用时累计；单方超时剩余为负、`fmt` 显示 `+0:07`；`fmt` 向上取整；dual 首次空格给 `first`；空格切换；A / L 直接给某方；被锁定一方不能切过去且有反馈；**耗尽自动转换按精确时刻结算**（在耗尽后 3.7 秒才 tick，另一方也只少了 3.7 秒）；双方都耗尽后 `done`；放弃剩余时间记入 `yielded`；撤销误切换后正方的用时连续、反方未动；撤销栈上限；adjust 夹紧与重新布防铃点；adjust 让锁定方解锁；铃点事件只在越过时触发一次；超过 1500ms 的陈旧铃点静默；暂停中越过铃点不触发；break 到 0 自动停止并产出 end；next / prev 保留各环节状态；goto 越界夹紧；insertExtra 次数上限与插入位置；插入环节的名字；view 的 phase 判定；progress 的状态；upcomingBells 单方、dual 连锁推演；record 的计划与实际用时；session 深拷贝赛制（开赛后改赛制不影响）
-- store：全部内置赛制通过校验；各类非法赛制被拒并给出中文路径；`parseDuration` 覆盖 5.10 列出的全部写法与非法输入；`effectiveBells` 三层合并；导出再导入往返一致；导入同 id 冲突的处理函数；localStorage 读到坏 JSON 不抛异常
+- engine：`effectiveBells` 三层合并与 break 的固定铃声；单方开始 / 暂停 / 继续的用时累计；单方超时剩余为负、`fmt` 显示 `+0:07`；`fmt` 向上取整；dual 首次空格给 `first`；空格切换；A / L 直接给某方；被锁定一方不能切过去且有反馈；**耗尽自动转换按精确时刻结算**（在耗尽后 3.7 秒才 tick，另一方也只少了 3.7 秒）；双方都耗尽后 `done`；放弃剩余时间记入 `yielded`；撤销误切换后正方的用时连续、反方未动；撤销栈上限；adjust 夹紧与重新布防铃点；adjust 让锁定方解锁；铃点事件只在越过时触发一次；超过 1500ms 的陈旧铃点静默；暂停中越过铃点不触发；break 到 0 自动停止并产出 end；next / prev 保留各环节状态；goto 越界夹紧；insertExtra 次数上限与插入位置；插入环节的名字；view 的 phase 判定；progress 的状态；upcomingBells 单方、dual 连锁推演；record 的计划与实际用时；session 深拷贝赛制（开赛后改赛制不影响）
+- store：全部内置赛制通过校验；各类非法赛制被拒并给出中文路径；`parseDuration` 覆盖 5.10 列出的全部写法与非法输入；导出再导入往返一致；导入同 id 冲突的处理函数；localStorage 读到坏 JSON 不抛异常
 - bells：用假的 AudioContext 验证 `schedule` 按 `at` 换算成音频时间、去重、`cancelAll` 停掉全部节点、未解锁时缓存并在解锁后补排
 - render：在一个离屏容器里渲染每种 View（title、single calm / warn / over、dual 未开始 / 进行 / 一方锁定、break、end），检查关键元素与 `data-*` 属性、`--used` 与 `--tension` 变量、席位对调时色场方向
 
