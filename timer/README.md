@@ -14,6 +14,19 @@
 
 单屏时，页面本身就是投影画面。鼠标一动或按 Tab，底部会浮出控制条，2.5 秒不操作就收起。
 
+## 导出这一场
+
+开赛页右栏底部「开始这一场」左边有一个「导出这一场」。它把这一场的赛制、辩题、队名、席位和主题固定下来，存成一个单独的 html 文件，拷到比赛用的电脑上用。
+
+- **文件名**：场次名；没有场次名就用正方辩题的前 16 个字；都没有就用赛制名。Windows 文件名里不能有的字符会换成下划线，后缀 `.html`。例如 `新生赛决赛.html`
+- **怎么用**：双击，直接进入这一场的开场卡，顶栏左边是场次名，右边是赛制名。不用再填任何东西，按空格开始
+- **刷新能恢复**：打到一半刷新或误关，再双击同一个文件，会回到同一个环节，和普通计时器一样
+- **结束以后**：结束卡上的按钮写作「重新开始这一场」，点了回到开场卡，全新计时
+- **当普通计时器用**：在开场卡上按 Esc 或 Shift+E，进入普通的开赛页。赛制库、音量和静音设置与普通计时器共用
+- **存储分开**：导出的文件有自己的场次存储，普通计时器里没打完的一场不会出现在它里面，反过来也不会。这一场的赛制只属于这个文件，不会进到赛制库
+- 导出的文件是完整的计时器，可以再导出一次（换一场），新的一场会替换旧的，不会叠加。文件如果被改坏了，会退回普通计时器，不会白屏
+- 「导出这一场」只在构建好的 `debate-timer.html` 里可用；开发用的 `src/index.html` 里按钮是灰的
+
 ## 键位
 
 按物理键位识别，中文输入法开着也能用。光标在输入框里时快捷键不生效。
@@ -86,14 +99,30 @@ python timer/build.py
 
 内置赛制就更新了，并重新生成 `debate-timer.html`。
 
+## 主题
+
+开赛页右栏的主题是一张缩略图网格，每格都是这个主题的真实画面，方向键移动，空格或回车选中。编辑器里是下拉框。共 8 个主题，全部由代码生成（CSS 渐变、内联 SVG、Canvas），没有任何图片或字体文件。
+
+| 主题 | 立意 | 适合 |
+|---|---|---|
+| 堂 `hall`（默认） | 全屏色场，整个房间染上发言方的颜色 | 暗场 |
+| 昼 `daylight` | 浅色底，色场收成数字后的一条横带 | 亮场 |
+| 绿幕 `chroma` | 纯绿底，数字放在本方色底板上 | 直播抠像 |
+| 墨 `ink` | 宣纸上的一道水墨笔触，朱砂对花青，时间用掉笔触就向本方席位收回 | 亮场 |
+| 星轨 `startrail` | 长曝光的夜空，发言越久星轨越长 | 暗场 |
+| 黑板 `chalk` | 教室黑板上的粉笔排线，时间用掉就被板擦擦去 | 暗场 |
+| 孔版 `riso` | 两色孔版印刷海报，红蓝网点随时间变稀 | 亮场 |
+| 构成 `construct` | 构成主义几何海报，巨大的扇形表盘从本方席位一侧转回 | 暗场 |
+
 ## 加主题
 
-主题就是 `timer/src/themes/` 下的一个 CSS 文件。
+一个主题是 `timer/src/themes/` 下的一个 CSS 文件（必需），再加一个同名的 JS 文件（可选，要 SVG 滤镜或画布时才写）。
 
 1. 复制 `timer/src/themes/hall.css`，改名，比如 `mytheme.css`
-2. 改第一行元数据：`/* @theme id=mytheme name=我的主题 desc=一句话说明 */`，然后把文件里所有 `[data-theme="hall"]` 换成 `[data-theme="mytheme"]`
-3. 改变量的值
-4. 运行 `python timer/build.py`，编辑器和开赛页的主题下拉框里就有它了
+2. 改第一行元数据：`/* @theme id=mytheme name=我的主题 desc=一句话说明 tone=dark */`。`tone` 只能是 `dark`（暗场）或 `light`（亮场），开赛页缩略图和编辑器靠它决定文字颜色；缺了或写错，`build.py` 会报错并指出文件名
+3. 把文件里所有 `[data-theme="hall"]` 换成 `[data-theme="mytheme"]`。主题的规则全部写在自己的 `[data-theme="<id>"]` 下，不改公共样式
+4. 改变量的值
+5. 运行 `python timer/build.py`，编辑器和开赛页的主题网格里就有它了
 
 每个主题都要定义这些变量：
 
@@ -105,8 +134,34 @@ python timer/build.py
 | `--ink` `--ink-dim` | 主要文字、次要文字 |
 | `--accent` | 强调色（超时、提示） |
 | `--font-digits` `--font-title` `--font-ui` | 数字、标题、界面的字体 |
+| `--digits-on-field` | 数字落在本方色场上时的颜色 |
+| `--digits-off-field` | 数字落在色场收回后露出的底上时的颜色 |
 
-可选：`--backdrop`（任意 `background` 值，比如渐变或 data URI 图片，画在色场之下），以及 `.stage-deco` 装饰层（可以用 `::before` / `::after` 画背景图案）。组件的 CSS 里不写死颜色，颜色只从这些变量来。自带三个主题：堂（默认，全屏色场）、昼（亮场投影）、绿幕（直播抠像）。
+可选：`--backdrop`（任意 `background` 值，画在色场之下）、`.stage-deco` 装饰层、`--text-field` / `--text-deep`（文字所在的两种底，默认是本方色和本方深色；色场够不到标题和顶栏的主题要指向真正的底色）、`--speaker-ink`（发言人一行的颜色）、`--half-ground`（双方环节每一半的底色，有画布的主题可设为 `transparent`）。组件的 CSS 里不写死颜色，颜色只从这些变量来。
+
+CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（单方、间隔）和每一半上的 `--remain`（双方）。纹理可以用 `background-image: url("data:image/svg+xml,…")`。
+
+**JS（可选）**：`timer/src/themes/mytheme.js`，经典脚本，调用：
+
+```js
+DT.themes.register('mytheme', { defs, painter });
+```
+
+- `defs`：一段 SVG 标记（`<svg width="0" height="0" style="position:absolute"><defs>…</defs></svg>`），第一次用到这个主题时插入页面一次，CSS 里就能写 `filter: url(#dt-mytheme-edge)`。滤镜、图案、渐变的 id 一律以 `dt-<主题id>-` 开头，避免和别的主题冲突
+- `painter`：`(canvas, ctx) => ({ frame(view, now), resize(w, h), destroy() })`。渲染器把 canvas 放在背景之上、色场之下。不要自己开 `requestAnimationFrame`：渲染器限制在 30fps 以内，页面不可见时不调用 `frame`，系统要求减少动态效果、演示态 `frozen=1` 和缩略图里只画一帧静态画面
+- 随机数只用 `DT.themes.rng(seed)`（返回 `() => [0,1)`，用主题 id 当种子），这样截图能复现，投影窗口和操作台预览的画面一致。不要用 `Math.random()`
+- 有 `mytheme.js` 就必须有 `mytheme.css`，否则构建失败
+
+**可读性硬约束**：投影在讲堂里，最后一排也要看清。数字对它可能落在的每种底色，对比度不低于 3:1；标题、发言人和顶栏文字不低于 4.5:1；正反方一眼可分；当前发言方、剩余时间、提示铃点、超时四种信息都要看得出来；1366×768 与 1920×1080 下都不溢出。`tests/themes.test.js` 会对每个主题、正反两方、两种席位自动检查对比度（用的就是 `--digits-on-field`、`--digits-off-field`、`--text-field`、`--text-deep`），不过就是测试失败。纹理有没有压住字，自动检查看不出来，要看截图。
+
+**截图**：
+
+```
+python timer/tests/screenshots.py --theme mytheme                   # 每个演示态都换成这个主题
+python timer/tests/screenshots.py --theme mytheme --size 1366x768
+```
+
+存到 `timer/tests/out/<分辨率>/mytheme/`。开场卡、单方、质询、超时、自由辩、间隔、结束卡都看一遍，席位对调（`seat-right`）也看。
 
 ## 开发
 
@@ -117,9 +172,9 @@ timer/
 ├── src/
 │   ├── index.html           # 开发用外壳，可直接双击调试
 │   ├── builtin-formats.js   # 生成文件，不要手改
-│   ├── engine.js store.js bells.js render.js setup.js editor.js sync.js demo.js ui.js
+│   ├── engine.js store.js preset.js bells.js render.js setup.js editor.js sync.js demo.js ui.js
 │   ├── styles/              # base / stage / console / editor
-│   └── themes/              # hall / daylight / chroma
+│   └── themes/              # 每个主题一个 .css，要画布或滤镜的再加同名 .js
 └── tests/                   # JS 测试、Python 测试、截图脚本
 ```
 
@@ -132,9 +187,10 @@ python timer/tests/run_js_tests.py           # JS 测试（用系统自带的 Ed
 python -m unittest discover -s timer/tests -p "test_*.py"   # Python 测试（含 --check）
 python timer/tests/screenshots.py            # 截图，1920x1080，存到 timer/tests/out/1920x1080/
 python timer/tests/screenshots.py --size 1366x768
+python timer/tests/screenshots.py --theme ink    # 某一个主题的全部场景
 ```
 
-截图用的是 `?demo=<名字>` 的固定场景（标题、单方、超时、双方、间隔、结束卡、三个主题、长名字、开赛页、编辑器、操作台等），可以直接在浏览器里打开 `debate-timer.html?demo=long` 看。
+截图用的是 `?demo=<名字>` 的固定场景（标题、单方、超时、双方、间隔、结束卡、长名字、开赛页、编辑器、操作台等；加 `&theme=<id>` 换主题），可以直接在浏览器里打开 `debate-timer.html?demo=long` 看。
 
 ## 已知限制
 
