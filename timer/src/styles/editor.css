@@ -1,0 +1,752 @@
+/* editor.css: pages outside the stage: the setup page (spec §5.9), the format editor (§5.10), and the form and
+   list parts they share. Same palette and type as the stage: the ground and ink, the two side colours,
+   the serif for names and motions. Surfaces reuse the console's panel variables from console.css. */
+
+/* ---- shared form parts ---- */
+
+.dt-input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: .55em .8em;
+  border: 1px solid var(--panel-line);
+  border-radius: .45em;
+  background: color-mix(in oklab, var(--ground) 72%, transparent);
+  color: var(--ink);
+  font: inherit;
+  letter-spacing: .04em;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.dt-input::placeholder { color: var(--ink-dim); opacity: .6; }
+.dt-input:hover { border-color: color-mix(in oklab, var(--ink) 30%, transparent); }
+.dt-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.dt-input-title { font-family: var(--font-title); font-size: 1.06em; letter-spacing: .06em; }
+
+/* A format's shape: one segment per stage, as long as the stage, in the stage's side colour. */
+.dt-setup-strip { display: flex; gap: 2px; height: .3em; }
+.dt-setup-strip i {
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--ground) 55%, var(--ink));
+}
+.dt-setup-strip i[data-side="pro"] { background: var(--pro); }
+.dt-setup-strip i[data-side="con"] { background: var(--con); }
+.dt-setup-strip i[data-kind="dual"] { background: linear-gradient(var(--pro) 50%, var(--con) 50%); }
+
+/* ---- setup page ---- */
+
+.dt-setup {
+  --gap: clamp(20px, 3vw, 56px);
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+  gap: clamp(14px, 2.6vh, 32px);
+  height: 100%;
+  overflow: auto;
+  padding: clamp(18px, 4vh, 64px) clamp(16px, 5vw, 96px) clamp(18px, 4.5vh, 56px);
+  background: radial-gradient(120% 90% at 50% 25%, transparent 55%, rgb(0 0 0 / .22)), var(--ground);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: clamp(14px, calc(1.45vh + 2px), 18px);
+  line-height: 1.5;
+  font-synthesis: none;
+}
+.dt-setup > * { flex: none; width: 100%; max-width: 1320px; margin-inline: auto; }
+/* Wider on big screens, so the match panel is about 950px across and the theme thumbnails can be read. */
+@media (min-width: 1600px) { .dt-setup > * { max-width: 1520px; } }
+.dt-setup :where(h1, h2, p) { margin: 0; }
+.dt-setup :where(button) {
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.dt-setup button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.dt-setup-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3em 1.6em; }
+.dt-setup-head h1 {
+  font-family: var(--font-title);
+  font-size: 1.9em;
+  font-weight: 600;
+  letter-spacing: .3em;
+}
+/* The mark: one bar, half each side's colour, like a free debate's segment on the progress bar. */
+.dt-setup-head h1::before {
+  content: "";
+  display: inline-block;
+  width: .2em;
+  height: .95em;
+  margin-right: .65em;
+  border-radius: .04em;
+  vertical-align: -.1em;
+  background: linear-gradient(var(--pro) 50%, var(--con) 50%);
+}
+.dt-setup-head p { color: var(--ink-dim); letter-spacing: .14em; }
+
+.dt-setup-label {
+  font-size: .8em;
+  font-weight: normal;
+  letter-spacing: .32em;
+  color: var(--ink-dim);
+}
+
+/* Resume banner: the one gold surface on the page, since it asks for a decision. */
+.dt-setup-resume {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8em 2em;
+  padding: .75em .8em .75em 1.4em;
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
+  border-radius: .6em;
+  background: color-mix(in oklab, var(--accent) 8%, var(--ground));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.dt-setup-resume p { letter-spacing: .06em; }
+.dt-setup-resume strong { font-family: var(--font-title); font-weight: 600; letter-spacing: .08em; }
+.dt-setup-resume-acts { display: flex; gap: .6em; }
+/* A match file's question on opening a match left part way: the banner alone, larger, in the middle of the page. */
+.dt-setup.dt-setup-ask > * { max-width: 900px; }
+.dt-setup-ask .dt-setup-resume { padding: 1.1em 1.1em 1.1em 1.6em; font-size: 1.12em; }
+.dt-setup-ask-words { display: flex; flex-direction: column; gap: .3em; }
+
+.dt-setup-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(16em, 25em) minmax(0, 1fr);
+  gap: var(--gap);
+}
+
+/* Format list: a quiet column; the chosen one is lifted and marked with an ink bar. */
+.dt-setup-formats { display: flex; flex-direction: column; gap: .7em; min-height: 0; }
+.dt-setup-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid var(--panel-line);
+  outline: none;
+}
+.dt-setup-group-label { padding: 1.1em 1em .35em; font-size: .78em; letter-spacing: .32em; color: var(--ink-dim); }
+.dt-setup-format {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: .3em;
+  padding: .85em 1em .95em 1.2em;
+  border-bottom: 1px solid var(--panel-line);
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.dt-setup-format:hover { background: var(--panel-hover); }
+.dt-setup-format[aria-selected="true"] { background: color-mix(in oklab, var(--ink) 10%, transparent); }
+.dt-setup-format[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .85em;
+  bottom: .85em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+.dt-setup-list:focus-visible .dt-setup-format[aria-selected="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dt-setup-format-name {
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 1.1em;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dt-setup-format-meta { display: flex; gap: 1.2em; font-size: .85em; letter-spacing: .06em; color: var(--ink-dim); }
+.dt-setup-format .dt-setup-strip { margin-top: .35em; opacity: .5; transition: opacity 150ms ease; }
+.dt-setup-format:hover .dt-setup-strip, .dt-setup-format[aria-selected="true"] .dt-setup-strip { opacity: 1; }
+
+/* This match: a panel headed by the chosen format and its shape. When the window is too short for all of it
+   (1366×768 with the resume banner), the panel scrolls and its footer stays pinned, so 开始这一场 is always
+   in view. */
+.dt-setup-match {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(.75em, 1.3vh, 1.2em);   /* tighter on short screens */
+  min-width: 0;
+  max-height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-bottom: 6em;   /* a focused field is scrolled clear of the pinned footer */
+  scrollbar-width: thin;
+  scrollbar-color: var(--panel-line) transparent;
+  padding: clamp(1em, 2.4vh, 1.5em) 2em 0;
+  border: 1px solid var(--panel-line);
+  border-radius: .9em;
+  background: var(--panel);
+  box-shadow: var(--panel-shadow);
+}
+/* The format's name with its size beside it on one line (a long name pushes the size under it), its shape below. */
+.dt-setup-chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1.3em;
+  padding-bottom: clamp(.8em, 1.8vh, 1.2em);
+  border-bottom: 1px solid var(--panel-line);
+}
+.dt-setup-chosen-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 1.65em;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: .1em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dt-setup-meta { letter-spacing: .08em; color: var(--ink-dim); }
+.dt-setup-chosen .dt-setup-strip { flex: 1 0 100%; height: .5em; gap: 3px; margin-top: clamp(.6em, 1.4vh, .9em); }
+
+.dt-setup-row { display: flex; flex-direction: column; gap: .5em; min-width: 0; margin: 0; padding: 0; border: 0; }
+.dt-setup-row > legend { margin-bottom: .5em; padding: 0; }
+.dt-setup .dt-input { padding-block: .45em; }   /* a little slimmer than the editor's, for the theme grid's sake */
+/* Wide screens: each row's label in a column on its left. The panel has the width to spare and not the height,
+   and the rows it saves let two rows of theme thumbnails large enough to tell apart fit at 1920×1080 and at
+   1366×768 alike. A floated legend is not the fieldset's rendered legend, so it is laid out as a grid item like
+   the rest. */
+@media (min-width: 1200px) {
+  .dt-setup-match .dt-setup-row { display: grid; grid-template-columns: 5.4em minmax(0, 1fr); align-items: start; gap: .5em 1.2em; }
+  .dt-setup-match .dt-setup-row > .dt-setup-label { float: left; grid-column: 1; margin: 0; padding-top: .9em; }
+  .dt-setup-match .dt-setup-row > :not(.dt-setup-label) { grid-column: 2; }
+  .dt-setup-match .dt-setup-row:has(> .dt-setup-themes) > .dt-setup-label { padding-top: .1em; }   /* level with the thumbnails' top */
+}
+/* The team boxes in seat order, left to right as on the projector, with the swap button between them. */
+.dt-setup-seating { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: .5em .8em; }
+.dt-setup-swap {
+  display: grid;
+  place-items: center;
+  width: 2.3em;
+  height: 2.3em;
+  border: 1px solid var(--panel-line);
+  border-radius: 50%;
+  color: var(--ink-dim);
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.dt-setup-swap:hover { border-color: color-mix(in oklab, var(--ink) 45%, transparent); background: var(--panel-hover); color: var(--ink); }
+.dt-setup-swap svg {
+  width: 1.05em;
+  height: 1.05em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: rotate 200ms ease;
+}
+/* The arrows turn with each swap, so the click visibly did something even before the eye finds the boxes. */
+.dt-setup-seating[data-seat="right"] .dt-setup-swap svg { rotate: 180deg; }
+
+/* A side's label with its colour bar, then the box. */
+.dt-setup-side { display: grid; grid-template-columns: 3.4em minmax(0, 1fr); align-items: center; }
+.dt-setup-side > span { position: relative; padding-left: .85em; font-size: .9em; letter-spacing: .2em; color: var(--ink-dim); }
+.dt-setup-side > span::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .15em;
+  bottom: .15em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--pro);
+}
+.dt-setup-side[data-side="con"] > span::before { background: var(--con); }
+
+/* Theme thumbnails (spec §3.1): each is the real stage in that theme, four to a row, the name under it, at every
+   size (at 1366×768 too, where eight in a row came out 88px wide, too small to see the ink, the chalk or the
+   dots), so ↑↓ always move between the two rows. The chosen one wears a gold ring; keyboard focus adds the page's
+   focus outline around the whole cell. */
+.dt-setup-themes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75em .7em; }
+@media (max-height: 860px) and (min-width: 1200px) {
+  .dt-setup-themes { gap: .45em .7em; }
+}
+.dt-setup-theme {
+  display: flex;
+  flex-direction: column;
+  gap: .4em;
+  min-width: 0;
+  padding: 0;
+  border-radius: .4em;
+  color: var(--ink-dim);
+  text-align: left;
+  transition: color 150ms ease;
+}
+.dt-setup .dt-setup-theme:focus-visible { outline-offset: 4px; }
+.dt-setup-thumb {
+  display: block;
+  aspect-ratio: 16 / 9;
+  border-radius: .35em;
+  pointer-events: none;
+  /* What the stage inherits on the projector, not this page's type: the thumbnail is the same frame, smaller. */
+  font-size: 1rem;
+  font-weight: normal;
+  line-height: normal;
+  letter-spacing: normal;
+  text-align: start;
+}
+/* The ring is drawn inside the thumbnail, over the stage, so nothing reaches past the panel's pinned footer. */
+.dt-setup-thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--panel-line);
+  transition: box-shadow 150ms ease;
+}
+.dt-setup-theme:hover { color: var(--ink); }
+.dt-setup-theme:hover .dt-setup-thumb::after { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink) 50%, transparent); }
+.dt-setup-theme[aria-checked="true"] { color: var(--ink); }
+.dt-setup-theme[aria-checked="true"] .dt-setup-thumb::after { box-shadow: inset 0 0 0 2px var(--accent); }
+.dt-setup-theme-name {
+  overflow: hidden;
+  padding-left: .1em;
+  font-size: .88em;
+  line-height: 1.3;
+  letter-spacing: .16em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dt-setup-hint { font-size: .85em; letter-spacing: .06em; color: var(--ink-dim); }
+.dt-setup-hint:empty { display: none; }
+
+.dt-setup-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .8em;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-top: auto;
+  padding: clamp(.8em, 1.8vh, 1.2em) 0 clamp(1em, 2.2vh, 1.4em);
+  border-top: 1px solid var(--panel-line);
+  background: var(--panel);
+}
+/* When the panel has more below the footer, the rows fade into it instead of being cut by its rule. It is
+   drawn only while the panel can scroll (a scroll-linked animation has no effect otherwise), and it clears
+   as the end comes into view. */
+.dt-setup-foot::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 2.5em;
+  background: linear-gradient(transparent, var(--panel));
+  pointer-events: none;
+  opacity: 0;
+  animation: dt-setup-more linear both;
+  animation-timeline: scroll(nearest block);
+}
+@keyframes dt-setup-more { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+.dt-setup-foot [data-action="edit"] { margin-right: auto; }
+.dt-setup .dt-button:hover { background: var(--panel-hover); }
+/* Primary: solid ink, the loudest thing on this page and the only solid button. */
+.dt-setup .dt-button[data-primary] { border-color: var(--ink); background: var(--ink); color: var(--ground); font-weight: 600; }
+.dt-setup .dt-button[data-primary]:hover { background: color-mix(in oklab, var(--ink) 86%, var(--ground)); }
+.dt-setup-start { padding: .7em 2.4em; font-size: 1.06em; letter-spacing: .3em; }
+/* 导出这一场: a plain button like 编辑赛制, beside the one solid one; greyed in the dev shell, which has no
+   single file to copy. */
+.dt-setup [data-action="export"] { padding: .7em 1.4em; }
+.dt-setup .dt-button:disabled { opacity: .45; cursor: default; }
+.dt-setup .dt-button:disabled:hover { background: none; }
+
+/* The notice drops in from the top edge like the stage's toast, and folds away again. */
+.dt-setup > .dt-setup-notice {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 2;
+  width: max-content;
+  max-width: min(92vw, 44em);
+  margin: 0;
+  padding: .8em 1.8em;
+  border-bottom: 2px solid var(--accent);
+  border-radius: 0 0 .7em .7em;
+  background: var(--panel);
+  box-shadow: 0 .6em 1.6em rgb(0 0 0 / .28);
+  color: var(--ink);
+  letter-spacing: .06em;
+  translate: -50% -110%;
+  transition: translate 200ms cubic-bezier(.2, .8, .2, 1);   /* the stage toast's --ease-out */
+}
+.dt-setup > .dt-setup-notice[data-shown] { translate: -50% 0; }
+.dt-setup > .dt-setup-notice:empty { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) { .dt-setup > .dt-setup-notice { transition: none; } }
+
+@media (max-width: 760px) {
+  .dt-setup-body { grid-template-columns: minmax(0, 1fr); }
+  .dt-setup-list { max-height: 40vh; }
+  /* One column: the whole page scrolls, as before, with the footer at the end of the panel. */
+  .dt-setup-body { flex: none; }
+  .dt-setup-match { max-height: none; overflow: visible; }
+  .dt-setup-foot { position: static; }
+  .dt-setup-foot::before { display: none; }
+}
+
+/* ---- format editor ---- */
+
+/* A full-screen sheet that rises from the bottom. It wears the default theme (editor.js sets data-theme), so it
+   reads the same over any match; the panel variables are set here because it may open outside .dt-app. */
+.dt-editor {
+  --panel: color-mix(in oklab, var(--ground) 91%, var(--ink));
+  --panel-line: color-mix(in oklab, var(--ink) 15%, transparent);
+  --panel-hover: color-mix(in oklab, var(--ink) 9%, transparent);
+  --ed-error: color-mix(in oklab, var(--pro) 50%, var(--ink));
+  --ed-error-line: color-mix(in oklab, var(--pro) 82%, var(--ink));
+  --ed-ease: cubic-bezier(.2, .8, .2, 1);
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+  color: var(--ink);
+  color-scheme: dark;
+  font-family: var(--font-ui);
+  font-size: clamp(13px, calc(1.3vh + 2px), 17px);
+  line-height: 1.5;
+  font-synthesis: none;
+  outline: none;
+  animation: dt-editor-in 260ms var(--ed-ease) both;
+}
+.dt-editor[data-leaving] { animation: dt-editor-out 260ms cubic-bezier(.5, 0, .75, .3) both; pointer-events: none; }
+.dt-editor[data-still] { animation: none; }
+@keyframes dt-editor-in { from { translate: 0 100%; } }
+@keyframes dt-editor-out { to { translate: 0 100%; } }
+
+.dt-editor :where(h1, h2, p) { margin: 0; }
+/* Zero specificity, so .dt-button and the editor's own button rules win. */
+:where(.dt-editor) button {
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.dt-editor button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dt-editor button:disabled { opacity: .32; cursor: default; }
+.dt-editor .dt-button:hover:not(:disabled) { background: var(--panel-hover); }
+.dt-editor .dt-button[data-primary] { border-color: var(--ink); background: var(--ink); color: var(--ground); font-weight: 600; }
+.dt-editor .dt-button[data-primary]:hover { background: color-mix(in oklab, var(--ink) 86%, var(--ground)); }
+
+.dt-ed-head {
+  display: flex;
+  align-items: center;
+  gap: 1.6em;
+  padding: .85em clamp(16px, 3vw, 44px);
+  border-bottom: 1px solid var(--panel-line);
+}
+.dt-ed-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2em 1.4em; margin-right: auto; }
+.dt-ed-title h1 { font-family: var(--font-title); font-size: 1.45em; font-weight: 600; letter-spacing: .26em; }
+.dt-ed-title h1::before {
+  content: "";
+  display: inline-block;
+  width: .2em;
+  height: .95em;
+  margin-right: .65em;
+  border-radius: .04em;
+  vertical-align: -.1em;
+  background: linear-gradient(var(--pro) 50%, var(--con) 50%);
+}
+.dt-ed-title p { font-size: .9em; letter-spacing: .12em; color: var(--ink-dim); }
+.dt-ed-head [data-action="close"] { padding: .5em 2.2em; letter-spacing: .3em; }
+
+/* 已保存 fades in and out; an unsaved draft keeps its warning up until it is fixed. */
+.dt-ed-status { font-size: .92em; letter-spacing: .12em; color: var(--ink-dim); opacity: 0; transition: opacity 300ms ease; }
+.dt-ed-status[data-shown] { opacity: 1; }
+.dt-ed-status[data-kind="saved"]::before { content: "✓"; margin-right: .5em; color: var(--accent); }
+.dt-ed-status[data-kind="invalid"] { color: var(--ed-error); }
+
+.dt-ed-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(15em, 19em) minmax(0, 1fr); }
+
+/* The format list and its tools. */
+.dt-ed-side { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--panel-line); }
+.dt-ed-list { flex: 1 1 auto; min-height: 0; overflow: auto; padding-bottom: .8em; }
+.dt-ed-group-label { padding: 1.1em 1.4em .35em; font-size: .78em; letter-spacing: .32em; color: var(--ink-dim); }
+.dt-ed-format {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: .12em;
+  width: 100%;
+  padding: .6em 1.2em .65em 1.4em;
+  text-align: left;
+  transition: background 150ms ease;
+}
+.dt-ed-format:hover { background: var(--panel-hover); }
+.dt-ed-format[aria-current="true"] { background: color-mix(in oklab, var(--ink) 10%, transparent); }
+.dt-ed-format[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .6em;
+  bottom: .6em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+.dt-ed-format-name {
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 1.04em;
+  letter-spacing: .05em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dt-ed-format-meta { font-size: .8em; letter-spacing: .04em; color: var(--ink-dim); }
+.dt-ed-format-meta em {
+  margin-left: .8em;
+  padding: 0 .45em;
+  border: 1px solid color-mix(in oklab, var(--accent) 50%, transparent);
+  border-radius: .3em;
+  font-style: normal;
+  color: var(--accent);
+}
+.dt-ed-empty { padding: .3em 1.4em; font-size: .85em; line-height: 1.6; color: var(--ink-dim); }
+
+.dt-ed-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .4em;
+  padding: .9em 1.2em;
+  border-top: 1px solid var(--panel-line);
+}
+.dt-ed-tools .dt-button { padding: .42em .3em; font-size: .9em; letter-spacing: .06em; white-space: nowrap; }
+.dt-ed-notice { max-height: 30vh; overflow: auto; padding: 0 1.2em; font-size: .86em; line-height: 1.55; }
+.dt-ed-notice p { margin-bottom: .75em; letter-spacing: .03em; color: var(--ink-dim); }
+.dt-ed-notice p[data-kind="bad"] { color: var(--ed-error); }
+
+/* The form. */
+.dt-ed-main { position: relative; min-height: 0; overflow: auto; padding: .4em clamp(16px, 3vw, 48px) 5em; }
+.dt-ed-main > * { max-width: 74em; }
+.dt-ed-section { padding: 1.2em 0 1.4em; border-bottom: 1px solid var(--panel-line); }
+.dt-ed-section:last-child { border-bottom: 0; }
+.dt-ed-h2 { margin-bottom: .8em; font-size: .8em; font-weight: normal; letter-spacing: .32em; color: var(--ink-dim); }
+.dt-ed-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2em 1.4em; margin-bottom: .6em; }
+.dt-ed-section-head .dt-ed-h2 { margin-bottom: 0; }
+.dt-ed-meta, .dt-ed-hint { font-size: .85em; letter-spacing: .05em; color: var(--ink-dim); }
+.dt-ed-hint { margin-top: .7em; }
+.dt-ed-hint:empty { display: none; }
+
+.dt-ed-field { display: flex; align-items: center; gap: .6em; min-width: 0; }
+.dt-ed-label { flex: none; font-size: .86em; letter-spacing: .14em; color: var(--ink-dim); white-space: nowrap; }
+.dt-ed-unit { flex: none; color: var(--ink-dim); }
+.dt-ed-short { width: 6em; }
+.dt-ed-secs { width: 5.4em; text-align: center; font-family: var(--font-digits); font-variant-numeric: tabular-nums; letter-spacing: .03em; }
+.dt-ed-select { width: auto; padding-block: .45em; cursor: pointer; }
+.dt-editor .dt-input[aria-invalid="true"] { border-color: var(--ed-error-line); box-shadow: 0 0 0 1px var(--ed-error-line); }
+.dt-ed-msg { font-size: .88em; letter-spacing: .04em; color: var(--ed-error); }
+.dt-ed-msg:empty { display: none; }
+.dt-ed-main > .dt-ed-msg { margin-top: 1em; }
+
+/* Name and theme on one line; the name box is the one big serif field on the page. */
+.dt-ed-format-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1em 2.4em; }
+.dt-ed-format-head .dt-ed-field { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .4em .8em; }
+.dt-ed-format-head .dt-ed-field > :nth-child(n+3) { grid-column: 2; margin: 0; }
+.dt-ed-grow { flex: 1 1 22em; }
+.dt-ed-name { font-size: 1.3em; font-weight: 600; letter-spacing: .08em; }
+.dt-ed-bells { display: flex; flex-wrap: wrap; align-items: center; gap: .7em 2.2em; }
+
+/* Stage rows: handle, number, name, type, side, time, details, remove. The header row uses the same columns. */
+.dt-ed-line {
+  display: grid;
+  grid-template-columns: 1.5em 1.7em minmax(9em, 1fr) 11.6em 9.8em 6.6em 2em 2em;
+  align-items: center;
+  gap: .55em;
+}
+.dt-ed-cols { padding: 0 .6em .3em 1em; color: var(--ink-dim); }
+/* Sized on the labels, not the row, so the header keeps the rows' em-based columns. */
+.dt-ed-cols span { font-size: .76em; letter-spacing: .22em; }
+.dt-ed-cols span:nth-child(6) { text-align: right; }
+.dt-ed-stagebox { position: relative; }
+.dt-ed-stages { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.dt-ed-stage {
+  position: relative;
+  padding: .36em .6em .36em 1em;
+  border-radius: .5em;
+  transition: background 150ms ease, opacity 150ms ease;
+}
+.dt-ed-stage:hover, .dt-ed-stage:focus-within { background: color-mix(in oklab, var(--ink) 5%, transparent); }
+.dt-ed-stage[data-dragging] { opacity: .45; }
+/* The side's colour down the row's edge, as on the progress bar. */
+.dt-ed-stage::before {
+  content: "";
+  position: absolute;
+  left: .2em;
+  top: .6em;
+  bottom: .6em;
+  width: 3px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--ground) 50%, var(--ink));
+}
+.dt-ed-stage[data-tone="pro"]::before { background: var(--pro); }
+.dt-ed-stage[data-tone="con"]::before { background: var(--con); }
+.dt-ed-stage[data-tone="dual"]::before { background: linear-gradient(var(--pro) 50%, var(--con) 50%); }
+.dt-ed-stage .dt-input { padding: .36em .6em; }
+.dt-ed-stage > .dt-ed-msg { margin: .3em 0 .15em calc(3.2em + 1.1em); }
+/* A message only about the duration sits under that box: right-aligned, clear of the two icon columns
+   (2em each plus a .55em gap, in the row's em; the message's own em is .88 of it). */
+.dt-ed-stage > .dt-ed-msg[data-about="secs"] { margin-left: 0; margin-right: calc((2em + .55em) * 2 / .88); text-align: right; }
+
+.dt-ed-handle {
+  height: 2em;
+  border-radius: .35em;
+  color: var(--ink-dim);
+  font-size: 1.1em;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+}
+.dt-ed-handle:hover { background: var(--panel-hover); color: var(--ink); }
+.dt-ed-stage[data-dragging] .dt-ed-handle { cursor: grabbing; }
+.dt-ed-index { font-family: var(--font-digits); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-dim); }
+
+/* Segmented choices: 单方 / 双方 / 间隔 and 正 / 反; a pressed side wears its colour. */
+.dt-ed-seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--panel-line);
+  border-radius: .45em;
+  background: color-mix(in oklab, var(--ground) 72%, transparent);
+}
+.dt-ed-seg-btn {
+  padding: .26em .72em;
+  border-radius: .3em;
+  color: var(--ink-dim);
+  letter-spacing: .1em;
+  white-space: nowrap;
+  transition: background 150ms ease, color 150ms ease;
+}
+.dt-ed-seg-btn:hover { background: var(--panel-hover); color: var(--ink); }
+.dt-ed-seg-btn[aria-pressed="true"] { background: color-mix(in oklab, var(--ink) 16%, transparent); color: var(--ink); }
+.dt-ed-seg-btn:is([data-side="pro"], [data-first="pro"])[aria-pressed="true"] { background: var(--pro); }
+.dt-ed-seg-btn:is([data-side="con"], [data-first="con"])[aria-pressed="true"] { background: var(--con); }
+.dt-ed-line > .dt-ed-seg { justify-self: start; }
+.dt-ed-side-cell { display: flex; align-items: center; gap: .5em; }
+.dt-ed-time { display: flex; align-items: center; justify-content: flex-end; gap: .4em; }
+
+.dt-ed-icon { display: grid; place-items: center; width: 2em; height: 2em; border-radius: .4em; color: var(--ink-dim); }
+.dt-ed-icon svg { width: .95em; height: .95em; }
+.dt-ed-icon:hover:not(:disabled) { background: var(--panel-hover); color: var(--ink); }
+.dt-ed-icon[data-action="expand"] { transition: rotate 150ms ease, background 150ms ease; }
+.dt-ed-icon[aria-expanded="true"] { rotate: 90deg; color: var(--ink); }
+.dt-ed-remove:hover:not(:disabled) { color: var(--ed-error); }
+
+/* A row's details, under its name. */
+.dt-ed-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .6em 2.2em;
+  margin: .45em 2.2em .5em calc(3.2em + 1.1em);
+  padding: .85em 1em;
+  border: 1px solid var(--panel-line);
+  border-radius: .55em;
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+}
+.dt-ed-details > .dt-ed-field { display: grid; grid-template-columns: 5.6em minmax(0, 1fr); }
+.dt-ed-details > .dt-ed-field .dt-ed-short { justify-self: start; }
+.dt-ed-wide { grid-column: 1 / -1; }
+.dt-ed-stage-bells { display: flex; flex-wrap: wrap; align-items: center; gap: .7em 2.2em; }
+.dt-ed-stage-bells > .dt-ed-field .dt-ed-label { min-width: 5.6em; }
+.dt-ed-stage-bells .dt-ed-bells .dt-ed-label { min-width: 0; }
+
+/* Where a dragged row will land: a 2px gold line with a dot at its start. */
+.dt-ed-drop {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.dt-ed-drop::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.dt-ed-drop[hidden] { display: none; }
+
+.dt-ed-add {
+  width: 100%;
+  margin-top: .7em;
+  padding: .55em;
+  border: 1px dashed var(--panel-line);
+  border-radius: .5em;
+  color: var(--ink-dim);
+  letter-spacing: .2em;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+.dt-ed-add:hover { border-color: color-mix(in oklab, var(--ink) 40%, transparent); background: var(--panel-hover); color: var(--ink); }
+.dt-ed-add-small { width: auto; padding: .35em 1.1em; letter-spacing: .1em; }
+
+/* Extra groups: a card each, its forms as rows. */
+.dt-ed-extra { margin-top: .8em; padding: .9em 1.1em; border: 1px solid var(--panel-line); border-radius: .6em; }
+.dt-ed-extra-head { display: flex; flex-wrap: wrap; align-items: center; gap: .6em 2em; }
+.dt-ed-extra-head .dt-ed-grow { flex-basis: 16em; }
+.dt-ed-extra-head [data-action="remove-extra"] { margin-left: auto; padding: .38em 1em; font-size: .9em; }
+.dt-ed-extra-head [data-action="remove-extra"]:hover { color: var(--ed-error); }
+.dt-ed-variants { display: flex; flex-direction: column; gap: .4em; margin-top: .8em; }
+.dt-ed-variant { display: grid; grid-template-columns: minmax(8em, 1fr) 5.4em minmax(8em, 1.4fr) 2em; align-items: center; gap: .55em; }
+.dt-ed-variant .dt-input { padding: .36em .6em; }
+.dt-ed-extra > .dt-ed-msg { margin-top: .6em; }
+
+/* A question over the editor: delete, or overwrite on import. */
+.dt-ed-dialog-layer { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; padding: 16px; }
+.dt-ed-scrim { position: absolute; inset: 0; background: color-mix(in oklab, var(--ground) 62%, transparent); animation: dt-fade 160ms ease both; }
+.dt-ed-dialog {
+  position: relative;
+  width: min(30em, 100%);
+  padding: 1.5em 1.6em 1.2em;
+  border: 1px solid var(--panel-line);
+  border-radius: .8em;
+  background: var(--panel);
+  animation: dt-ed-pop 200ms var(--ed-ease) both;
+}
+.dt-ed-dialog-text { font-family: var(--font-title); font-size: 1.18em; line-height: 1.5; letter-spacing: .06em; }
+.dt-ed-dialog-acts { display: flex; justify-content: flex-end; gap: .6em; margin-top: 1.4em; }
+.dt-ed-dialog-acts .dt-button { min-width: 6.5em; }
+.dt-ed-dialog-acts .dt-button[data-kind="danger"] { border-color: var(--ed-error-line); color: var(--ed-error); }
+@keyframes dt-ed-pop { from { opacity: 0; translate: 0 .6em; } }
+
+@media (max-width: 900px) {
+  .dt-ed-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .dt-ed-side { max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--panel-line); }
+  .dt-ed-cols { display: none; }
+  .dt-ed-line { grid-template-columns: 1.5em 1.7em minmax(0, 1fr) 2em 2em; }
+  .dt-ed-line > :nth-child(n+4):nth-child(-n+6) { grid-column: 3; }
+  /* The duration box has moved under the name here, so its message goes back to the name's column. */
+  .dt-ed-stage > .dt-ed-msg[data-about="secs"] { margin: .3em 0 .15em calc(3.2em + 1.1em); text-align: left; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-setup, .dt-setup * { transition: none !important; }
+  .dt-editor, .dt-editor[data-leaving], .dt-ed-scrim, .dt-ed-dialog { animation: none; }
+  .dt-editor * { transition: none; }
+}

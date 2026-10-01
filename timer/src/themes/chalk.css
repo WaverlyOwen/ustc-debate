@@ -1,0 +1,314 @@
+/* @theme id=chalk name=黑板 desc=教室黑板上的粉笔排线，时间用掉就被板擦擦去，适合暗场投影 tone=dark order=3 */
+/* 黑板: university debates are often held in a classroom. The floor is chalk hatching across the board from the speaking
+   side's seat, wiped off toward that seat as the time is used; the stage name is written in 楷体 as a teacher writes
+   on the board (spec §2.3). The chalk filters are in themes/chalk.js. */
+[data-theme="chalk"] {
+  --pro: #F08F84;           /* red chalk, as it lands on a board: soft, a little pink */
+  --pro-deep: var(--ground);
+  --con: #8CBDE8;           /* blue chalk */
+  --con-deep: var(--ground);
+  --ground: #213A30;        /* 墨绿: a classroom board, green before it is black */
+  --ink: #EEF0E6;           /* white chalk */
+  --ink-dim: rgb(226 232 220 / .74);
+  --accent: #F0D477;        /* yellow chalk: the bells, overtime, what a teacher marks */
+  --speaker-ink: #DDE2D6;
+  /* A line of hatching is chalk on the board, not paint: the stick leaves about two thirds of its colour (the chalk
+     mixed into the board: red 64%, blue 58%). This is the brightest the field gets, so the digits are measured
+     against it (spec §1.5). Written out as hex, the form the contrast check reads. */
+  --pro-hatch: #A57066;
+  --con-hatch: #5F869B;
+  --pro-faint: #745C52;     /* the waiting side's lighter hand in free debate: red 40%, blue 36% */
+  --con-faint: #486972;
+  --pro-angle: 48deg;       /* 正方 hatches one way, 反方 the other: the sides differ by more than hue */
+  --con-angle: -48deg;
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "KaiTi", "楷体", "STKaiti", "Kaiti SC", "KaiTi_GB2312", serif;
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  /* The board: lighter where the room's lights fall, and rubbed all over with the dust of old chalk (feTurbulence):
+     broad clouds and the long arcs of the eraser in one tile, sized in cqh so a thumbnail shows the same board,
+     smaller; and a fine speckle in another, drawn pixel for pixel, since scaled it turns into a woven mesh. On a
+     thumbnail the speckle would only be snow, so it is left out there. */
+  --board-dust: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='900' height='900'><filter id='d' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.0016' numOctaves='3' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .86  0 0 0 0 .9  0 0 0 0 .86  .4 0 0 0 -.16' result='haze'/><feTurbulence type='fractalNoise' baseFrequency='.0016 .009' numOctaves='3' seed='8' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .88  0 0 0 0 .92  0 0 0 0 .88  .7 0 0 0 -.38' result='wipe'/><feMerge><feMergeNode in='haze'/><feMergeNode in='wipe'/></feMerge></filter><rect width='100%25' height='100%25' filter='url(%23d)'/></svg>") 0 0 / 90cqh 90cqh;
+  --board-speck: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='s' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='1' seed='1' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .9  0 0 0 0 .92  0 0 0 0 .9  3 0 0 0 -1.74'/></filter><rect width='100%25' height='100%25' filter='url(%23s)'/></svg>") 0 0 / 300px 300px;
+  --board-light: radial-gradient(120% 100% at 50% 38%, #2B4A3C, #213A30 55%, #172A22);
+  --backdrop: var(--board-speck), var(--board-dust), var(--board-light);
+  /* Up-and-down streaks of an eraser, as a mask for what is left of the wiped chalk. */
+  --wiped: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='w' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.02 .0035' numOctaves='2' seed='6' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1.8 0 0 0 -.5'/></filter><rect width='100%25' height='100%25' filter='url(%23w)'/></svg>") 0 0 / 44cqh 44cqh;
+  /* Where a hand's hatching starts and stops: each stroke a little longer or shorter than the next. A vertical
+     ramp plus noise that varies only across the board, cut hard: a mask for the lines' upper ends (flipped for the
+     lower ones). */
+  --ends-top: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='40'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></linearGradient><filter id='f' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.045 .0001' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1' result='n'/><feComposite in='SourceGraphic' in2='n' operator='arithmetic' k2='1' k3='1.8' k4='-1.35'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  20 0 0 0 0'/></filter><rect width='100%25' height='100%25' fill='url(%23g)' filter='url(%23f)'/></svg>");
+  --ends-bottom: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='40'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-color='%23fff'/><stop offset='1' stop-color='%23000'/></linearGradient><filter id='f' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.045 .0001' numOctaves='2' seed='13' stitchTiles='stitch'/><feColorMatrix values='1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1' result='n'/><feComposite in='SourceGraphic' in2='n' operator='arithmetic' k2='1' k3='1.8' k4='-1.35'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  20 0 0 0 0'/></filter><rect width='100%25' height='100%25' fill='url(%23g)' filter='url(%23f)'/></svg>");
+  --ends: var(--ends-top) 0 0 / 40cqh 4cqh repeat-x, var(--ends-bottom) 0 100% / 40cqh 4cqh repeat-x,
+    linear-gradient(#000, #000) 0 50% / 100% calc(100% - 8cqh) no-repeat;
+  --fade-y: linear-gradient(transparent, #000 5cqh calc(100% - 5cqh), transparent);   /* dust thins out above and below */
+  --text-field: var(--ground);   /* the hatching stays below the head, so all text above it sits on the board */
+  --text-deep: var(--ground);
+  --hatch-top: 30cqh;            /* the hatched part of the board, between the head and the bottom bar */
+  --hatch-bottom: 88cqh;
+  --hatch-line: .6cqh;           /* one stroke of chalk, and the distance between strokes */
+  --hatch-pitch: 1.8cqh;
+  --chalk-stub: 6cqw;            /* the last strokes at the seat that the eraser misses (see below) */
+}
+
+.dt-stage[data-theme="chalk"] {
+  --clock-y: 59%;                /* the digits written in the middle of the hatching */
+  --side-chalk: var(--ink);
+  --hatch-angle: var(--pro-angle);
+  --chalk-stroke: url(#dt-chalk-stroke-xl);
+  --chalk-grain: url(#dt-chalk-grain-xl);
+  --chalk-write: url(#dt-chalk-write-xl);
+}
+.dt-stage[data-theme="chalk"][data-side="pro"] { --side-color: var(--pro-hatch); --side-chalk: var(--pro); --hatch-angle: var(--pro-angle); }
+.dt-stage[data-theme="chalk"][data-side="con"] { --side-color: var(--con-hatch); --side-chalk: var(--con); --hatch-angle: var(--con-angle); }
+
+/* The filters for the stage's size (see chalk.js). */
+@container (max-width: 1600px) {
+  .dt-stage[data-theme="chalk"] {
+    --chalk-stroke: url(#dt-chalk-stroke-l); --chalk-grain: url(#dt-chalk-grain-l); --chalk-write: url(#dt-chalk-write-l);
+  }
+}
+@container (max-width: 1100px) {
+  .dt-stage[data-theme="chalk"] {
+    --chalk-stroke: url(#dt-chalk-stroke-m); --chalk-grain: url(#dt-chalk-grain-m); --chalk-write: url(#dt-chalk-write-m);
+  }
+}
+@container (max-width: 520px) {
+  .dt-stage[data-theme="chalk"] {
+    --chalk-stroke: url(#dt-chalk-stroke-s); --chalk-grain: url(#dt-chalk-grain-s); --chalk-write: url(#dt-chalk-write-s);
+    --backdrop: var(--board-dust), var(--board-light);
+  }
+}
+
+/* ---- the hatching ---- */
+
+/* The lines are a layer of their own that never changes, so the chalk filter is drawn once; the field around them
+   is only cut back. It runs a little past the field so the filter's shaken edge is not a straight cut. */
+.dt-stage[data-theme="chalk"] .dt-field,
+.dt-stage[data-theme="chalk"] .dt-half-field { background: none; }
+.dt-stage[data-theme="chalk"] .dt-field::before,
+.dt-stage[data-theme="chalk"] .dt-half-field::before {
+  content: "";
+  position: absolute;
+  inset: 0 -2cqw;
+  background: repeating-linear-gradient(var(--hatch-angle), var(--side-color) 0 var(--hatch-line),
+    transparent var(--hatch-line) var(--hatch-pitch));
+  filter: var(--chalk-stroke);
+  -webkit-mask: var(--ends);
+  mask: var(--ends);
+}
+/* [data-mode] ranks these with stage.css's per-seat clip-path rules, which they replace: the same wipe toward the
+   seat, but open above and below, where the lines end unevenly as a hand hatches. The eraser never gets the last
+   strokes at the seat: a stub of --chalk-stub stays there as the time runs out and through overtime, clear of the
+   digits, so the room still sees whose floor it is (spec §1.5). The wipe stops at it, so nothing jumps back in
+   when overtime begins. */
+.dt-stage[data-theme="chalk"][data-mode] .dt-field {
+  top: var(--hatch-top);
+  bottom: auto;
+  height: calc(var(--hatch-bottom) - var(--hatch-top));
+  clip-path: inset(-3cqh min(var(--used) * 100%, 100% - var(--chalk-stub)) -3cqh 0);
+}
+.dt-stage[data-theme="chalk"][data-mode][data-pro-seat="right"][data-side="pro"] .dt-field,
+.dt-stage[data-theme="chalk"][data-mode][data-pro-seat="left"][data-side="con"] .dt-field {
+  clip-path: inset(-3cqh 0 -3cqh min(var(--used) * 100%, 100% - var(--chalk-stub)));
+}
+
+/* The board never comes quite clean: over the hatched part, a haze of the speaking side's chalk in the eraser's
+   streaks. It shows where the lines have been wiped, and with the stub says through overtime whose floor it is. */
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"] .dt-deco::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--hatch-top);
+  height: calc(var(--hatch-bottom) - var(--hatch-top));
+  background-color: color-mix(in srgb, var(--side-chalk) 14%, transparent);
+  -webkit-mask: var(--wiped), var(--fade-y);
+  -webkit-mask-composite: source-in;
+  mask: var(--wiped), var(--fade-y);
+  mask-composite: intersect;
+}
+/* In overtime all of the band but the stub is wiped, and the haze is heavier: the eraser has been over all of it. */
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco::before {
+  background-color: color-mix(in srgb, var(--side-chalk) 30%, transparent);
+}
+
+/* The eraser's dust along the edge of the wipe, softening where the lines were cut off. */
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"] .dt-deco-over::before {
+  --smear: 7cqw;
+  content: "";
+  position: absolute;
+  top: calc(var(--hatch-top) - 2cqh);
+  height: calc(var(--hatch-bottom) - var(--hatch-top) + 4cqh);
+  left: calc(max((1 - var(--used)) * 100%, var(--chalk-stub)) - var(--smear) / 2);
+  width: var(--smear);
+  background-color: color-mix(in srgb, var(--side-chalk) 34%, transparent);
+  -webkit-mask: var(--wiped), linear-gradient(to right, transparent, #000 45% 55%, transparent), var(--fade-y);
+  -webkit-mask-composite: source-in;
+  mask: var(--wiped), linear-gradient(to right, transparent, #000 45% 55%, transparent), var(--fade-y);
+  mask-composite: intersect;
+}
+.dt-stage[data-theme="chalk"][data-pro-seat="right"][data-side="pro"] .dt-deco-over::before,
+.dt-stage[data-theme="chalk"][data-pro-seat="left"][data-side="con"] .dt-deco-over::before {
+  left: calc(min(var(--used) * 100%, 100% - var(--chalk-stub)) - var(--smear) / 2);
+}
+
+/* ---- digits: chalk white, a grain of chalk at their edges, the body solid ---- */
+
+/* The grain is drawn on each part of the digits rather than the whole: the colon's breathing is then only a change
+   of opacity, which does not draw the filter again, and the numbers are drawn again only when they change. */
+.dt-stage[data-theme="chalk"] .dt-digits > span { filter: var(--chalk-grain); }
+/* For the same reason the digits tense up in small steps rather than on every frame: 50 steps over a stage. */
+@supports (width: round(nearest, 1px, 1px)) {
+  .dt-stage[data-theme="chalk"] .dt-digits {
+    --tension-step: round(nearest, var(--tension), .02);
+    font-variation-settings: "wght" calc(300 + 400 * var(--tension-step)), "wdth" calc(100 - 22 * var(--tension-step));
+  }
+}
+/* The digits are one colour on the hatching and off it, so the renderer's second, clipped layer is not needed. */
+.dt-stage[data-theme="chalk"] .dt-digits-on { display: none; }
+/* The attribute selectors only rank this above stage.css's per-seat clips, which it removes. */
+.dt-stage[data-theme="chalk"][data-kind][data-pro-seat][data-side] .dt-clock .dt-digits:not(.dt-digits-on) { clip-path: none; }
+
+/* The board and the digits each get a layer of their own: the board's noise tile is then drawn once, not again under
+   every frame's change of the digits. */
+.dt-stage[data-theme="chalk"] .dt-backdrop,
+.dt-stage[data-theme="chalk"] .dt-clock { will-change: transform; }
+
+/* ---- writing: 楷体, as a teacher writes on the board ---- */
+
+.dt-stage[data-theme="chalk"] .dt-title {
+  font-size: 6.4cqh;
+  font-weight: 400;
+  letter-spacing: .06em;
+  text-wrap: balance;
+  filter: var(--chalk-write);
+}
+.dt-stage[data-theme="chalk"][data-long="true"] .dt-title { font-size: 4.8cqh; }
+.dt-stage[data-theme="chalk"] .dt-speaker { font-family: var(--font-title); font-size: 3.1cqh; letter-spacing: .1em; }
+.dt-stage[data-theme="chalk"] .dt-top { font-family: var(--font-title); font-size: 2.3cqh; letter-spacing: .04em; }
+.dt-stage[data-theme="chalk"] .dt-team { filter: var(--chalk-write); }
+
+/* ---- the warn bell point: a tick in yellow chalk on the hatching, below the digits ---- */
+
+/* A heavy tick in a patch of board wiped clear of the hatching, so the chalk's broken edge cannot lose it among the
+   lines from the back of the room. */
+.dt-stage[data-theme="chalk"] .dt-warnline {
+  top: calc(var(--hatch-bottom) - 12.5cqh);
+  bottom: auto;
+  left: clamp(5.5cqh, calc(var(--warn-at) * 100%), calc(100% - 5.5cqh));
+  width: 11cqh;
+  height: 11cqh;
+  margin-left: -5.5cqh;
+  background:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M16 52 C24 58 31 68 39 81 C51 58 66 35 86 16' fill='none' stroke='%23F0D477' stroke-width='17' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / contain no-repeat,
+    radial-gradient(closest-side, var(--ground) 62%, transparent);
+  -webkit-mask-image: none;
+  mask-image: none;
+  filter: var(--chalk-stroke);
+}
+.dt-stage[data-theme="chalk"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
+.dt-stage[data-theme="chalk"][data-pro-seat="left"][data-side="con"] .dt-warnline {
+  left: clamp(5.5cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 5.5cqh));
+}
+
+/* ---- overtime: the digits turn yellow chalk (stage.css), and a teacher's loop rings them ---- */
+
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: var(--clock-y);
+  width: 128cqh;
+  height: 50cqh;
+  translate: -50% -50%;
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 400' preserveAspectRatio='none'><path d='M820 58 C640 12 250 22 116 96 C-6 162 30 302 244 348 C470 396 812 380 924 298 C1004 236 956 112 776 64 C700 44 606 38 560 42' fill='none' stroke='%23F0D477' stroke-width='9' stroke-linecap='round'/></svg>") center / 100% 100% no-repeat;
+  filter: var(--chalk-stroke);
+}
+
+/* ---- free debate: a chalk line parts the board; the speaking side hatches denser ---- */
+
+.dt-stage[data-theme="chalk"] .dt-half {
+  --half-ground: transparent;   /* the board runs under both halves */
+  --side-hatch: var(--pro-hatch);
+  --side-faint: var(--pro-faint);
+  --side-color: var(--side-hatch);
+  --hatch-angle: var(--pro-angle);
+  --hatch-pitch: 1.9cqh;
+  --dual-top: 26cqh;            /* below the teams and the stage name */
+  box-shadow: none;
+}
+.dt-stage[data-theme="chalk"] .dt-half[data-side="con"] {
+  --side-hatch: var(--con-hatch);
+  --side-faint: var(--con-faint);
+  --hatch-angle: var(--con-angle);
+}
+.dt-stage[data-theme="chalk"] .dt-half[data-active] { --hatch-pitch: 1.3cqh; }
+.dt-stage[data-theme="chalk"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) {
+  --side-color: var(--side-faint);
+  --hatch-pitch: 2.8cqh;
+  filter: none;
+}
+/* Each half's hatching is wiped from the top down as its time goes; the lines left standing keep their place. */
+.dt-stage[data-theme="chalk"] .dt-half-field {
+  inset: auto 0 calc(100cqh - var(--hatch-bottom));
+  height: calc(var(--remain, 1) * (var(--hatch-bottom) - var(--dual-top)));
+  clip-path: inset(0 0 -3cqh);
+}
+.dt-stage[data-theme="chalk"] .dt-half-field::before {
+  top: auto;
+  bottom: 0;
+  height: calc(var(--hatch-bottom) - var(--dual-top));
+}
+.dt-stage[data-theme="chalk"] .dt-half .dt-clock { top: calc((var(--dual-top) + var(--hatch-bottom)) / 2); }
+.dt-stage[data-theme="chalk"] .dt-half:last-child::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: -1.2cqh;
+  top: 3cqh;
+  bottom: 3cqh;
+  width: 3cqh;
+  background: linear-gradient(to right, transparent 1.2cqh, rgb(238 240 230 / .8) 1.2cqh 1.7cqh, transparent 1.7cqh);
+  filter: var(--chalk-stroke);
+}
+.dt-stage[data-theme="chalk"] .dt-half .dt-team::before { opacity: 1; }
+.dt-stage[data-theme="chalk"] .dt-half[data-side="pro"] .dt-team::before { color: var(--pro); }
+.dt-stage[data-theme="chalk"] .dt-half[data-side="con"] .dt-team::before { color: var(--con); }
+/* The speaker's floor line: a stroke of yellow chalk under the hatching. */
+.dt-stage[data-theme="chalk"] .dt-floorline {
+  left: 5cqw;
+  right: 5cqw;
+  bottom: calc(100cqh - var(--hatch-bottom) - 3.4cqh);
+  height: 2.4cqh;
+  background: linear-gradient(transparent 35%, var(--accent) 35% 65%, transparent 65%);
+  filter: var(--chalk-stroke);
+}
+
+/* ---- cards ---- */
+
+/* Title card: each motion is marked with a patch of its side's hatching; the teams are parted by a chalk line and
+   labelled in their own chalk. */
+.dt-stage[data-theme="chalk"] .dt-motion::before {
+  top: .16em;
+  width: .55em;
+  height: 1.02em;
+  background: repeating-linear-gradient(var(--pro-angle), var(--pro) 0 .1em, transparent .1em .22em);
+  filter: var(--chalk-write);   /* a small patch: the lighter hand, or the stroke's bend would smear it */
+}
+.dt-stage[data-theme="chalk"] .dt-motion[data-side="con"]::before {
+  background: repeating-linear-gradient(var(--con-angle), var(--con) 0 .1em, transparent .1em .22em);
+}
+.dt-stage[data-theme="chalk"] .dt-teams::before {
+  width: 3cqh;
+  margin-left: -1.5cqh;
+  background: linear-gradient(to right, transparent 1.25cqh, rgb(238 240 230 / .75) 1.25cqh 1.75cqh, transparent 1.75cqh);
+  filter: var(--chalk-stroke);
+}
+.dt-stage[data-theme="chalk"] .dt-teams span[data-side="pro"]::before { color: var(--pro); }
+.dt-stage[data-theme="chalk"] .dt-teams span[data-side="con"]::before { color: var(--con); }
+.dt-stage[data-theme="chalk"] .dt-motion,
+.dt-stage[data-theme="chalk"] .dt-teams { filter: var(--chalk-write); }
+
+/* The bells ring in yellow chalk. */
+.dt-stage[data-theme="chalk"] .dt-ring { filter: var(--chalk-stroke); }

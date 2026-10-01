@@ -1,0 +1,561 @@
+/* stage.css: the projected stage (spec §5.3–5.5). Colours and fonts come only from the theme variables. */
+
+/* ---- frame ---- */
+
+.dt-stage {
+  --side-color: color-mix(in oklab, var(--ground) 90%, var(--ink));
+  --side-deep: var(--ground);
+  --clock-y: 55%;                 /* vertical centre of the main digits */
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.36, .64, 1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 4.2cqh 5cqw 3.6cqh;
+  background: var(--side-deep);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+.dt-stage[data-side="pro"] { --side-color: var(--pro); --side-deep: var(--pro-deep); }
+.dt-stage[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
+
+/* ---- layers, bottom to top (spec §1.5): backdrop, canvas, deco, field / halves, deco-over, warn line, content,
+   rings, toast ---- */
+
+.dt-backdrop, .dt-canvas, .dt-deco, .dt-field, .dt-halves, .dt-deco-over, .dt-warnline, .dt-rings {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.dt-backdrop { z-index: 0; background: var(--backdrop); }
+/* A theme painter's canvas (only when the theme has one); it comes before the deco, so the deco paints over it. */
+.dt-canvas { z-index: 1; width: 100%; height: 100%; }
+.dt-deco { z-index: 1; }                /* decoration under the field (daylight's band track) */
+.dt-field, .dt-halves { z-index: 2; }
+.dt-deco-over { z-index: 3; }           /* decoration over the field and the halves: seals, marks, grain */
+.dt-warnline { z-index: 4; }
+.dt-top, .dt-head, .dt-clock, .dt-card, .dt-bottom { position: relative; z-index: 5; }
+.dt-rings { z-index: 6; overflow: hidden; }
+.dt-toast { z-index: 7; }
+
+/* The colour field: time is taken back toward the speaking side's own seat. */
+.dt-field {
+  background: var(--side-color);
+  clip-path: inset(0 calc(var(--used) * 100%) 0 0);
+}
+.dt-stage[data-pro-seat="right"][data-side="pro"] .dt-field,
+.dt-stage[data-pro-seat="left"][data-side="con"] .dt-field {
+  clip-path: inset(0 0 0 calc(var(--used) * 100%));
+}
+/* A break is the plain ground (spec §5.4): a receding field's edge would cut through its centred text. */
+.dt-stage:not([data-mode="stage"]) .dt-field,
+.dt-stage[data-kind="dual"] .dt-field,
+.dt-stage[data-kind="break"] .dt-field { display: none; }
+
+/* A gold hairline where the warn bell sits, visible until the field has been taken back past it. */
+.dt-warnline {
+  right: auto;
+  left: calc(var(--warn-at) * 100%);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  /* Kept to the field's clear zone: absent where the stage name and speaker sit, faint behind the digits,
+     full strength below them, gone again before the bottom bar and its 下一环节, then a short full-strength
+     tick at the very floor under the bar, so the 30-second point still reads from the back of the room. */
+  --warn-mask: linear-gradient(to bottom, transparent 0 30cqh, rgb(0 0 0 / .2) 34cqh 74cqh, #000 80cqh 86cqh,
+    transparent 90cqh calc(100% - 1.6cqh), #000 calc(100% - 1.6cqh));
+  -webkit-mask-image: var(--warn-mask);
+  mask-image: var(--warn-mask);
+  transition: opacity 400ms ease;
+}
+.dt-stage[data-pro-seat="right"][data-side="pro"] .dt-warnline,
+.dt-stage[data-pro-seat="left"][data-side="con"] .dt-warnline {
+  left: calc((1 - var(--warn-at)) * 100%);
+}
+.dt-stage:not([data-mode="stage"]) .dt-warnline,
+.dt-stage:not([data-kind="single"]) .dt-warnline { display: none; }
+.dt-stage:not([data-phase="calm"]) .dt-warnline { opacity: 0; }
+
+/* ---- top bar ---- */
+
+.dt-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 4cqw;
+  min-height: 1.4em;
+  font-size: 2cqh;
+  letter-spacing: .08em;
+  color: var(--ink-dim);
+}
+.dt-top span { max-width: 48%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* ---- stage name and speaker ---- */
+
+.dt-head { margin-top: 4.5cqh; max-width: 82cqw; }
+.dt-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 5.6cqh;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .04em;
+  overflow-wrap: anywhere;
+}
+.dt-stage[data-long="true"] .dt-title { font-size: 4.2cqh; }
+.dt-speaker {
+  margin: 1.3cqh 0 0;
+  overflow: hidden;
+  font-size: 2.8cqh;
+  letter-spacing: .12em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--speaker-ink);
+}
+.dt-speaker:empty { display: none; }
+.dt-stage[data-mode="title"] .dt-head { display: none; }
+
+/* ---- digits ---- */
+
+.dt-clock { line-height: 1; }
+.dt-clock[data-clock="main"] {
+  position: absolute;
+  left: 50%;
+  top: var(--clock-y);
+  translate: -50% -50%;
+}
+.dt-stage:not([data-mode="stage"]) .dt-clock[data-clock="main"],
+.dt-stage[data-kind="dual"] .dt-clock[data-clock="main"] { display: none; }
+.dt-stage[data-kind="single"] .dt-clock { color: var(--on-side); }
+
+.dt-digits {
+  display: flex;
+  color: var(--digits-off-field);
+  align-items: baseline;
+  justify-content: center;
+  white-space: nowrap;
+  font-family: var(--font-digits);
+  font-size: min(38cqh, 30cqw);
+  font-variant-numeric: tabular-nums;
+  /* Tension: light and wide when the clock is full, heavy and narrow at zero (spec §5.3). */
+  font-variation-settings: "wght" calc(300 + 400 * var(--tension)), "wdth" calc(100 - 22 * var(--tension));
+  letter-spacing: -.01em;
+  /* Numerals have no descenders: drop them a little so the glyphs, not the line box, sit on the centre line. */
+  translate: 0 .07em;
+  transition: color 300ms ease;
+}
+.dt-colon { padding: 0 .03em; opacity: .55; transition: color 300ms ease; }
+.dt-clock[data-running="true"] .dt-colon { animation: dt-breathe 1000ms ease-in-out infinite; }
+.dt-clock[data-phase="warn"] .dt-colon,
+.dt-clock[data-phase="count"] .dt-colon { color: var(--accent); }
+.dt-clock[data-phase="over"] .dt-digits { color: var(--accent); }
+.dt-sign { margin-right: .04em; }
+.dt-sign:empty { display: none; }
+.dt-clock[data-phase="over"] .dt-sign { animation: dt-breathe 2000ms ease-in-out infinite; }
+.dt-clock.is-bump .dt-digits { animation: dt-bump 240ms ease-out; }
+
+/* Two layers of the same digits (spec §1.5): .dt-digits in --digits-off-field, and over it .dt-digits-on in
+   --digits-on-field, each clipped to its own side of the field's edge, so the digits read on both. --cut is
+   where that edge falls in the digits' own box: from its left on a single stage (the clock is centred on the
+   stage), from its top in a dual half (the clock is centred at 52% of the half, the glyphs dropped .07em).
+   The on-field layer reaches 1px past the edge: two clips that meet at a fractional pixel each leave that pixel
+   part transparent, and the dark ground shows through as a hairline across the digit. */
+.dt-digits-on { display: none; position: absolute; inset: 0; color: var(--digits-on-field); }
+.dt-stage[data-kind="single"] .dt-digits-on,
+.dt-half .dt-digits-on { display: flex; }
+
+.dt-stage[data-kind="single"] .dt-clock { --cut: calc((1 - var(--used)) * 100cqw - 50cqw + 50%); }
+.dt-stage[data-kind="single"] .dt-digits-on { clip-path: inset(-50% calc(100% - var(--cut) - 1px) -50% -50%); }
+.dt-stage[data-kind="single"] .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% -50% var(--cut)); }
+/* The field taken back toward the right-hand seat: it lies to the right of the edge. */
+.dt-stage[data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-clock,
+.dt-stage[data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-clock {
+  --cut: calc(var(--used) * 100cqw - 50cqw + 50%);
+}
+.dt-stage[data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-digits-on,
+.dt-stage[data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-digits-on {
+  clip-path: inset(-50% -50% -50% calc(var(--cut) - 1px));
+}
+.dt-stage[data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-digits:not(.dt-digits-on),
+.dt-stage[data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-digits:not(.dt-digits-on) {
+  clip-path: inset(-50% calc(100% - var(--cut)) -50% -50%);
+}
+
+.dt-half { --field-top: calc((1 - var(--remain, 1)) * 100cqh); }   /* a theme with another field geometry sets it */
+.dt-half .dt-clock { --cut: calc(var(--field-top) - 52cqh + 50% - .07em); }
+.dt-half .dt-digits-on { clip-path: inset(calc(var(--cut) - 1px) -50% -50% -50%); }
+.dt-half .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% calc(100% - var(--cut)) -50%); }
+
+/* 「暂停」 hangs below the digits without moving them. */
+.dt-state {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  translate: -50% 0;
+  margin-top: 1.4cqh;
+  font-size: 2.8cqh;
+  letter-spacing: .5em;
+  text-indent: .5em;
+  white-space: nowrap;
+  opacity: .72;
+  transition: opacity 200ms ease;
+}
+.dt-state:empty { opacity: 0; }
+
+/* ---- dual: two halves by seat, the speaking side widens to 58% ---- */
+
+.dt-halves {
+  display: none;
+  grid-template-columns: var(--left-col, 50%) var(--right-col, 50%);
+  transition: grid-template-columns 520ms var(--ease-spring);
+}
+.dt-stage[data-mode="stage"][data-kind="dual"] .dt-halves { display: grid; }
+.dt-stage[data-kind="dual"] .dt-top,
+.dt-stage[data-kind="dual"] .dt-bottom::before { display: none; }
+.dt-stage[data-kind="dual"] .dt-head { margin-top: 6cqh; max-width: 36cqw; }
+
+.dt-half {
+  --side-color: var(--pro);
+  --side-deep: var(--pro-deep);
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--half-ground, var(--side-deep));   /* a painter theme sets it transparent to show its canvas */
+  transition: filter 300ms ease;
+}
+.dt-half[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
+.dt-half + .dt-half { box-shadow: inset 1px 0 0 color-mix(in oklab, var(--ink) 16%, transparent); }
+.dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: saturate(.45) brightness(.78); }
+
+/* Each half is its side's field, drained from the top like a falling water level. */
+.dt-half-field {
+  position: absolute;
+  inset: auto 0 0;
+  height: calc(var(--remain, 1) * 100%);
+  background: var(--side-color);
+  clip-path: inset(0);
+}
+
+.dt-team {
+  position: absolute;
+  z-index: 1;
+  top: 4.2cqh;
+  left: 5cqw;
+  right: 5cqw;
+  display: flex;
+  align-items: baseline;
+  gap: .7em;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: var(--font-title);
+  font-size: 3.2cqh;
+  color: var(--on-side);
+}
+.dt-half:last-child .dt-team { flex-direction: row-reverse; }
+.dt-team[data-long="true"] { font-size: 2.6cqh; }
+/* The name has a box of its own so a joint team's long name ends in an ellipsis instead of mid-glyph. */
+.dt-team-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dt-team:not([data-label=""])::before {
+  flex: none;
+  content: attr(data-label);
+  font-family: var(--font-ui);
+  font-size: .7em;
+  letter-spacing: .3em;
+  opacity: .75;
+}
+
+.dt-half .dt-clock {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 52%;
+  translate: -50% -50%;
+  color: var(--on-side);
+}
+.dt-half .dt-digits {
+  font-size: min(15cqh, 9cqw);
+  transition: font-size 520ms var(--ease-spring), color 300ms ease;
+}
+.dt-halves[data-idle] .dt-digits { font-size: min(24cqh, 14cqw); }
+.dt-half[data-active] .dt-digits { font-size: min(30cqh, 17cqw); }
+.dt-half[data-locked] .dt-digits { display: none; }
+.dt-half[data-locked] .dt-state {
+  position: static;
+  translate: none;
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 6cqh;
+  letter-spacing: .3em;
+  opacity: .92;
+}
+
+/* The speaker's gold floor line (spec §5.4): on the floor of the half, its full width, opening from the middle. */
+.dt-floorline {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: max(4px, .4cqh);
+  background: var(--accent);
+  transform: scaleX(0);
+  transition: transform 520ms var(--ease-out);
+}
+.dt-half[data-active] .dt-floorline { transform: scaleX(1); }
+
+/* ---- cards: title, break, end ---- */
+
+.dt-card { display: none; flex-direction: column; }
+.dt-stage[data-mode="title"] .dt-card,
+.dt-stage[data-mode="end"] .dt-card,
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-card { display: flex; }
+
+.dt-motions { display: flex; flex-direction: column; gap: 2.2cqh; }
+.dt-motion {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  padding-left: .85em;
+  font-family: var(--font-title);
+  line-height: 1.32;
+  letter-spacing: .03em;
+  overflow-wrap: anywhere;
+}
+.dt-motion::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .16em;
+  width: .2em;
+  height: 1em;
+  background: var(--pro);
+}
+.dt-motion[data-side="con"]::before { background: var(--con); }
+
+.dt-teams { display: none; }
+.dt-record { display: none; }
+.dt-stage[data-mode="end"] .dt-motions { display: none; }
+.dt-stage[data-mode="end"] .dt-record { display: table; }
+
+/* Title card: motions in the upper half, the two teams by seat in the lower half, both on the centre axis. */
+.dt-stage[data-mode="title"] .dt-card { flex: 1; justify-content: center; gap: 11cqh; padding: 0 3cqw; }
+.dt-stage[data-mode="title"] .dt-motions { align-self: center; }
+.dt-stage[data-mode="title"] .dt-motion { max-width: 84cqw; font-size: 6cqh; }
+.dt-stage[data-mode="title"] .dt-teams {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  font-family: var(--font-title);
+  font-size: 4.4cqh;
+  line-height: 1.25;
+}
+.dt-teams::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  bottom: 8%;
+  width: 1px;
+  background: var(--ink-dim);
+}
+.dt-teams span { min-width: 0; padding: 0 4cqw; overflow-wrap: anywhere; }
+.dt-teams span:first-child { text-align: right; }
+.dt-teams span:not([data-label=""])::before {
+  content: attr(data-label);
+  display: block;
+  margin-bottom: 1.2cqh;
+  font-family: var(--font-ui);
+  font-size: .5em;
+  letter-spacing: .4em;
+  color: color-mix(in oklab, var(--pro) 50%, var(--ink));
+}
+.dt-teams span[data-side="con"]::before { color: color-mix(in oklab, var(--con) 45%, var(--ink)); }
+
+/* Break: name, relaxed digits and the motions, centred as one group. */
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-head { margin: auto auto 0; max-width: 86cqw; text-align: center; }
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-clock[data-clock="main"] {
+  position: relative;
+  left: auto;
+  top: auto;
+  translate: none;
+  margin-top: 3cqh;
+}
+.dt-stage[data-kind="break"] .dt-digits { font-size: 22cqh; }
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-card { margin: 7cqh auto auto; max-width: 86cqw; }
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-motion { font-size: 3.4cqh; }
+.dt-stage[data-mode="stage"][data-kind="break"] .dt-bottom { margin-top: 0; }
+
+/* End card: the match record, as large as fits so the room can read it (spec §5.4); like the title card it
+   sits on the centre axis. */
+.dt-stage[data-mode="end"] .dt-head { align-self: center; text-align: center; }
+.dt-stage[data-mode="end"] .dt-card { margin-top: 3.6cqh; min-height: 0; }
+.dt-record {
+  align-self: center;
+  border-collapse: collapse;
+  /* The rows fill what is left above the bar: --record-budget is that height, less for a theme whose head or card
+     takes more of the stage (chroma's plates). */
+  font-size: min(2.6cqh, calc(var(--record-budget, 68cqh) / var(--rows, 20) / 1.5));
+  line-height: 1.5;
+}
+.dt-record th, .dt-record td { padding: 0 4em 0 0; text-align: left; white-space: nowrap; }
+.dt-record th {
+  padding-bottom: .35em;
+  border-bottom: 1px solid color-mix(in oklab, var(--ink) 22%, transparent);
+  font-weight: normal;
+  letter-spacing: .2em;
+  color: var(--ink-dim);
+}
+.dt-record tr:nth-child(2) td { padding-top: .45em; }
+.dt-record td:first-child { max-width: 56cqw; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-title); }
+.dt-record td:first-child::before {
+  content: "";
+  display: inline-block;
+  width: .5em;
+  height: .5em;
+  margin-right: .8em;
+  vertical-align: .12em;
+  background: color-mix(in oklab, var(--ground) 45%, var(--ink));   /* a break: the progress bar's grey */
+}
+.dt-record tr[data-side="pro"] td:first-child::before { background: var(--pro); }
+.dt-record tr[data-side="con"] td:first-child::before { background: var(--con); }
+.dt-record tr[data-kind="dual"] td:first-child::before { background: linear-gradient(90deg, var(--pro) 50%, var(--con) 50%); }
+.dt-record td:not(:first-child) { font-family: var(--font-digits); font-variant-numeric: tabular-nums; }
+.dt-record tr[data-over] td:nth-child(n+3) { color: var(--accent); }
+.dt-record tr[data-skipped] { opacity: .45; }
+
+/* ---- bottom bar: progress and what comes next ---- */
+
+.dt-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4cqw;
+  margin-top: auto;
+  font-size: 2cqh;
+  color: var(--ink-dim);
+}
+.dt-bottom::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -7cqh -5cqw -3.6cqh;
+  background: linear-gradient(to top, color-mix(in oklab, var(--side-deep) 55%, transparent), transparent);
+}
+
+.dt-progress { display: flex; align-items: flex-end; gap: .35cqh; min-width: 0; }
+.dt-seg {
+  --seg: color-mix(in oklab, var(--ground) 45%, var(--ink));
+  position: relative;
+  display: block;
+  flex: none;
+  width: 1.7cqh;
+  height: 1cqh;
+  border-radius: .2cqh;
+  background: var(--seg);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--ink) 22%, transparent);
+  opacity: .35;
+}
+.dt-seg[data-side="pro"] { --seg: var(--pro); }
+.dt-seg[data-side="con"] { --seg: var(--con); }
+.dt-seg[data-kind="dual"] { background: linear-gradient(90deg, var(--pro) 50%, var(--con) 50%); }
+.dt-seg[data-gap] { margin-left: 1.1cqh; }
+.dt-seg[data-state="done"], .dt-seg[data-state="current"] { opacity: 1; }
+.dt-seg[data-state="current"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -.75cqh;
+  height: .35cqh;
+  border-radius: .2cqh;
+  background: var(--accent);
+}
+
+.dt-next { display: flex; align-items: baseline; gap: 1.1em; min-width: 0; white-space: nowrap; }
+.dt-next span:empty { display: none; }
+.dt-next-label { letter-spacing: .2em; }
+.dt-next-name { overflow: hidden; text-overflow: ellipsis; font-family: var(--font-title); color: var(--ink); }
+.dt-next-time { font-family: var(--font-digits); font-variant-numeric: tabular-nums; color: var(--ink); }
+.dt-halves[data-idle] ~ .dt-bottom .dt-next-name { color: var(--accent); }
+
+/* ---- rings and toast ---- */
+
+.dt-ring {
+  position: absolute;
+  width: 34cqh;
+  height: 34cqh;
+  margin: -17cqh 0 0 -17cqh;
+  border: .45cqh solid var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+  animation: dt-ring 1100ms ease-out forwards;
+}
+
+.dt-toast {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  max-width: 70cqw;
+  padding: 1.3cqh 3.2cqh;
+  border-bottom: .3cqh solid var(--accent);
+  border-radius: 0 0 1.2cqh 1.2cqh;
+  background: color-mix(in oklab, var(--ground) 94%, var(--ink));
+  color: var(--ink);
+  font-size: 2.4cqh;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  translate: -50% -110%;
+  transition: translate 200ms var(--ease-out);
+}
+.dt-toast.is-shown { translate: -50% 0; }
+.dt-toast:empty { visibility: hidden; }
+
+/* ---- the one orchestrated moment: a new stage sweeps in from its side's seat ---- */
+
+.dt-stage.is-entering .dt-field { animation: dt-sweep-l 560ms var(--ease-out); }
+.dt-stage.is-entering[data-pro-seat="right"][data-side="pro"] .dt-field,
+.dt-stage.is-entering[data-pro-seat="left"][data-side="con"] .dt-field { animation-name: dt-sweep-r; }
+.dt-stage.is-entering .dt-half:first-child .dt-half-field { animation: dt-sweep-l 560ms var(--ease-out); }
+.dt-stage.is-entering .dt-half:last-child .dt-half-field { animation: dt-sweep-r 560ms var(--ease-out); }
+.dt-stage.is-entering .dt-title,
+.dt-stage.is-entering .dt-card { animation: dt-rise 420ms var(--ease-out) both; }
+.dt-stage.is-entering .dt-speaker,
+.dt-stage.is-entering .dt-team { animation: dt-rise 420ms var(--ease-out) 70ms both; }
+.dt-stage.is-entering .dt-clock { animation: dt-rise 420ms var(--ease-out) 140ms both; }
+
+/* No `to` frame: the sweep ends on the field's live clip-path. */
+@keyframes dt-sweep-l { from { clip-path: inset(0 100% 0 0); } }
+@keyframes dt-sweep-r { from { clip-path: inset(0 0 0 100%); } }
+@keyframes dt-rise { from { opacity: 0; transform: translateY(1.1cqh); } }
+@keyframes dt-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+@keyframes dt-bump { from { transform: scale(1.07); } }
+@keyframes dt-ring {
+  from { transform: scale(.6); opacity: .9; }
+  to { transform: scale(2.4); opacity: 0; }
+}
+
+/* A frozen demo (?demo=…&frozen=1) is a still for review: it shows each state at its end. A transition lands at
+   once; an animation stands 10 s in, so a one-shot is over (a ring gone, an entrance risen) and a loop is at its
+   start (a breathe at full strength), however long the browser took to take the picture. This also keeps a headless
+   browser from stalling a transition part way, as it does under a painter's canvas. */
+.dt-stage[data-still], .dt-stage[data-still] *, .dt-stage[data-still] *::before, .dt-stage[data-still] *::after {
+  transition: none !important;
+  animation-delay: -10s !important;
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-stage, .dt-stage *, .dt-stage *::before, .dt-stage *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

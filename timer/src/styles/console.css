@@ -1,0 +1,538 @@
+/* console.css: the timekeeper's layer over the stage: control dock, status pills, overlays, the console beside
+   a projector window, and the projector window's first hint (spec §5.7, §5.11).
+   Quiet surfaces in the theme's own colours, so the stage stays the only loud thing on screen. */
+
+/* ---- shared surface ---- */
+
+.dt-app, .dt-console {
+  /* Chroma's dark plate when there is one, otherwise the ground lifted a little toward the ink. */
+  --panel: var(--plate, color-mix(in oklab, var(--ground) 91%, var(--ink)));
+  --panel-line: color-mix(in oklab, var(--ink) 15%, transparent);
+  --panel-hover: color-mix(in oklab, var(--ink) 9%, transparent);
+  --panel-shadow: 0 1.2em 3em rgb(0 0 0 / .32);
+  --console-ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+/* The root is the size container, so the layer is measured in the same cqh as the stage. */
+.dt-dock, .dt-status, .dt-overlay, .dt-console, .dt-projector-hint {
+  --ui: clamp(13px, 1.55cqh, 22px);
+  font-family: var(--font-ui);
+  font-size: var(--ui);
+  line-height: 1.4;
+  color: var(--ink);
+  font-synthesis: none;
+}
+
+/* Zero specificity, so each component's own button rules win without !important. */
+:where(.dt-dock, .dt-overlay, .dt-console) button {
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.dt-dock button:focus-visible, .dt-overlay button:focus-visible, .dt-console button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.dt-dock button:disabled, .dt-overlay button:disabled, .dt-console button:disabled { opacity: .34; cursor: default; }
+
+.dt-dock kbd, .dt-overlay kbd, .dt-console kbd, .dt-projector-hint kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: .08em .42em;
+  border: 1px solid var(--panel-line);
+  border-bottom-width: 2px;
+  border-radius: .32em;
+  font-family: var(--font-ui);
+  font-size: .76em;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-align: center;
+  color: var(--ink-dim);
+}
+
+.dt-swatch {
+  flex: none;
+  width: .62em;
+  height: .62em;
+  border-radius: .12em;
+  background: var(--pro);
+}
+.dt-swatch[data-side="con"] { background: var(--con); }
+
+.dt-dock svg { flex: none; width: .8em; height: .8em; fill: currentColor; }
+.dt-pill svg { flex: none; width: 1.15em; height: 1.15em; fill: currentColor; }
+
+/* The pointer disappears from the projection with the dock; it comes back on the next movement. */
+.dt-app[data-idle]:not([data-layout="console"]) .dt-stage { cursor: none; }
+
+/* ---- dock: floats above the bottom bar, below the digits ---- */
+
+.dt-dock {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  bottom: 8.5cqh;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .3em;
+  width: max-content;   /* shrink-to-fit would stop at the half width left of `left: 50%` */
+  max-width: 90cqw;
+  padding: .36em;
+  border: 1px solid var(--panel-line);
+  border-radius: .75em;
+  background: var(--panel);
+  box-shadow: var(--panel-shadow);
+  letter-spacing: .06em;
+  opacity: 0;
+  translate: -50% .9em;
+  pointer-events: none;
+  transition: opacity 200ms var(--console-ease), translate 260ms var(--console-ease);
+}
+.dt-dock[data-shown] { opacity: 1; translate: -50% 0; pointer-events: auto; }
+/* A pinned dock (a still for review) is simply there, with no entrance to catch half way. */
+.dt-dock[data-pinned] { transition: none; }
+
+.dt-dock-group { display: flex; gap: .15em; }
+.dt-dock-group + .dt-dock-group { padding-left: .3em; border-left: 1px solid var(--panel-line); }
+
+.dt-dock button {
+  display: inline-flex;
+  align-items: center;
+  gap: .5em;
+  padding: .55em .78em;
+  border-radius: .5em;
+  white-space: nowrap;
+}
+.dt-dock button:hover:not(:disabled) { background: var(--panel-hover); }
+.dt-dock button[data-primary] {
+  justify-content: center;
+  min-width: 7.6em;
+  background: color-mix(in oklab, var(--ink) 13%, transparent);
+}
+.dt-dock button[data-primary]:hover:not(:disabled) { background: color-mix(in oklab, var(--ink) 19%, transparent); }
+.dt-dock .dt-icon { display: inline-flex; }
+.dt-dock button[hidden] { display: none; }
+
+/* ---- status pills: top right, under the top bar ---- */
+
+.dt-status {
+  position: absolute;
+  z-index: 15;
+  top: 9cqh;
+  right: 5cqw;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: .5em;
+  font-size: clamp(12px, 1.4cqh, 20px);
+  pointer-events: none;
+}
+.dt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .45em;
+  padding: .38em .95em;
+  border: 1px solid var(--panel-line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink-dim);
+  letter-spacing: .1em;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 400ms ease, visibility 0s linear 400ms;
+}
+.dt-pill[data-shown] { opacity: 1; visibility: visible; transition: opacity 400ms ease; }
+.dt-pill[data-kind="muted"] { order: -1; color: var(--accent); }
+
+/* ---- overlays ---- */
+
+.dt-overlay {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dt-scrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--ground) 50%, transparent);
+  animation: dt-fade 200ms ease both;
+}
+
+.dt-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(44em, 90cqw);
+  max-height: 86cqh;
+  border: 1px solid var(--panel-line);
+  border-radius: .8em;
+  background: var(--panel);
+  box-shadow: var(--panel-shadow);
+  outline: none;
+  animation: dt-panel-in 240ms var(--console-ease) both;
+}
+.dt-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2em;
+  padding: 1em 1.1em .85em 1.5em;
+  border-bottom: 1px solid var(--panel-line);
+}
+.dt-panel-head h2 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 1.3em;
+  font-weight: 600;
+  letter-spacing: .14em;
+}
+.dt-close { padding: .3em; border-radius: .4em; }
+.dt-close:hover kbd { color: var(--ink); }
+.dt-panel-body { min-height: 0; overflow: auto; padding: .7em 1.5em 1.3em; }
+.dt-panel-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: .9em 1.5em 1.1em;
+  border-top: 1px solid var(--panel-line);
+}
+.dt-button {
+  padding: .5em 1.3em;
+  border: 1px solid var(--panel-line);
+  border-radius: .5em;
+  letter-spacing: .1em;
+}
+.dt-button:hover { background: var(--panel-hover); }
+.dt-hint { margin: 1.1em 0 0; font-size: .88em; letter-spacing: .06em; color: var(--ink-dim); }
+
+/* Stage list: a drawer from the left; the stage stays in view beside it. */
+.dt-overlay[data-name="stages"] { justify-content: flex-start; align-items: stretch; }
+.dt-overlay[data-name="stages"] .dt-scrim { background: color-mix(in oklab, var(--ground) 28%, transparent); }
+.dt-overlay[data-name="stages"] .dt-panel {
+  width: min(30em, 46cqw);
+  max-height: none;
+  border-width: 0 1px 0 0;
+  border-radius: 0;
+  animation-name: dt-drawer-in;
+}
+
+.dt-stagelist { margin: 0 -.6em; padding: 0; list-style: none; }
+.dt-row {
+  display: grid;
+  grid-template-columns: 1.6em .24em minmax(0, 1fr) auto 5.6em;
+  align-items: center;
+  gap: .75em;
+  width: 100%;
+  padding: .5em .6em;
+  border-radius: .45em;
+  text-align: left;
+}
+.dt-row[data-gap] { margin-top: .75em; }
+.dt-row:hover { background: var(--panel-hover); }
+.dt-row[aria-current] { background: color-mix(in oklab, var(--ink) 12%, transparent); }
+.dt-row-index, .dt-row-plan, .dt-row-state {
+  font-family: var(--font-digits);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink-dim);
+}
+.dt-row-index { text-align: right; }
+.dt-row-side {
+  align-self: stretch;
+  border-radius: .12em;
+  background: color-mix(in oklab, var(--ground) 50%, var(--ink));
+}
+.dt-row[data-side="pro"] .dt-row-side { background: var(--pro); }
+.dt-row[data-side="con"] .dt-row-side { background: var(--con); }
+.dt-row[data-kind="dual"] .dt-row-side { background: linear-gradient(var(--pro) 50%, var(--con) 50%); }
+.dt-row-name { overflow: hidden; font-family: var(--font-title); white-space: nowrap; text-overflow: ellipsis; }
+.dt-row-state { text-align: right; }
+/* Gold means overtime here (spec §5.7); the current row's time is plain ink behind a gold dot. */
+.dt-row[aria-current] .dt-row-state { color: var(--ink); }
+.dt-row[data-over] .dt-row-state, .dt-row-dot { color: var(--accent); }
+
+/* Help: the key table. */
+.dt-keys { width: 100%; border-collapse: collapse; }
+.dt-keys th, .dt-keys td { padding: .42em 0; vertical-align: baseline; text-align: left; }
+.dt-keys tr + tr > * { border-top: 1px solid var(--panel-line); }
+.dt-keys th { padding-right: 1.8em; font-weight: normal; white-space: nowrap; }
+.dt-keys kbd { color: var(--ink); }
+.dt-keys kbd + kbd { margin-left: .45em; }
+
+/* Insert: one row per variant, a button per side. */
+.dt-extra h3 {
+  margin: .5em 0 .5em;
+  font-family: var(--font-title);
+  font-size: 1.1em;
+  font-weight: 600;
+  letter-spacing: .12em;
+}
+.dt-extra h3 small, .dt-extra-name small {
+  margin-left: .9em;
+  font-family: var(--font-ui);
+  font-size: .76em;
+  font-weight: normal;
+  letter-spacing: .06em;
+  color: var(--ink-dim);
+}
+.dt-extra-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: .8em;
+  padding: .75em 0;
+  border-top: 1px solid var(--panel-line);
+}
+.dt-extra-name { font-family: var(--font-title); }
+.dt-extra-name small { display: block; margin: .2em 0 0; }
+.dt-extra-time { font-family: var(--font-digits); font-variant-numeric: tabular-nums; color: var(--ink-dim); }
+.dt-extra-side {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5em;
+  min-width: 6.8em;
+  padding: .5em 1em;
+  border: 1px solid var(--panel-line);
+  border-radius: .5em;
+  letter-spacing: .1em;
+}
+.dt-extra-side:hover:not(:disabled) { background: var(--panel-hover); }
+
+/* Record: the same table as the end card, with the overtime column. */
+.dt-record-table { width: 100%; border-collapse: collapse; }
+.dt-record-table th, .dt-record-table td { padding: .32em 1.6em .32em 0; text-align: left; white-space: nowrap; }
+.dt-record-table th {
+  position: sticky;
+  top: -.7em;
+  padding-top: .7em;
+  border-bottom: 1px solid var(--panel-line);
+  background: var(--panel);
+  font-weight: normal;
+  letter-spacing: .2em;
+  color: var(--ink-dim);
+}
+.dt-record-table td:first-child { max-width: 24em; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-title); }
+.dt-record-table td:first-child::before {
+  content: "";
+  display: inline-block;
+  width: .5em;
+  height: .5em;
+  margin-right: .8em;
+  vertical-align: .12em;
+  background: color-mix(in oklab, var(--ground) 50%, var(--ink));
+}
+.dt-record-table tr[data-side="pro"] td:first-child::before { background: var(--pro); }
+.dt-record-table tr[data-side="con"] td:first-child::before { background: var(--con); }
+.dt-record-table td:not(:first-child) { font-family: var(--font-digits); font-variant-numeric: tabular-nums; }
+.dt-record-table tr[data-over] td:nth-child(n+3) { color: var(--accent); }
+.dt-record-table tr[data-current] td { background: var(--panel-hover); }
+
+/* The copy fallback's textarea, off screen. */
+.dt-offscreen { position: fixed; left: -9999px; top: 0; opacity: 0; }
+
+/* ---- console: stage list, preview and controls beside a projector window (spec §5.7) ---- */
+
+/* The console's right column takes over from the dock. */
+.dt-app[data-layout="console"] .dt-dock { display: none; }
+
+.dt-console {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 24em) minmax(0, 1fr) minmax(0, 19em);
+  background: var(--ground);
+}
+.dt-console-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.dt-console-list, .dt-console-controls { background: var(--panel); }
+.dt-console-list { border-right: 1px solid var(--panel-line); }
+.dt-console-controls { overflow: auto; border-left: 1px solid var(--panel-line); }
+
+/* Column heads: small, spaced, dim; the content below is what matters. */
+.dt-console-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 1.2em;
+  min-height: 4.2em;
+  margin: 0;
+  padding: 0 1.75em;
+  font-size: .8em;
+  font-weight: normal;
+  letter-spacing: .28em;
+  color: var(--ink-dim);
+}
+.dt-console-head h2 { margin: 0; font: inherit; letter-spacing: inherit; }
+
+.dt-console-scroll { flex: 1; min-height: 0; overflow: auto; padding: 0 1.4em 1.4em; }
+
+/* Middle: the preview, as large as the column allows at the projector's 16:9. */
+.dt-console-main { padding: 0 2em 1.6em; }
+.dt-console-main .dt-console-head { padding: 0; }
+.dt-console-status { margin-left: auto; }
+.dt-console .dt-status {
+  position: static;
+  flex-direction: row;
+  font-size: 1em;
+  letter-spacing: normal;
+}
+.dt-console .dt-pill:not([data-shown]) { display: none; }
+.dt-console-live { display: inline-flex; align-items: center; gap: .7em; letter-spacing: .14em; }
+.dt-console-live::before {
+  content: "";
+  width: .55em;
+  height: .55em;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 .3em color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
+/* The preview and the note under it, centred together; the preview gets all the room but the note's 5em. */
+.dt-preview-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+}
+/* A size container of its own (.dt-stage-host), so the stage inside is laid out exactly as on the projector. */
+.dt-preview {
+  flex: none;
+  width: min(100cqw, (100cqh - 5em) * 16 / 9);
+  height: min(100cqh - 5em, 100cqw * 9 / 16);
+  border-radius: .45em;
+  box-shadow: 0 0 0 1px var(--panel-line), var(--panel-shadow);
+}
+
+/* The timekeeper's note for this stage, one line as wide as the preview. Its room is kept when there is none,
+   so the preview never jumps. */
+.dt-console-note {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: 1.4em;
+  width: min(100cqw, (100cqh - 5em) * 16 / 9);
+  margin: 1.3em 0 0;
+  padding: .85em 1.3em;
+  border-left: 3px solid var(--accent);
+  border-radius: .2em .5em .5em .2em;
+  background: var(--panel);
+}
+.dt-console-note[hidden] { display: flex; visibility: hidden; }
+.dt-console-note-label { flex: none; font-size: .8em; letter-spacing: .24em; color: var(--ink-dim); }
+.dt-console-note-text {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-title);
+  letter-spacing: .06em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The console's list has room for two lines of a long stage name. */
+.dt-console .dt-row-name {
+  display: -webkit-box;
+  line-height: 1.3;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Right: the controls, grouped as on the sketch; each group a row of equal buttons. */
+.dt-control-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45em;
+  padding: 1.05em 1.4em;
+  border-top: 1px solid var(--panel-line);
+}
+.dt-console-head + .dt-control-group { padding-top: 0; border-top: 0; }
+.dt-console-controls button {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: .5em;
+  min-width: 0;
+  padding: .62em .5em;
+  border: 1px solid var(--panel-line);
+  border-radius: .5em;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+.dt-console-controls button:hover:not(:disabled) { background: var(--panel-hover); }
+.dt-console-controls button[hidden] { display: none; }
+.dt-console-controls button[data-wide] { flex-basis: 100%; }
+.dt-console-controls button[data-primary] {
+  flex-basis: 100%;
+  padding: 1.05em .8em;
+  border-color: transparent;
+  background: color-mix(in oklab, var(--ink) 13%, transparent);
+  font-size: 1.15em;
+  letter-spacing: .14em;
+}
+.dt-console-controls button[data-primary]:hover:not(:disabled) { background: color-mix(in oklab, var(--ink) 19%, transparent); }
+.dt-console-controls button[aria-pressed="true"] {
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
+  color: var(--accent);
+}
+.dt-console-controls .dt-icon { display: inline-flex; }
+.dt-console-controls svg { flex: none; width: .8em; height: .8em; fill: currentColor; }
+.dt-adjust button { padding-inline: 0; font-family: var(--font-digits); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.dt-adjust-unit { align-self: center; padding-left: .2em; font-size: .9em; color: var(--ink-dim); }
+.dt-volume {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: .9em;
+  padding-top: .45em;
+  letter-spacing: .1em;
+  color: var(--ink-dim);
+}
+.dt-volume input { flex: 1; min-width: 0; margin: 0; accent-color: var(--accent); }
+
+/* ---- projector window: the first hint, gone at the first key ---- */
+
+.dt-projector-hint {
+  position: absolute;
+  z-index: 25;
+  left: 50%;
+  bottom: 15cqh;
+  padding: 1em 1.8em;
+  border: 1px solid var(--panel-line);
+  border-radius: .75em;
+  background: var(--panel);
+  box-shadow: var(--panel-shadow);
+  font-size: clamp(14px, 2.4cqh, 32px);
+  letter-spacing: .16em;
+  white-space: nowrap;
+  translate: -50% 0;
+  pointer-events: none;
+  animation: dt-panel-in 320ms var(--console-ease) both;
+}
+.dt-projector-hint kbd { margin: 0 .2em; color: var(--ink); }
+.dt-projector-hint[hidden] { display: none; }
+/* Full screen on the projector: nothing to point at, so no pointer. */
+.dt-app[data-layout="projector"]:fullscreen .dt-stage { cursor: none; }
+
+@keyframes dt-fade { from { opacity: 0; } }
+@keyframes dt-panel-in { from { opacity: 0; transform: translateY(1.2cqh); } }
+@keyframes dt-drawer-in { from { transform: translateX(-100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-dock, .dt-pill, .dt-overlay, .dt-overlay *, .dt-projector-hint {
+    animation: none !important;
+    transition: none !important;
+  }
+}

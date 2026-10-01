@@ -1,0 +1,71 @@
+/* @theme id=daylight name=昼 desc=浅色底，色场收成数字后的一条横带，适合亮场投影 tone=light order=5 */
+/* 昼: for lit rooms. The field is a 34cqh band behind the digits instead of the whole screen (spec §5.6). */
+[data-theme="daylight"] {
+  --pro: #B3261E;
+  --pro-deep: #EBC9C4;      /* the band's pale track: dark digits and titles read on it */
+  --con: #1A4E8F;
+  --con-deep: #C7D6EA;
+  --ground: #E7E9EC;
+  --ink: #15171B;
+  --ink-dim: rgb(21 23 27 / .68);
+  --accent: #B7791F;
+  --on-side: #F7F4EE;
+  --digits-on-field: #F7F4EE;
+  --digits-off-field: var(--ink);
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  --backdrop: none;
+  --band: 34cqh;
+  --text-field: var(--ground);   /* the band stays below the head, so all text above it sits on the ground */
+  --text-deep: var(--ground);
+}
+
+.dt-stage[data-theme="daylight"] { background: var(--ground); }
+.dt-stage[data-theme="daylight"] .dt-bottom::before { display: none; }
+
+/* The band and its deep track sit on the digits' centre line; the band is taken back the same way. */
+.dt-stage[data-theme="daylight"] .dt-field,
+.dt-stage[data-theme="daylight"] .dt-warnline,
+.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"] .dt-deco {
+  top: var(--clock-y);
+  bottom: auto;
+  height: var(--band);
+  translate: 0 -50%;
+}
+.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"] .dt-deco { background: var(--side-deep); }
+/* Overtime: the emptied track turns gold under ink digits (gold digits on the pale track would read at 2.4:1). */
+.dt-stage[data-theme="daylight"][data-kind="single"][data-phase="over"] .dt-deco { background: var(--accent); }
+.dt-stage[data-theme="daylight"] .dt-clock[data-phase="over"] .dt-digits { color: var(--digits-off-field); }
+/* Gold on the lit band is too faint (about 1.9:1 on 朱), so the band's line carries a light halo. */
+.dt-stage[data-theme="daylight"] .dt-warnline {
+  -webkit-mask-image: none;
+  mask-image: none;
+  box-shadow: 0 0 0 1px var(--on-side);
+}
+
+/* Dual: each half keeps the light ground, with its band draining from the top inside the track. */
+.dt-stage[data-theme="daylight"] .dt-half { --half-ground: var(--ground); }
+.dt-stage[data-theme="daylight"] .dt-half::before {
+  content: "";
+  position: absolute;
+  inset: 52% 0 auto;
+  height: var(--band);
+  translate: 0 -50%;
+  background: var(--side-deep);
+}
+.dt-stage[data-theme="daylight"] .dt-half { --field-top: calc(52cqh + var(--band) / 2 - var(--remain, 1) * var(--band)); }
+.dt-stage[data-theme="daylight"] .dt-half-field {
+  bottom: calc(48% - var(--band) / 2);
+  height: calc(var(--remain, 1) * var(--band));
+}
+.dt-stage[data-theme="daylight"] .dt-team { color: var(--ink); }
+/* A side out of time shows its empty pale track, so its 「时间到」 is inked like the digits off the band. */
+.dt-stage[data-theme="daylight"] .dt-half[data-locked] .dt-clock { color: var(--digits-off-field); }
+/* Dim only the band and digits of the waiting side; a dimmed light ground or pale track would read as a grey slab. */
+.dt-stage[data-theme="daylight"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: none; }
+.dt-stage[data-theme="daylight"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-half-field,
+.dt-stage[data-theme="daylight"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-clock {
+  filter: saturate(.45) brightness(.78);
+}
+.dt-stage[data-theme="daylight"] .dt-half + .dt-half { box-shadow: inset 1px 0 0 color-mix(in oklab, var(--ink) 14%, transparent); }

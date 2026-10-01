@@ -1,0 +1,66 @@
+/* base.css: the theme variable contract with 堂 (hall) defaults, a small reset, and the stage's size basis. */
+
+/* The digits' face. Edge loads the system Bahnschrift as a set of named faces and then ignores
+   font-variation-settings on it, so the digits never tense up. Declared here with its axis ranges, the same
+   font varies continuously in weight and width (spec §5.3). Every theme's --font-digits leads with it. */
+@font-face {
+  font-family: "DT Digits";
+  src: local("Bahnschrift");
+  font-weight: 300 700;
+  font-stretch: 75% 100%;
+}
+
+/* The contract every theme defines (spec §5.6). These defaults are hall's values. */
+:root {
+  --pro: #B8322A;
+  --pro-deep: #521511;
+  --con: #1D4E89;
+  --con-deep: #0C2340;
+  --ground: #2A2D33;
+  --ink: #F4EFE4;
+  --ink-dim: rgb(244 239 228 / .6);
+  --accent: #E4B04A;
+  --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+  --font-title: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
+  --backdrop: none;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-ui);
+}
+
+/* The host decides the size; everything on the stage is sized in container units (cqh / cqw),
+   so a shrunken preview on the console and the full-screen projection keep the same proportions. */
+.dt-stage-host {
+  container-type: size;
+  position: relative;
+  overflow: hidden;
+}
+
+.dt-stage {
+  position: absolute;
+  inset: 0;
+  /* Optional contract extras with derived defaults; a theme may override them. */
+  --on-side: var(--ink);        /* text drawn on a side colour (team names, 「暂停」) */
+  --digits-on-field: var(--ink);    /* the digits where they sit on the speaking side's field */
+  --digits-off-field: var(--ink);   /* the digits where the field has been taken back (spec §1.5) */
+  --speaker-ink: var(--ink);        /* the speaker line: set apart by size and spacing, not transparency */
+  --text-field: var(--side-color);  /* the two grounds the top bar, stage name and speaker can sit on: a theme */
+  --text-deep: var(--side-deep);    /* whose field never reaches them points these at what does (spec §1.5) */
+  --used: 0;
+  --tension: 0;
+  --warn-at: 0;
+}
+
+.dt-stage [hidden] { display: none !important; }
+
+/* The page shell ui.js mounts into fills the window. */
+.dt-app { height: 100%; }
