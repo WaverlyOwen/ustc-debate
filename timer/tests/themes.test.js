@@ -77,6 +77,42 @@
     })));
   }
 
+  // 2026-10-03 final review: 重置 / 退出 waiting for the second click is the one state that must be read before the
+  // next click, so its words keep 4.5:1 in the dock and the S drawer of every theme, and in the console.
+  DT.test('themes: an armed 重置 or 退出 reads at 4.5:1 on every theme', () => {
+    const box = document.getElementById('sandbox');
+    const ARMED = '<span class="dt-arm"><span class="dt-arm-rest"><span>退出</span><kbd>Q Q</kbd></span>' +
+      '<span class="dt-arm-ask">再点一次退出</span></span>';
+    const check = (where, button, words) => {
+      const fg = getComputedStyle(words).color;
+      const bg = getComputedStyle(button).backgroundColor;
+      assert.ok(/^rgb\(/.test(bg), where + ': an opaque fill, not a tint (' + bg + ')');
+      const c = contrast(fg, bg);
+      assert.ok(c >= 4.5, where + ': ' + c.toFixed(2) + ' (' + fg + ' on ' + bg + ')');
+    };
+    try {
+      DT.THEMES.map(t => t.id).concat(['console']).forEach(id => {
+        const theme = id === 'console' ? 'hall' : id;
+        box.innerHTML = '<div class="dt-app dt-stage-host" style="width:1366px;height:768px" data-theme="' + theme + '">' +
+          '<div class="dt-dock" data-shown><div class="dt-dock-group"><button type="button" data-armed="a">' + ARMED +
+          '</button></div></div><div class="dt-overlay"><ol class="dt-stagelist"><li class="dt-stagelist-item">' +
+          '<button class="dt-row" type="button"></button><button class="dt-row-reset" type="button" data-armed="a">' +
+          '<span class="dt-row-reset-icon">↺</span><span class="dt-row-reset-label">再点一次重置</span></button></li></ol></div>' +
+          '<div class="dt-console" data-theme="hall"><aside class="dt-console-controls"><div class="dt-control-group">' +
+          '<button type="button" data-armed="a">' + ARMED + '</button></div></aside></div></div>';
+        if (id === 'console') {
+          const b = box.querySelector('.dt-console-controls button');
+          check('console', b, b.querySelector('.dt-arm-ask'));
+          return;
+        }
+        const dockButton = box.querySelector('.dt-dock button');
+        check(id + ' / dock', dockButton, dockButton.querySelector('.dt-arm-ask'));
+        const row = box.querySelector('.dt-row-reset');
+        check(id + ' / stage list', row, row.querySelector('.dt-row-reset-label'));
+      });
+    } finally { box.innerHTML = ''; }
+  });
+
   DT.test('themes: every theme in DT.THEMES has a name, a description and a tone', () => {
     assert.ok(DT.THEMES.length >= 3);
     DT.THEMES.forEach(t => {

@@ -185,10 +185,10 @@
     try {
       press('Space');
       const exit = dockBtn('exit');
-      assert.equal(exit.textContent, '退出Q Q');
+      assert.equal(exit.querySelector('.dt-arm-rest').textContent, '退出Q Q');
       exit.click();
       assert.ok(exit.hasAttribute('data-armed'));
-      assert.equal(exit.querySelector('span').textContent, '再点一次确认');
+      assert.equal(exit.querySelector('.dt-arm-ask').textContent, '再点一次退出');
       t.clock.advance(100); exit.click();
       assert.equal(t.c.route(), 'timer', 'two clicks 100 ms apart are one double-click');
       t.clock.advance(400); exit.click();
@@ -206,7 +206,7 @@
       assert.ok(exit.hasAttribute('data-armed'));
       dockBtn('stages').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       assert.equal(exit.hasAttribute('data-armed'), false);
-      assert.equal(exit.querySelector('span').textContent, '退出');
+      assert.equal(getComputedStyle(exit.querySelector('.dt-arm-rest')).visibility, 'visible', '退出 again');
       t.clock.advance(300); exit.click();
       assert.equal(t.c.route(), 'timer');
     } finally { t.done(); }
@@ -238,7 +238,7 @@
       assert.equal(btn.hidden, false);
       assert.equal(list.querySelector('button[aria-label="重置第 3 个环节"]').hidden, true, 'an unused one does not');
       btn.click();
-      assert.equal(btn.querySelector('.dt-row-reset-label').textContent, '再点一次确认');
+      assert.equal(btn.querySelector('.dt-row-reset-label').textContent, '再点一次重置　✓ 0:20', 'what it throws away');
       assert.equal(t.c.session().cursor, 1, 'one click does nothing yet');
       assert.ok(t.c.session().runs[t.c.session().timeline[0].id]);
       t.clock.advance(300); btn.click();
@@ -248,6 +248,74 @@
       assert.equal(btn.hidden, true);
       press('KeyZ');
       assert.equal(DT.engine.remaining(DT.engine.getRun(t.c.session(), t.c.session().timeline[0].id), 'main', DT.clock.now()), 160000);
+    } finally { t.done(); }
+  });
+
+  // 2026-10-03 final review: the armed state names its action, keeps its footprint, and takes a fresh press.
+  DT.test('ui: arming 重置 or 退出 names the action and moves nothing in the dock', () => {
+    const t = bootSetup(memStorage());
+    try {
+      press('Space'); t.clock.advance(5000); press('Space');
+      const dock = document.querySelector('.dt-dock');
+      [['reset', '再点一次重置'], ['exit', '再点一次退出']].forEach(([act, words]) => {
+        const b = dockBtn(act);
+        const before = [b.getBoundingClientRect().width, dock.getBoundingClientRect().width];
+        b.click();
+        assert.ok(b.hasAttribute('data-armed'), act);
+        assert.equal(b.querySelector('.dt-arm-ask').textContent, words);
+        assert.equal(getComputedStyle(b.querySelector('.dt-arm-ask')).visibility, 'visible', act + ': the words show');
+        assert.equal(getComputedStyle(b.querySelector('.dt-arm-rest')).visibility, 'hidden', act + ': in place of the rest');
+        const after = [b.getBoundingClientRect().width, dock.getBoundingClientRect().width];
+        assert.near(after[0], before[0], 0.5, act + ': the button keeps its width');
+        assert.near(after[1], before[1], 0.5, act + ': so does the dock');
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      });
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: an armed button gives up when the pointer leaves it', () => {
+    const t = bootSetup(memStorage());
+    try {
+      const exit = dockBtn('exit');
+      exit.click();
+      assert.ok(exit.hasAttribute('data-armed'));
+      exit.dispatchEvent(new PointerEvent('pointerleave'));
+      assert.equal(exit.hasAttribute('data-armed'), false);
+      t.clock.advance(300); exit.click();
+      assert.equal(t.c.route(), 'timer', 'the click after coming back arms it again');
+      assert.ok(exit.hasAttribute('data-armed'));
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a held Enter or Space cannot confirm an armed button', () => {
+    const t = bootSetup(memStorage());
+    try {
+      const exit = dockBtn('exit');
+      const down = (key, repeat) => {
+        const e = new KeyboardEvent('keydown', { key, code: key === ' ' ? 'Space' : key, repeat, bubbles: true, cancelable: true });
+        exit.dispatchEvent(e);
+        return e.defaultPrevented;
+      };
+      assert.equal(down('Enter', true), true, 'a repeat of Enter does not click');
+      assert.equal(down(' ', true), true, 'nor one of Space');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: arming a row\'s ↺ leaves the row where it was', () => {
+    const t = bootSetup(memStorage());
+    try {
+      press('Space'); t.clock.advance(20000); press('ArrowRight');
+      press('KeyS');
+      const list = document.querySelector('.dt-overlay[data-name="stages"]');
+      const btn = list.querySelector('button[aria-label="重置第 1 个环节"]');
+      const row = btn.parentNode.querySelector('.dt-row');
+      const next = list.querySelectorAll('.dt-row')[1];
+      const box = e => { const r = e.getBoundingClientRect(); return [r.top, r.width, r.height]; };
+      const before = [box(row), box(next)];
+      btn.click();
+      assert.ok(btn.hasAttribute('data-armed'));
+      const after = [box(row), box(next)];
+      [0, 1].forEach(i => [0, 1, 2].forEach(k => assert.near(after[i][k], before[i][k], 0.5, 'row ' + i + ' part ' + k)));
     } finally { t.done(); }
   });
 

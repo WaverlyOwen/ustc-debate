@@ -256,7 +256,7 @@
       const id = t.c.session().timeline[7].id;
       assert.ok(t.c.session().runs[id]);
       btn('reset').click();
-      assert.equal(btn('reset').querySelector('span').textContent, '再点一次确认');
+      assert.equal(btn('reset').querySelector('.dt-arm-ask').textContent, '再点一次重置');
       t.advance(300); btn('reset').click();
       assert.equal(t.c.session().runs[id], undefined, 'the stage is fresh');
       assert.equal(t.c.session().cursor, 7);
@@ -272,7 +272,7 @@
       press('Space');
       t.advance(8000);
       btn('exit').click();
-      assert.equal(btn('exit').querySelector('span').textContent, '再点一次确认');
+      assert.equal(btn('exit').querySelector('.dt-arm-ask').textContent, '再点一次退出');
       t.advance(300); btn('exit').click();
       assert.equal(t.c.route(), 'setup');
       assert.equal(t.root.querySelector('.dt-console'), null);

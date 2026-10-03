@@ -402,6 +402,25 @@ class TrustedKeyboardTest(unittest.TestCase):
         self.assertEqual(saved["cursor"], 0)
         self.assertFalse(saved["runs"][stage["id"]]["running"], "the clock stopped on the way out")
 
+    def test_8_a_held_enter_on_exit_does_not_confirm(self):
+        """Enter held on a focused 退出 (reached with Tab) clicks on every repeat; only a fresh press may confirm."""
+        self.open("")
+        self.start_match()
+        self.key("Space")
+        self.js("document.querySelector(\".dt-dock button[data-act='exit']\").focus()")
+        enter = dict(KEYS["Enter"])
+        text = enter.pop("text")
+        self.cdp.send("Input.dispatchKeyEvent", dict(type="keyDown", text=text, unmodifiedText=text, **enter))
+        self.wait("document.querySelector(\".dt-dock button[data-act='exit'][data-armed]\")")
+        for _ in range(8):   # the browser's auto-repeat, about 30 a second after half a second
+            time.sleep(0.07 if _ else 0.5)
+            self.cdp.send("Input.dispatchKeyEvent",
+                          dict(type="keyDown", text=text, unmodifiedText=text, autoRepeat=True, **enter))
+        self.cdp.send("Input.dispatchKeyEvent", dict(type="keyUp", **enter))
+        time.sleep(0.1)
+        self.assertEqual(self.js("window.__dtTest.route()"), "timer", "holding Enter does not exit")
+        self.assertTrue(self.running())
+
 
 if __name__ == "__main__":
     unittest.main()

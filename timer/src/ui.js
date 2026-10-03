@@ -5,7 +5,6 @@
   'use strict';
   const DOUBLE_MS = 1500;       // the second press of R R / G G / Q Q, or click of 重置 / 退出, must come within this
   const CONFIRM_MIN_MS = 250;   // a second click sooner than this is one double-click, not a confirmation
-  const CONFIRM = '再点一次确认';
   const DOCK_IDLE_MS = 2500;    // the dock folds away after this long without pointer movement
   const RUNG_MEMORY = 32;       // visual events the projector remembers, so one reported twice plays once
   const MERGE_MS = 1000;        // adjusts of one clock this close together are one undo step (a held arrow key)
@@ -61,6 +60,14 @@
       '<path d="m10.4 5.8 4 4.4m0-4.4-4 4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
   };
 
+  // 重置 and 退出 carry the words they show while armed (new spec §2.1) in the same cell as their rest, so the
+  // button is always as wide as the longer of the two and arming moves nothing under the pointer.
+  const armable = (act, label, keys, ask) => '<button type="button" data-act="' + act + '"><span class="dt-arm">' +
+    '<span class="dt-arm-rest"><span>' + label + '</span><kbd>' + keys + '</kbd></span>' +
+    '<span class="dt-arm-ask">' + ask + '</span></span></button>';
+  const RESET_BUTTON = armable('reset', '重置', 'R R', '再点一次重置');
+  const EXIT_BUTTON = armable('exit', '退出', 'Q Q', '再点一次退出');
+
   // Static markup only; session text goes in through textContent.
   const DOCK =
     '<div class="dt-dock-group">' +
@@ -74,13 +81,13 @@
     '<button type="button" data-act="floor" data-side="con"><i class="dt-swatch" data-side="con"></i><span>反方</span><kbd>L</kbd></button></div>' +
     '<div class="dt-dock-group">' +
     '<button type="button" data-act="undo"><span>撤销</span><kbd>Z</kbd></button>' +
-    '<button type="button" data-act="reset"><span>重置</span><kbd>R R</kbd></button>' +
+    RESET_BUTTON +
     '<button type="button" data-act="insert"><span>插入奇袭</span><kbd>X</kbd></button>' +
     '<button type="button" data-act="stages"><span>环节</span><kbd>S</kbd></button>' +
     '<button type="button" data-act="editor"><span>赛制</span><kbd>E</kbd></button></div>' +
     '<div class="dt-dock-group"><button type="button" data-act="projector"><span>投影窗口</span><kbd>O</kbd></button>' +
     '<button type="button" data-act="fullscreen"><span>全屏</span><kbd>F</kbd></button></div>' +
-    '<div class="dt-dock-group" data-exit><button type="button" data-act="exit"><span>退出</span><kbd>Q Q</kbd></button></div>';
+    '<div class="dt-dock-group" data-exit>' + EXIT_BUTTON + '</div>';
   // The console (spec §5.7): stage list, preview, controls. The stage moves into .dt-preview while it is open.
   const ADJUST = [[-5000, '−5'], [-1000, '−1'], [1000, '+1'], [5000, '+5']];
   const CONSOLE =
@@ -106,14 +113,14 @@
     '<button type="button" data-act="next"><span>下一环节</span><kbd>→</kbd></button></div>' +
     '<div class="dt-control-group">' +
     '<button type="button" data-act="undo"><span>撤销</span><kbd>Z</kbd></button>' +
-    '<button type="button" data-act="reset"><span>重置</span><kbd>R R</kbd></button>' +
+    RESET_BUTTON +
     '<button type="button" data-act="insert" data-wide><span>插入奇袭</span><kbd>X</kbd></button></div>' +
     '<div class="dt-control-group">' +
     '<button type="button" data-act="bell"><span>敲铃</span><kbd>B</kbd></button>' +
     '<button type="button" data-act="mute" aria-pressed="false"><span class="dt-mute-label">静音</span><kbd>M</kbd></button>' +
     // Not a <label>: a click on 音量 would give the slider focus (new spec §3, P1).
     '<div class="dt-volume"><span>音量</span><input type="range" name="volume" aria-label="音量" min="0" max="1" step="0.05"></div></div>' +
-    '<div class="dt-control-group" data-exit><button type="button" data-act="exit"><span>退出</span><kbd>Q Q</kbd></button></div>' +
+    '<div class="dt-control-group" data-exit>' + EXIT_BUTTON + '</div>' +
     '</aside>';
   const STATUS =
     '<span class="dt-pill" data-kind="sound">按任意键启用声音</span>' +
@@ -317,21 +324,26 @@
     box.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
   }
 
-  // The buttons that reset or exit ask twice (new spec §2.1): the first click arms the button and its `label`
-  // reads 再点一次确认; a second click 250 ms to 1.5 s after the first runs `run`. A shaky double-click is too
-  // quick to count, and stays armed for a deliberate second click. 1.5 s, or a press anywhere else, puts the
-  // label back. Returns the function that does so, for a page going away.
-  function confirmTwice(button, label, run) {
-    const words = label.textContent;
-    let armedAt = null, timer = null;
+  // The buttons that reset or exit ask twice (new spec §2.1): the first click arms the button (data-armed), and
+  // its CSS shows the words that say what the second click does; a second click 250 ms to 1.5 s after the first runs
+  // `run`. A shaky double-click is too quick to count, and stays armed for a deliberate second click. 1.5 s, the
+  // pointer leaving the button, or a press anywhere else disarms it. `words()`, when given, writes those words
+  // into `ask` as the button arms. data-armed alternates a / b so the 1.5 s drain under the words starts over on
+  // every arming. Returns the function that disarms, for a page going away.
+  function confirmTwice(button, run, ask, words) {
+    let armedAt = null, timer = null, turn = 'b';
     function disarm() {
       armedAt = null;
       clearTimeout(timer);
       document.removeEventListener('pointerdown', elsewhere, true);
+      button.removeEventListener('pointerleave', disarm);
       attr(button, 'data-armed', false);
-      text(label, words);
     }
     function elsewhere(e) { if (!button.contains(e.target)) disarm(); }
+    // A held Enter clicks again on every repeat, and one of them would confirm: only a fresh press counts.
+    button.addEventListener('keydown', e => {
+      if (e.repeat && (e.key === 'Enter' || e.key === ' ')) e.preventDefault();
+    });
     button.addEventListener('click', () => {
       const now = DT.clock.now();
       if (armedAt !== null && now - armedAt <= DOUBLE_MS) {
@@ -342,10 +354,12 @@
       }
       disarm();
       armedAt = now;
-      attr(button, 'data-armed', true);
-      text(label, CONFIRM);
+      if (words) text(ask, words());
+      turn = turn === 'a' ? 'b' : 'a';
+      attr(button, 'data-armed', turn);
       timer = setTimeout(disarm, DOUBLE_MS);
       document.addEventListener('pointerdown', elsewhere, true);
+      button.addEventListener('pointerleave', disarm);
     });
     return disarm;
   }
@@ -588,12 +602,12 @@
           list.textContent = '';
           rows = tl.map((st, i) => {
             const li = el('li', 'dt-stagelist-item');
+            attr(li, 'data-gap', i > 0 && (st.block || '') !== (tl[i - 1].block || ''));
             const b = el('button', 'dt-row');
             b.type = 'button';
             attr(b, 'data-index', i);
             attr(b, 'data-side', st.side || 'none');
             attr(b, 'data-kind', st.type);
-            attr(b, 'data-gap', i > 0 && (st.block || '') !== (tl[i - 1].block || ''));
             const state = el('span', 'dt-row-state');
             const dot = state.appendChild(el('span', 'dt-row-dot'));
             const time = state.appendChild(el('span'));
@@ -610,7 +624,9 @@
             attr(reset, 'title', '重置');
             reset.appendChild(el('span', 'dt-row-reset-icon', '↺')).setAttribute('aria-hidden', 'true');
             const label = reset.appendChild(el('span', 'dt-row-reset-label', '重置'));
-            confirmTwice(reset, label, () => act('reset', i));   // rebuilt with the list; its own 1.5 s tidies it
+            // Armed, it says what it does and what it throws away: the time the row shows (✓ 2:57, + 0:06, 1:12).
+            confirmTwice(reset, () => act('reset', i), label,
+              () => '再点一次重置' + (time.textContent ? '　' + time.textContent : ''));   // rebuilt with the list
             li.appendChild(b);
             li.appendChild(reset);
             list.appendChild(li);
@@ -816,7 +832,7 @@
     function confirmControls(box) {
       ['reset', 'exit'].forEach(name => {
         const b = box.querySelector('button[data-act="' + name + '"]');
-        disarms.push(confirmTwice(b, b.querySelector('span'), () => act(name)));
+        disarms.push(confirmTwice(b, () => act(name)));
       });
     }
     function onControlClick(e) {

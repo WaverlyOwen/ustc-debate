@@ -11,6 +11,9 @@
   --panel-hover: color-mix(in oklab, var(--ink) 9%, transparent);
   --panel-shadow: 0 1.2em 3em rgb(0 0 0 / .32);
   --console-ease: cubic-bezier(.2, .8, .2, 1);
+  /* Words on a solid --accent fill (an armed 重置 / 退出). A theme whose accent is too close to its panel names
+     another (daylight: its ink; ink: its paper); themes.test.js holds every theme to 4.5:1. */
+  --on-accent: var(--panel);
 }
 
 /* The root is the size container, so the layer is measured in the same cqh as the stage. */
@@ -72,6 +75,7 @@
 /* ---- dock: floats above the bottom bar, below the digits ---- */
 
 .dt-dock {
+  --ui: clamp(13px, min(1.55cqh, 1.05cqw), 22px);   /* on a screen squarer than 16:9 it follows the width too */
   position: absolute;
   z-index: 20;
   left: 50%;
@@ -99,8 +103,8 @@
 
 .dt-dock-group { display: flex; gap: .15em; }
 .dt-dock-group + .dt-dock-group { padding-left: .3em; border-left: 1px solid var(--panel-line); }
-/* 退出 stands apart at the far end, out of reach of a hand going for 全屏. */
-.dt-dock-group[data-exit] { margin-left: .9em; }
+/* 退出 stands apart at the far end, out of reach of a hand going for 全屏: the room split evenly around its divider. */
+.dt-dock-group[data-exit] { margin-left: .45em; padding-left: .75em; }
 
 .dt-dock button {
   display: inline-flex;
@@ -119,6 +123,15 @@
 .dt-dock button[data-primary]:hover:not(:disabled) { background: color-mix(in oklab, var(--ink) 19%, transparent); }
 .dt-dock .dt-icon { display: inline-flex; }
 .dt-dock button[hidden] { display: none; }
+/* Where the dock with its key hints would not fit on one row (below about 1320px wide, or a screen squarer than
+   16:10, such as a 4:3 projector at 1024x768), the hints go: the dock stays one row, and 退出 stays apart. The
+   help (H) still lists every key. */
+@container (max-width: 1320px) or (max-aspect-ratio: 159 / 100) {
+  .dt-dock { letter-spacing: .03em; }
+  .dt-dock kbd { display: none; }
+  .dt-dock button { padding-inline: .5em; }
+  .dt-dock button[data-primary] { min-width: 6.4em; }
+}
 
 /* ---- status pills: top right, under the top bar ---- */
 
@@ -237,9 +250,6 @@
   border-radius: .45em;
   text-align: left;
 }
-.dt-row[data-gap] { margin-top: .75em; }
-.dt-row:hover { background: var(--panel-hover); }
-.dt-row[aria-current] { background: color-mix(in oklab, var(--ink) 12%, transparent); }
 .dt-row-index, .dt-row-plan, .dt-row-state {
   font-family: var(--font-digits);
   font-variant-numeric: tabular-nums;
@@ -262,9 +272,13 @@
 .dt-row[data-over] .dt-row-state, .dt-row-dot { color: var(--accent); }
 
 /* A stage that has been timed offers ↺ at the row's end: quiet until the row is pointed at or focused. Armed, it
-   widens over the row's end to say 再点一次确认. */
-.dt-stagelist-item { position: relative; display: flex; align-items: center; }
+   widens over the row's end to say 再点一次重置 and the time it would throw away. */
+.dt-stagelist-item { position: relative; display: flex; align-items: center; padding-right: .25em; border-radius: .45em; }
 .dt-stagelist-item .dt-row { flex: 1; min-width: 0; }
+/* The highlight is the whole item's, so the ↺ sits inside it, and so is a block's gap, so the ↺ centres on its row. */
+.dt-stagelist-item[data-gap] { margin-top: .75em; }
+.dt-stagelist-item:hover { background: var(--panel-hover); }
+.dt-stagelist-item:has(> .dt-row[aria-current]) { background: color-mix(in oklab, var(--ink) 12%, transparent); }
 .dt-row-reset {
   display: inline-flex;
   flex: none;
@@ -286,14 +300,18 @@
 .dt-row-reset-label { display: none; }
 .dt-stagelist-item .dt-row-reset[data-armed] {
   position: absolute;
-  right: 0;
+  right: .25em;
   width: auto;
   padding: 0 .75em;
-  background: color-mix(in oklab, var(--accent) 20%, var(--panel));
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
   opacity: 1;
 }
 .dt-row-reset[data-armed] .dt-row-reset-label { display: inline; }
+/* The armed ↺ leaves the flow; the row keeps the room it had, so no name re-wraps and no row below moves between
+   the two clicks. */
+.dt-stagelist-item:has(> .dt-row-reset[data-armed]) > .dt-row { margin-right: 1.85em; }
 
 /* Help: the key table. */
 .dt-keys { width: 100%; border-collapse: collapse; }
@@ -385,7 +403,7 @@
   z-index: 10;
   inset: 0;
   display: grid;
-  grid-template-columns: minmax(0, 25em) minmax(0, 1fr) minmax(0, 19em);
+  grid-template-columns: minmax(0, 28em) minmax(0, 1fr) minmax(0, 19em);   /* 28em: a ten-character name on one line */
   background: var(--ground);
 }
 .dt-console-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -540,17 +558,46 @@
 /* 退出 sits last, below everything else. */
 .dt-control-group[data-exit] { margin-top: auto; }
 
-/* 重置 or 退出 waiting for its second click (new spec §2.1): gold, as a warning that the next click acts. As specific
-   as the hover rules and after them, so it holds while the pointer is still on the button. */
-.dt-dock button[data-armed]:not(:disabled), .dt-console-controls button[data-armed]:not(:disabled) {
-  border-color: color-mix(in oklab, var(--accent) 70%, transparent);
-  background: color-mix(in oklab, var(--accent) 20%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 70%, transparent);
-  color: var(--accent);
+/* 重置 and 退出 hold both their faces in one grid cell (ui.js armable): the rest (label and key) and the words that
+   ask for the second click. The button is as wide as the longer, so arming moves nothing under the pointer. */
+.dt-arm { display: inline-grid; }
+.dt-arm > * {
+  display: inline-flex;
+  grid-area: 1 / 1;
+  align-items: center;
+  justify-content: center;
+  gap: .45em;
 }
-.dt-console-controls button[data-armed]:not(:disabled) { box-shadow: none; }
-/* The words take the key hint's place, so the button grows as little as it can under the pointer. */
-.dt-dock button[data-armed] kbd, .dt-console-controls button[data-armed] kbd { display: none; }
+.dt-arm-ask { visibility: hidden; font-size: .86em; font-weight: 600; letter-spacing: .02em; }
+button[data-armed] .dt-arm-rest { visibility: hidden; }
+button[data-armed] .dt-arm-ask { visibility: visible; }
+
+/* 重置 or 退出 waiting for its second click (new spec §2.1): a solid gold fill, the warning that the next click acts,
+   with words that read at 4.5:1 on it. As specific as the hover rules and after them, so it holds while the
+   pointer is still on the button. */
+.dt-dock button[data-armed]:not(:disabled), .dt-console-controls button[data-armed]:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: none;
+  color: var(--on-accent);
+}
+/* Under the words, a line drains over the 1.5 s the button waits (ui.js DOUBLE_MS), so a hesitating hand sees the
+   window closing. Two names for one animation: data-armed alternates a / b, so each arming starts it over. */
+.dt-dock button[data-act], .dt-console-controls button[data-act] { position: relative; }
+.dt-dock button[data-armed]::after, .dt-console-controls button[data-armed]::after, .dt-row-reset[data-armed]::after {
+  content: "";
+  position: absolute;
+  left: .6em;
+  right: .6em;
+  bottom: .2em;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: left center;
+  animation: dt-confirm-drain 1500ms linear both;
+}
+.dt-dock button[data-armed="b"]::after, .dt-console-controls button[data-armed="b"]::after,
+.dt-row-reset[data-armed="b"]::after { animation-name: dt-confirm-drain-again; }
 
 /* ---- projector window: the first hint, gone at the first key ---- */
 
@@ -577,12 +624,17 @@
 .dt-app[data-layout="projector"]:fullscreen .dt-stage { cursor: none; }
 
 @keyframes dt-fade { from { opacity: 0; } }
+@keyframes dt-confirm-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes dt-confirm-drain-again { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @keyframes dt-panel-in { from { opacity: 0; transform: translateY(1.2cqh); } }
 @keyframes dt-drawer-in { from { transform: translateX(-100%); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .dt-dock, .dt-pill, .dt-overlay, .dt-overlay *, .dt-projector-hint {
+  .dt-dock, .dt-dock *, .dt-pill, .dt-overlay, .dt-overlay *, .dt-console *, .dt-projector-hint {
     animation: none !important;
     transition: none !important;
   }
+  /* No drain to watch: the armed fill says enough. */
+  .dt-dock button[data-armed]::after, .dt-console-controls button[data-armed]::after,
+  .dt-row-reset[data-armed]::after { display: none; }
 }
