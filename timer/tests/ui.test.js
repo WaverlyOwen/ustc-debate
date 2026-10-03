@@ -22,10 +22,11 @@
   }
   const press = (code, opts) => window.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ code, key: 'Process', bubbles: true }, opts || {})));
 
-  DT.test('ui: space leaves the title card, then starts and pauses', () => {
+  DT.test('ui: space on the title card starts the first stage, and pauses it', () => {
     const t = boot();
-    press('Space'); assert.equal(t.c.session().cursor, 0);
-    press('Space'); assert.ok(DT.engine.getRun(t.c.session()).running);
+    press('Space');
+    assert.equal(t.c.session().cursor, 0);
+    assert.ok(DT.engine.getRun(t.c.session()).running);
     t.clock.advance(5000);
     press('Space'); assert.equal(DT.engine.getRun(t.c.session()).running, false);
     t.done();
@@ -47,6 +48,86 @@
     t.done();
   });
 
+  // The console beside a projector window, opened with O in a stand-in window.
+  function bootDesk() {
+    const proj = { closed: false, postMessage() {} };
+    const host = { location: { href: 'file:///C:/x/debate-timer.html' }, addEventListener() {}, removeEventListener() {},
+      open: () => proj };
+    const t = boot({ window: host });
+    press('KeyO');
+    return t;
+  }
+
+  // P1: a focused range input must not swallow timer keys
+  DT.test('ui: keys still work while the volume slider has focus', () => {
+    const t = bootDesk();
+    press('Space');                                     // title card → stage 1, running (new behaviour)
+    const slider = document.querySelector('input[type="range"][name="volume"]');
+    assert.ok(slider, 'the console shows the volume slider');
+    assert.equal(slider.closest('label'), null, 'no label hands a click on 音量 to the slider');
+    assert.equal(slider.getAttribute('aria-label'), '音量');
+    slider.focus();
+    const ev = new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true });
+    slider.dispatchEvent(ev);
+    assert.ok(ev.defaultPrevented);
+    assert.equal(DT.engine.getRun(t.c.session()).running, false);
+    t.done();
+  });
+
+  // P2: mouse clicks in the stage list and overlays leave no focus behind
+  DT.test('ui: clicking a stage-list row does not keep focus', () => {
+    const t = boot();
+    press('KeyS');
+    const row = document.querySelector('.dt-overlay[data-name="stages"] button');
+    const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    row.dispatchEvent(down);
+    assert.ok(down.defaultPrevented);
+    t.done();
+  });
+
+  DT.test('ui: clicking a row of the console\'s stage list does not keep focus', () => {
+    const t = bootDesk();
+    const row = document.querySelector('.dt-console-list button[data-index="2"]');
+    const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    row.dispatchEvent(down);
+    assert.ok(down.defaultPrevented);
+    t.done();
+  });
+
+  // Some presenters and on-screen keyboards send no scan code.
+  DT.test('ui: a key without a code falls back to its key', () => {
+    const t = boot();
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: '', key: 'ArrowRight', bubbles: true, cancelable: true }));
+    assert.equal(t.c.session().cursor, 0);
+    t.done();
+  });
+
+  // P3: the editor's close animation must not eat the keys pressed during it.
+  DT.test('ui: a key pressed while the editor sinks away reaches the timer, once', async () => {
+    const t = boot();
+    const realMatch = window.matchMedia;
+    // Not reduced motion, so the editor takes its 260 ms to close.
+    window.matchMedia = q => ({ matches: false, media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+    try {
+      press('Space');                                   // stage 1 is running
+      press('KeyE');
+      const history = t.c.session().history.length;
+      press('Escape');
+      assert.ok(document.querySelector('.dt-editor'), 'the editor is still sinking away');
+      const root = document.getElementById('app-under-test');
+      assert.ok(Array.from(root.children).every(c => c.classList.contains('dt-editor') || !c.inert), 'the page behind is live again');
+      press('Space');
+      assert.equal(DT.engine.getRun(t.c.session()).running, false, 'the space paused the clock');
+      await new Promise(r => setTimeout(r, 400));
+      assert.equal(document.querySelector('.dt-editor'), null);
+      assert.equal(t.c.session().history.length, history + 1, 'exactly one toggle');
+      assert.equal(DT.engine.getRun(t.c.session()).running, false);
+    } finally {
+      window.matchMedia = realMatch;
+      t.done();
+    }
+  });
+
   DT.test('ui: A and L give the floor in free debate; Z undoes a wrong switch', () => {
     const t = boot();
     const idx = t.c.session().timeline.findIndex(s => s.name === '自由辩论');
@@ -62,7 +143,7 @@
 
   DT.test('ui: R needs a second press within 1.5 s', () => {
     const t = boot();
-    press('Space'); press('Space'); t.clock.advance(20000); press('Space');
+    press('Space'); t.clock.advance(20000); press('Space');
     press('KeyR');
     assert.equal(DT.engine.remaining(DT.engine.getRun(t.c.session()), 'main', DT.clock.now()), 160000);
     t.clock.advance(2000); press('KeyR');
@@ -74,7 +155,7 @@
 
   DT.test('ui: arrows adjust by one and five seconds', () => {
     const t = boot();
-    press('Space'); press('Space');
+    press('Space');
     t.clock.advance(30000);
     press('ArrowUp'); press('ArrowUp', { shiftKey: true });
     assert.equal(DT.engine.remaining(DT.engine.getRun(t.c.session()), 'main', DT.clock.now()), 156000);
@@ -83,7 +164,7 @@
 
   DT.test('ui: every action saves the session and reschedules bells', () => {
     const t = boot();
-    press('Space'); press('Space');
+    press('Space');
     assert.ok(t.storage.getItem('dt.session.v1'));
     const last = t.bells.log.scheduled[t.bells.log.scheduled.length - 1];
     assert.ok(last.some(b => b.sound === 'double'));
@@ -94,7 +175,7 @@
   DT.test('ui: reload resumes the running clock', () => {
     const storage = memStorage();
     let t = boot({ storage });
-    press('Space'); press('Space');
+    press('Space');
     t.clock.advance(10000);
     t.done();
     let now = T0 + 40000;
@@ -125,7 +206,7 @@
 
   DT.test('ui: insert menu adds a surprise attack in the school cup', () => {
     const t = boot({ formatId: 'ustc-school-cup' });
-    press('Space'); press('Space'); t.clock.advance(1000); press('Space');
+    press('Space'); t.clock.advance(1000); press('Space');
     press('KeyX');
     const btn = document.querySelector('.dt-overlay[data-name="insert"] button[data-side="con"][data-variant="0"]');
     assert.ok(btn); btn.click();
@@ -155,7 +236,7 @@
 
   DT.test('ui: another key between the two presses cancels the double press', () => {
     const t = boot();
-    press('Space'); press('Space'); t.clock.advance(20000); press('Space');
+    press('Space'); t.clock.advance(20000); press('Space');
     press('KeyR'); press('KeyB'); press('KeyR');
     assert.equal(DT.engine.remaining(DT.engine.getRun(t.c.session()), 'main', DT.clock.now()), 160000);
     t.done();
@@ -163,7 +244,7 @@
 
   DT.test('ui: a held key does not repeat switching actions, but adjusting repeats', () => {
     const t = boot();
-    press('Space'); press('Space', { repeat: true });
+    press('ArrowRight'); press('Space', { repeat: true });
     assert.equal(t.c.session().cursor, 0);
     assert.equal(DT.engine.getRun(t.c.session()).running, false);
     press('ArrowUp', { repeat: true });
@@ -232,7 +313,7 @@
     let copied = null;
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: s => { copied = s; return Promise.resolve(); } } });
     try {
-      press('Space'); press('Space'); t.clock.advance(185000); press('Space');
+      press('Space'); t.clock.advance(185000); press('Space');
       t.c.openOverlay('record');
       const panel = document.querySelector('.dt-overlay[data-name="record"]');
       assert.ok(panel.querySelectorAll('tr').length > t.c.session().timeline.length);
@@ -251,7 +332,7 @@
 
   DT.test('ui: insert buttons of a used-up side are disabled and say so', () => {
     const t = boot({ formatId: 'ustc-school-cup' });
-    press('Space'); press('Space'); t.clock.advance(1000); press('Space');
+    press('Space'); t.clock.advance(1000); press('Space');
     t.c.act('insert', '奇袭', 1, 'pro');
     t.c.openOverlay('insert');
     const btn = document.querySelector('.dt-overlay[data-name="insert"] button[data-side="pro"][data-variant="0"]');
@@ -274,7 +355,7 @@
     const dock = document.querySelector('.dt-dock');
     const btn = sel => dock.querySelector('button[data-act="' + sel + '"]');
     assert.equal(btn('prev').disabled, true);
-    press('Space');
+    press('ArrowRight');
     assert.equal(dock.querySelector('button[data-act="floor"][data-side="pro"]').disabled, true);
     assert.equal(btn('insert').disabled, true);
     btn('toggle').click();
@@ -354,10 +435,10 @@
     const changes = [], events = [];
     t.c.on('change', s => changes.push(s.cursor));
     t.c.on('events', list => list.forEach(e => events.push(e.key)));
-    press('Space'); press('Space');
+    press('Space');
     t.clock.advance(150500);
     press('KeyP');
-    assert.deepEqual(changes, [0, 0, 0]);
+    assert.deepEqual(changes, [0, 0]);
     assert.deepEqual(events, ['w30']);
     t.c.destroy();
     press('Space');
@@ -376,7 +457,7 @@
       createBuffer: (ch, len) => ({ getChannelData: () => new Float32Array(len) }) };
     DT.bells._setContextFactory(() => ctx); DT.bells._resetForTests();
     const t = boot({ bells: DT.bells });
-    press('Space'); press('Space');
+    press('Space');
     const endBell = started.filter(n => n.startAt >= 190 - 0.01);
     assert.ok(endBell.length > 0, 'the end bell is planned at 180 s');
     t.clock.advance(180400); ctx.currentTime = 190.4;   // between the two strikes of the double bell
@@ -394,7 +475,7 @@
 
   DT.test('ui: clicking the current row of the stage list leaves its running clock alone', () => {
     const t = boot();
-    press('Space'); press('Space'); t.clock.advance(5000);
+    press('Space'); t.clock.advance(5000);
     const history = t.c.session().history.length;
     t.c.openOverlay('stages');
     document.querySelector('.dt-overlay[data-name="stages"] button[data-index="0"]').click();
@@ -408,7 +489,7 @@
     const t = boot();
     const events = [];
     t.c.on('events', list => list.forEach(e => events.push(e.key)));
-    press('Space'); press('Space');
+    press('Space');
     t.clock.advance(148000);
     press('ArrowDown', { shiftKey: true });
     assert.deepEqual(t.bells.log.played, ['ding']);
@@ -441,7 +522,7 @@
 
   DT.test('ui: a held arrow key makes one undo step and saves once it settles', () => {
     const t = boot();
-    press('Space'); press('Space'); t.clock.advance(30000);
+    press('Space'); t.clock.advance(30000);
     const before = t.c.session().history.length;
     press('ArrowUp');
     for (let i = 0; i < 20; i++) { t.clock.advance(33); press('ArrowUp', { repeat: true }); }
@@ -468,7 +549,7 @@
     let t;
     try { t = boot(); } finally { DT.engine.tick = tick; console.warn = warn; }
     try {
-      press('Space'); press('Space');
+      press('Space');
       t.clock.advance(5000);
       await Promise.race([new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))), later(1000)]);
       assert.equal(document.querySelector('.dt-clock[data-clock="main"] .dt-sec').textContent, '55');
@@ -501,7 +582,7 @@
   DT.test('ui: a plain session never leaks into a preset file', () => {
     const storage = memStorage();
     const t = boot({ storage });
-    press('Space'); press('Space');          // a plain match is running
+    press('Space');          // a plain match is running
     t.done();
     const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], { title: '决赛', proMotion: '甲', conMotion: '乙', proTeam: '', conTeam: '', proSeat: 'left' }, 'hall', T0);
     const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
@@ -553,7 +634,7 @@
     const storage = memStorage();
     const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
     let t = bootPreset(storage, preset);
-    press('Space'); press('Space');   // the first stage is running
+    press('Space');   // the first stage is running
     const rehearsal = t.c.session().id;
     t.done();
     now += 3 * 3600 * 1000;           // match day
@@ -598,7 +679,7 @@
     const storage = memStorage();
     const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
     let t = bootPreset(storage, preset);
-    press('Space'); press('Space'); press('ArrowLeft');
+    press('Space'); press('ArrowLeft');
     assert.equal(t.c.session().cursor, -1);
     t.done();
     t = bootPreset(storage, preset);
@@ -611,7 +692,7 @@
     const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
     const t = bootPreset(storage, preset);
     try {
-      press('Space'); press('Space'); press('ArrowLeft');
+      press('Space'); press('ArrowLeft');
       const old = t.c.session().id;
       press('Escape');
       assert.equal(t.c.route(), 'setup');

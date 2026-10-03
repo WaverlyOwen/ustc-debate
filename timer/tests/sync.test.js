@@ -108,6 +108,17 @@
     assert.equal(states.length, 2);
   });
 
+  // P4
+  DT.test('sync: a projector whose console is gone neither forwards nor swallows keys', () => {
+    const me = fakeWin(); const opener = Object.assign(fakeWin(), { closed: true });
+    const end = DT.sync.createProjectorEnd({ target: me, opener, storage: null, onState() {}, onKey() {} });
+    let prevented = false;
+    me.emit('keydown', { code: 'Space', preventDefault() { prevented = true; } });
+    assert.equal(opener.sent.length, 0);
+    assert.equal(prevented, false);
+    end.stop();
+  });
+
   DT.test('sync: the projector leaves browser shortcuts to the browser', () => {
     const me = fakeWin(), opener = fakeWin();
     const end = DT.sync.createProjectorEnd({ target: me, opener, storage: null, onState() {}, onKey() {} });
@@ -174,10 +185,11 @@
       press('KeyO');
       t.host.emit('message', key('Space'));
       assert.equal(t.c.session().cursor, 0);
-      t.host.emit('message', { data: { source: 'other', type: 'key', code: 'Space' } });
-      assert.equal(t.c.session().cursor, 0);
-      t.host.emit('message', key('Space'));
       assert.ok(DT.engine.getRun(t.c.session()).running);
+      t.host.emit('message', { data: { source: 'other', type: 'key', code: 'Space' } });
+      assert.ok(DT.engine.getRun(t.c.session()).running);
+      t.host.emit('message', key('Space'));
+      assert.equal(DT.engine.getRun(t.c.session()).running, false);
     } finally { t.done(); }
   });
 
@@ -203,7 +215,6 @@
       const btn = sel => panel.querySelector('button[data-act="' + sel + '"]');
       btn('toggle').click();
       assert.equal(t.c.session().cursor, 0);
-      btn('toggle').click();
       t.advance(30000);
       panel.querySelector('button[data-act="adjust"][data-ms="5000"]').click();
       assert.equal(DT.engine.remaining(DT.engine.getRun(t.c.session()), 'main', DT.clock.now()), 155000);
@@ -223,7 +234,7 @@
     const toasts = () => t.proj.sent.filter(m => m.type === 'toast').map(m => m.message);
     try {
       press('KeyO');
-      press('Space'); press('Space');
+      press('Space');
       t.advance(150500);
       press('KeyP');
       const events = t.proj.sent.filter(m => m.type === 'events');
@@ -291,7 +302,7 @@
       assert.equal(hint.textContent, '把这个窗口拖到投影屏幕上，按 F 全屏');
       assert.equal(hint.hidden, false);
       let s = DT.engine.createSession(freshman(), MATCH, T0);
-      s = DT.engine.toggle(DT.engine.toggle(s, T0), T0);
+      s = DT.engine.toggle(s, T0);
       me.emit('message', { data: { source: 'debate-timer', type: 'state', session: s, settings: {} } });
       assert.equal(c.route(), 'projector');
       assert.equal(c.session().cursor, 0);
@@ -307,6 +318,22 @@
       assert.equal(box.querySelector('.dt-toast').textContent, '反方时间已用完');
     } finally { c.destroy(); DT.clock.reset(); }
     assert.equal(box.querySelector('.dt-stage'), null);
+  });
+
+  DT.test('sync: a projector whose console was closed says how to reconnect', () => {
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const me = fakeWin(), opener = fakeWin();
+    me.opener = opener;
+    DT.clock.set(() => T0);
+    const c = DT.app.boot({ root: box.firstChild, route: 'projector', window: me, storage: memStorage(), bells: fakeBells() });
+    try {
+      opener.closed = true;
+      let prevented = false;
+      me.emit('keydown', { code: 'Space', preventDefault() { prevented = true; } });
+      assert.equal(opener.sent.length, 0);
+      assert.equal(prevented, false);
+      assert.equal(box.querySelector('.dt-toast').textContent, '控制台已关闭。在主窗口按 O 重新连接');
+    } finally { c.destroy(); DT.clock.reset(); }
   });
 
   DT.test('sync: the projector starts from the saved session and rings a bell once', () => {

@@ -16,6 +16,7 @@
   const EXPORTED = '已导出。把这个文件拷到比赛用的电脑上，双击就能直接开始这一场';
   const EXPORT_FAILED = '没能导出这个文件：浏览器没有让它下载。再试一次，或换一个浏览器';
   const RESTART_LABEL = '重新开始这一场';   // 新的一场 on the end card of a match file (new spec §4.1)
+  const CONSOLE_GONE = '控制台已关闭。在主窗口按 O 重新连接';   // a key in a projector window left on its own
   // What ?exportProbe=1 exports, for the end-to-end test (new spec §4.4).
   const PROBE = {
     format: 'ustc-freshman-cup', theme: 'hall',
@@ -105,7 +106,8 @@
     '<div class="dt-control-group">' +
     '<button type="button" data-act="bell"><span>敲铃</span><kbd>B</kbd></button>' +
     '<button type="button" data-act="mute" aria-pressed="false"><span class="dt-mute-label">静音</span><kbd>M</kbd></button>' +
-    '<label class="dt-volume"><span>音量</span><input type="range" name="volume" min="0" max="1" step="0.05"></label></div>' +
+    // Not a <label>: a click on 音量 would give the slider focus (new spec §3, P1).
+    '<div class="dt-volume"><span>音量</span><input type="range" name="volume" aria-label="音量" min="0" max="1" step="0.05"></div></div>' +
     '</aside>';
   const STATUS =
     '<span class="dt-pill" data-kind="sound">按任意键启用声音</span>' +
@@ -148,10 +150,25 @@
 
   const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
 
+  // Inputs that take no typing (a slider, a checkbox…) leave the keys to the timer (new spec §3, P1).
+  const UNTYPED = ['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file'];
+
+  // Where keys are typing: a text box, a select, an editable element.
   function isEditable(target) {
     if (!target || !target.tagName) return false;
     const tag = target.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!target.isContentEditable;
+    if (tag === 'INPUT') return UNTYPED.indexOf(String(target.type).toLowerCase()) < 0;
+    return tag === 'TEXTAREA' || tag === 'SELECT' || !!target.isContentEditable;
+  }
+
+  // The code of a key, or for a presenter or an on-screen keyboard that sends none, the code its key stands for.
+  function codeOf(e) {
+    if (e.code) return e.code;
+    const k = String(e.key || '');
+    if (k === ' ') return 'Space';
+    if (/^[a-z]$/i.test(k)) return 'Key' + k.toUpperCase();
+    if (k === '/' || k === '?') return 'Slash';
+    return /^(Arrow(Up|Down|Left|Right)|Page(Up|Down)|Escape)$/.test(k) ? k : '';
   }
 
   // Whole seconds, as on the end card.
@@ -297,7 +314,8 @@
     };
   }
 
-  // A mouse click must not leave focus on a button, or the next space would press it as well as toggle.
+  // A mouse click must not leave focus on a button, or the next space would press it as well as toggle, and Enter
+  // would press it again. Every box of buttons gets this: the dock, the console's columns, the overlays.
   function keepFocus(box) {
     box.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
   }
@@ -698,6 +716,7 @@
       text(wrap.querySelector('h2'), OVERLAY_TITLE[name]);
       wrap.querySelector('.dt-scrim').addEventListener('click', closeOverlay);
       wrap.querySelector('.dt-close').addEventListener('click', closeOverlay);
+      keepFocus(wrap);
       overlay = { name, el: wrap, refresh: OVERLAYS[name](wrap.querySelector('.dt-panel-body')) };
       root.appendChild(wrap);
       const now = DT.clock.now();
@@ -770,8 +789,8 @@
       const refreshList = stagesOverlay(list);
       controls.addEventListener('click', onControlClick);
       keepFocus(controls);
+      keepFocus(list);
       volume.addEventListener('input', () => setVolume(Number(volume.value)));
-      volume.addEventListener('pointerup', () => volume.blur());   // so the next space reaches the timer
       root.insertBefore(box, root.firstChild);
       attr(root, 'data-layout', 'console');
       let cursor = null;
@@ -824,7 +843,7 @@
       if (env.blocked()) return;
       if (isEditable(e.target)) return;
       if (e.isComposing) return;
-      if (key(e.code, e)) e.preventDefault();
+      if (key(codeOf(e), e)) e.preventDefault();
     }
 
     window.addEventListener('keydown', onKeyDown);
@@ -937,6 +956,7 @@
       onState(m) { session = m.session; draw(DT.clock.now()); },
       onEvents: pulse,
       onToast: message => stage.toast(message),
+      onLost: () => stage.toast(CONSOLE_GONE),
       onKey(code) {
         attr(hint, 'hidden', true);
         if (code === 'KeyF') toggleFullscreen(root);
@@ -1011,7 +1031,8 @@
 
     const listeners = { change: [], events: [], toast: [] };
     let screen = null, destroyed = false;   // {name: 'setup' | 'ask' | 'timer', handle}
-    let editor = null;                       // the format editor's handle while it covers the screen
+    let editor = null;                       // the format editor's handle, until it has closed
+    let covered = false;                     // the editor covers the screen: from opening until it starts to leave
     let projector = null;                    // {win, link} while a projector window is open
 
     function emit(name, arg) {
@@ -1048,7 +1069,7 @@
     function connect(win) {
       const link = DT.sync.createConsoleLink({
         target: host, pollMs: o.pollMs, getWindow: () => win,
-        onKey(code, k) { if (timer() && !editor) timer().key(code, k); },
+        onKey(code, k) { if (timer() && !covered) timer().key(code, k); },
         onClosed() { if (projector && projector.link === link) disconnect(); },
       });
       projector = { win, link };
@@ -1095,19 +1116,26 @@
     // Starting or resuming is a click or a key press, so the sound can be unlocked right there.
     function unlockSound() { if (!bells.isUnlocked()) bells.unlock(); }
 
-    // The editor covers the page; what is behind it is out of reach until it closes, then `after(formatId)` runs.
+    // The editor covers the page; what is behind it is out of reach until it starts to sink away (new spec §3, P3),
+    // and `after(formatId)` runs once it is gone. Until then `editor` stays set, so it cannot open twice.
     function openEditor(selectedId, after) {
       if (editor || destroyed) return;
       const behind = Array.from(root.children);
+      const uncover = () => {
+        covered = false;
+        behind.forEach(c => { c.inert = false; });
+      };
       behind.forEach(c => { c.inert = true; });
+      covered = true;
       editor = DT.editor.mount(root, {
         formats: DT.store.loadFormats(),
         selectedId,
         themes: themeList(),
         onChange(list) { DT.store.saveFormats(list); },
+        onLeave: uncover,
         onClose(id) {
           editor = null;
-          behind.forEach(c => { c.inert = false; });
+          uncover();
           if (after && !destroyed) after(id);
         },
       });
@@ -1131,7 +1159,7 @@
         console: !!projector || !!x.console, matchFile: !!preset,
         onNewMatch: () => newMatch(own), newLabel: own ? RESTART_LABEL : null,
         onEdit: formatId => openEditor(formatId), onSetup: () => showSetup(), onProjector: openProjector,
-        blocked: () => !!editor,
+        blocked: () => covered,
       };
       screen = { name: 'timer', handle: mountTimer(root, session, env) };
       pushState();
@@ -1287,8 +1315,14 @@
   function autoboot() {
     DT.preset.captureSource();   // first, before anything changes the page: an export copies it as loaded
     if (!document.body.hasAttribute('data-dt-autoboot')) return;
-    if (new URLSearchParams(window.location.search).get('exportProbe') === '1') exportProbe();
-    else boot({ root: document.getElementById('app') });
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('exportProbe') === '1') { exportProbe(); return; }
+    const app = boot({ root: document.getElementById('app') });
+    // ?test=1: a read-only look at the app for tests/test_keyboard.py, which drives the page with real input.
+    if (params.get('test') === '1') {
+      const copy = v => (v ? JSON.parse(JSON.stringify(v)) : v);
+      window.__dtTest = { route: () => app.route(), session: () => copy(app.session()) };
+    }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autoboot);
   else autoboot();

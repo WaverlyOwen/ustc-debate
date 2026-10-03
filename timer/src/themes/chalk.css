@@ -158,13 +158,6 @@
 /* The grain is drawn on each part of the digits rather than the whole: the colon's breathing is then only a change
    of opacity, which does not draw the filter again, and the numbers are drawn again only when they change. */
 .dt-stage[data-theme="chalk"] .dt-digits > span { filter: var(--chalk-grain); }
-/* For the same reason the digits tense up in small steps rather than on every frame: 50 steps over a stage. */
-@supports (width: round(nearest, 1px, 1px)) {
-  .dt-stage[data-theme="chalk"] .dt-digits {
-    --tension-step: round(nearest, var(--tension), .02);
-    font-variation-settings: "wght" calc(300 + 400 * var(--tension-step)), "wdth" calc(100 - 22 * var(--tension-step));
-  }
-}
 /* The digits are one colour on the hatching and off it, so the renderer's second, clipped layer is not needed. */
 .dt-stage[data-theme="chalk"] .dt-digits-on { display: none; }
 /* The attribute selectors only rank this above stage.css's per-seat clips, which it removes. */

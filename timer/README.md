@@ -8,7 +8,7 @@
 
 1. 左边选赛制。内置赛制在前（新生赛、校赛、招新赛 3v3 / 2v2 / 1v1），自己建的在后。每项写着环节数和总时长
 2. 右边填这一场的信息：场次名（可空）、正反方辩题、两队队名（可空，空则显示「正方」「反方」）、正方坐左边还是右边、主题（默认用赛制自带的，可以为这一场另选）
-3. 点「开始这一场」，先出开场卡，按空格进入第一个环节
+3. 点「开始这一场」，先出开场卡，按空格开始第一个环节（只想进入、先不开始，按 →）
 
 上次填的队名、辩题、席位会预填。如果上一场没打完（或者中途刷新、误关了页面），开赛页顶部会有一条提示，点「继续」回到同一个环节，正在走的时钟按真实过去的时间接着走，不会补响已经过期的铃；点「放弃并新开」则丢掉它。
 
@@ -142,7 +142,7 @@ python timer/build.py
 
 可选：`--backdrop`（任意 `background` 值，画在色场之下）、`.stage-deco` 装饰层、`--text-field` / `--text-deep`（文字所在的两种底，默认是本方色和本方深色；色场够不到标题和顶栏的主题要指向真正的底色）、`--speaker-ink`（发言人一行的颜色）、`--half-ground`（双方环节每一半的底色，有画布的主题可设为 `transparent`）、`--field-ground`（数字落在色场上时真正的底色，默认是本方色；色场不是平涂本方色的主题要如实写，比如「墨」等待方的淡墨笔触、「星轨」双方环节的星云光晕）。组件的 CSS 里不写死颜色，颜色只从这些变量来。
 
-CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（单方、间隔）和每一半上的 `--remain`（双方）。纹理可以用 `background-image: url("data:image/svg+xml,…")`。
+CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（单方、间隔）和每一半上的 `--remain`（双方）。`--tension` 以 0.02 为一步，值不变就不重写，主题不用自己再量化。纹理可以用 `background-image: url("data:image/svg+xml,…")`。
 
 **JS（可选）**：`timer/src/themes/mytheme.js`，经典脚本，调用：
 
@@ -188,7 +188,7 @@ timer/
 python timer/build.py                        # 生成
 python timer/build.py --check                # 只检查产物与源码是否一致，不一致退出 1
 python timer/tests/run_js_tests.py           # JS 测试（用系统自带的 Edge 跑，不需要 Node）
-python -m unittest discover -s timer/tests -p "test_*.py"   # Python 测试（含 --check）
+python -m unittest discover -s timer/tests -p "test_*.py"   # Python 测试（含 --check，以及 test_keyboard.py：无头 Edge 注入真实键盘鼠标）
 python timer/tests/screenshots.py            # 截图，1920x1080，存到 timer/tests/out/1920x1080/
 python timer/tests/screenshots.py --size 1366x768
 python timer/tests/screenshots.py --theme ink    # 某一个主题的全部场景

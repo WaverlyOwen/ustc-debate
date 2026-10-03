@@ -945,9 +945,11 @@
       settle(CLOSE, leave);
     }
 
+    // onLeave as the panel starts to sink, so the page behind takes keys again at once; onClose once it is gone.
     function leave() {
       closing = true;
       panel.setAttribute('data-leaving', '');
+      if (o.onLeave) o.onLeave();
       setTimeout(() => {
         if (destroyed) return;
         const id = currentId;

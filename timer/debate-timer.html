@@ -2092,13 +2092,6 @@ body {
 /* The grain is drawn on each part of the digits rather than the whole: the colon's breathing is then only a change
    of opacity, which does not draw the filter again, and the numbers are drawn again only when they change. */
 .dt-stage[data-theme="chalk"] .dt-digits > span { filter: var(--chalk-grain); }
-/* For the same reason the digits tense up in small steps rather than on every frame: 50 steps over a stage. */
-@supports (width: round(nearest, 1px, 1px)) {
-  .dt-stage[data-theme="chalk"] .dt-digits {
-    --tension-step: round(nearest, var(--tension), .02);
-    font-variation-settings: "wght" calc(300 + 400 * var(--tension-step)), "wdth" calc(100 - 22 * var(--tension-step));
-  }
-}
 /* The digits are one colour on the hatching and off it, so the renderer's second, clipped layer is not needed. */
 .dt-stage[data-theme="chalk"] .dt-digits-on { display: none; }
 /* The attribute selectors only rank this above stage.css's per-seat clips, which it removes. */
@@ -3230,13 +3223,6 @@ body {
 }
 @container (max-width: 520px) {
   .dt-stage[data-theme="riso"] .dt-digits > span { -webkit-mask: none; mask: none; }
-}
-/* For the same reason the digits tense up in steps rather than on every frame: 50 steps over a stage. */
-@supports (width: round(nearest, 1px, 1px)) {
-  .dt-stage[data-theme="riso"] .dt-digits {
-    --tension-step: round(nearest, var(--tension), .02);
-    font-variation-settings: "wght" calc(300 + 400 * var(--tension-step)), "wdth" calc(100 - 22 * var(--tension-step));
-  }
 }
 /* One colour on the halftone and off it, so the renderer's second, clipped layer is not needed. The attribute
    selectors only rank these above stage.css's clips, which they remove. */
@@ -4639,8 +4625,13 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 
   // ---- actions ----
 
+  // On the title card, which says 空格开始, the first stage starts at once (new spec §3), in one undo step.
   function toggle(session, now) {
-    if (session.cursor < 0) return next(session, now);
+    if (session.cursor < 0) {
+      const entered = next(session, now);
+      if (!currentStage(entered)) return entered;
+      return Object.assign(toggle(entered, now), { history: entered.history });   // Z goes back to the title card
+    }
     const st = currentStage(session);
     if (!st) return noop(session);
     const r0 = getRun(session);
@@ -5697,11 +5688,13 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     return ids.indexOf(id) >= 0 ? id : 'hall';
   }
 
-  // Digits tighten as time runs out; overtime and finished clocks stay tight; breaks never tense up.
+  // Digits tighten as time runs out; overtime and finished clocks stay tight; breaks never tense up. In steps of
+  // 0.02, so --tension changes about every few seconds rather than every frame: each new value sets the digits'
+  // font-variation-settings again, which lays the whole page out again (new spec §3, P5).
   function tension(clock, kind) {
     if (!clock || kind === 'break') return 0;
     if (clock.phase === 'over' || clock.phase === 'done') return 1;
-    return clamp01(1 - clock.fraction);
+    return Math.round(clamp01(1 - clock.fraction) * 50) / 50;
   }
 
   function stateText(clock, kind) {
@@ -7842,9 +7835,11 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       settle(CLOSE, leave);
     }
 
+    // onLeave as the panel starts to sink, so the page behind takes keys again at once; onClose once it is gone.
     function leave() {
       closing = true;
       panel.setAttribute('data-leaving', '');
+      if (o.onLeave) o.onLeave();
       setTimeout(() => {
         if (destroyed) return;
         const id = currentId;
@@ -7987,12 +7982,17 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   // The projector's end. opts: {target (this window), opener (the console), storage (read for the saved
   // session at start, or null), sessionKey (where the console saves it; a match file has its own),
   // onState({session, settings}), onKey(code, event) for every key pressed here, onEvents(list),
-  // onToast(message)}. Keys other than F go to the console; F stays for full screen here.
+  // onToast(message), onLost() for a key pressed after the console has gone}. Keys other than F go to the
+  // console; F stays for full screen here.
   function createProjectorEnd(opts) {
     const o = opts || {};
     const target = o.target || window;
     const sessionKey = o.sessionKey || SESSION_KEY;
     let stopped = false;
+
+    function consoleOpen() {
+      try { return !!o.opener && !o.opener.closed; } catch (e) { return false; }
+    }
 
     function state(session, settings) {
       if (!stopped && isObj(session)) o.onState({ session, settings: isObj(settings) ? settings : null });
@@ -8010,10 +8010,13 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       if (stopped) return;
       if (o.onKey) o.onKey(e.code, e);
       if (e.code === 'KeyF') return;
-      if (o.opener) {
-        post(o.opener, { type: 'key', code: e.code, shiftKey: !!e.shiftKey, ctrlKey: !!e.ctrlKey,
-          altKey: !!e.altKey, repeat: !!e.repeat });
+      // With the console gone nobody hears the key, so the browser keeps it (new spec §3, P4).
+      if (!consoleOpen()) {
+        if (o.onLost) o.onLost();
+        return;
       }
+      post(o.opener, { type: 'key', code: e.code, shiftKey: !!e.shiftKey, ctrlKey: !!e.ctrlKey,
+        altKey: !!e.altKey, repeat: !!e.repeat });
       // Reload, close, the function keys and the like still belong to the browser.
       const browserKey = e.ctrlKey || e.altKey || e.metaKey || /^F\d+$/.test(e.code || '');
       if (!browserKey && e.preventDefault) e.preventDefault();
@@ -8190,6 +8193,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   const EXPORTED = '已导出。把这个文件拷到比赛用的电脑上，双击就能直接开始这一场';
   const EXPORT_FAILED = '没能导出这个文件：浏览器没有让它下载。再试一次，或换一个浏览器';
   const RESTART_LABEL = '重新开始这一场';   // 新的一场 on the end card of a match file (new spec §4.1)
+  const CONSOLE_GONE = '控制台已关闭。在主窗口按 O 重新连接';   // a key in a projector window left on its own
   // What ?exportProbe=1 exports, for the end-to-end test (new spec §4.4).
   const PROBE = {
     format: 'ustc-freshman-cup', theme: 'hall',
@@ -8279,7 +8283,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     '<div class="dt-control-group">' +
     '<button type="button" data-act="bell"><span>敲铃</span><kbd>B</kbd></button>' +
     '<button type="button" data-act="mute" aria-pressed="false"><span class="dt-mute-label">静音</span><kbd>M</kbd></button>' +
-    '<label class="dt-volume"><span>音量</span><input type="range" name="volume" min="0" max="1" step="0.05"></label></div>' +
+    // Not a <label>: a click on 音量 would give the slider focus (new spec §3, P1).
+    '<div class="dt-volume"><span>音量</span><input type="range" name="volume" aria-label="音量" min="0" max="1" step="0.05"></div></div>' +
     '</aside>';
   const STATUS =
     '<span class="dt-pill" data-kind="sound">按任意键启用声音</span>' +
@@ -8322,10 +8327,25 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 
   const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
 
+  // Inputs that take no typing (a slider, a checkbox…) leave the keys to the timer (new spec §3, P1).
+  const UNTYPED = ['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file'];
+
+  // Where keys are typing: a text box, a select, an editable element.
   function isEditable(target) {
     if (!target || !target.tagName) return false;
     const tag = target.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!target.isContentEditable;
+    if (tag === 'INPUT') return UNTYPED.indexOf(String(target.type).toLowerCase()) < 0;
+    return tag === 'TEXTAREA' || tag === 'SELECT' || !!target.isContentEditable;
+  }
+
+  // The code of a key, or for a presenter or an on-screen keyboard that sends none, the code its key stands for.
+  function codeOf(e) {
+    if (e.code) return e.code;
+    const k = String(e.key || '');
+    if (k === ' ') return 'Space';
+    if (/^[a-z]$/i.test(k)) return 'Key' + k.toUpperCase();
+    if (k === '/' || k === '?') return 'Slash';
+    return /^(Arrow(Up|Down|Left|Right)|Page(Up|Down)|Escape)$/.test(k) ? k : '';
   }
 
   // Whole seconds, as on the end card.
@@ -8471,7 +8491,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     };
   }
 
-  // A mouse click must not leave focus on a button, or the next space would press it as well as toggle.
+  // A mouse click must not leave focus on a button, or the next space would press it as well as toggle, and Enter
+  // would press it again. Every box of buttons gets this: the dock, the console's columns, the overlays.
   function keepFocus(box) {
     box.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
   }
@@ -8872,6 +8893,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       text(wrap.querySelector('h2'), OVERLAY_TITLE[name]);
       wrap.querySelector('.dt-scrim').addEventListener('click', closeOverlay);
       wrap.querySelector('.dt-close').addEventListener('click', closeOverlay);
+      keepFocus(wrap);
       overlay = { name, el: wrap, refresh: OVERLAYS[name](wrap.querySelector('.dt-panel-body')) };
       root.appendChild(wrap);
       const now = DT.clock.now();
@@ -8944,8 +8966,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       const refreshList = stagesOverlay(list);
       controls.addEventListener('click', onControlClick);
       keepFocus(controls);
+      keepFocus(list);
       volume.addEventListener('input', () => setVolume(Number(volume.value)));
-      volume.addEventListener('pointerup', () => volume.blur());   // so the next space reaches the timer
       root.insertBefore(box, root.firstChild);
       attr(root, 'data-layout', 'console');
       let cursor = null;
@@ -8998,7 +9020,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       if (env.blocked()) return;
       if (isEditable(e.target)) return;
       if (e.isComposing) return;
-      if (key(e.code, e)) e.preventDefault();
+      if (key(codeOf(e), e)) e.preventDefault();
     }
 
     window.addEventListener('keydown', onKeyDown);
@@ -9111,6 +9133,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       onState(m) { session = m.session; draw(DT.clock.now()); },
       onEvents: pulse,
       onToast: message => stage.toast(message),
+      onLost: () => stage.toast(CONSOLE_GONE),
       onKey(code) {
         attr(hint, 'hidden', true);
         if (code === 'KeyF') toggleFullscreen(root);
@@ -9185,7 +9208,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 
     const listeners = { change: [], events: [], toast: [] };
     let screen = null, destroyed = false;   // {name: 'setup' | 'ask' | 'timer', handle}
-    let editor = null;                       // the format editor's handle while it covers the screen
+    let editor = null;                       // the format editor's handle, until it has closed
+    let covered = false;                     // the editor covers the screen: from opening until it starts to leave
     let projector = null;                    // {win, link} while a projector window is open
 
     function emit(name, arg) {
@@ -9222,7 +9246,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     function connect(win) {
       const link = DT.sync.createConsoleLink({
         target: host, pollMs: o.pollMs, getWindow: () => win,
-        onKey(code, k) { if (timer() && !editor) timer().key(code, k); },
+        onKey(code, k) { if (timer() && !covered) timer().key(code, k); },
         onClosed() { if (projector && projector.link === link) disconnect(); },
       });
       projector = { win, link };
@@ -9269,19 +9293,26 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     // Starting or resuming is a click or a key press, so the sound can be unlocked right there.
     function unlockSound() { if (!bells.isUnlocked()) bells.unlock(); }
 
-    // The editor covers the page; what is behind it is out of reach until it closes, then `after(formatId)` runs.
+    // The editor covers the page; what is behind it is out of reach until it starts to sink away (new spec §3, P3),
+    // and `after(formatId)` runs once it is gone. Until then `editor` stays set, so it cannot open twice.
     function openEditor(selectedId, after) {
       if (editor || destroyed) return;
       const behind = Array.from(root.children);
+      const uncover = () => {
+        covered = false;
+        behind.forEach(c => { c.inert = false; });
+      };
       behind.forEach(c => { c.inert = true; });
+      covered = true;
       editor = DT.editor.mount(root, {
         formats: DT.store.loadFormats(),
         selectedId,
         themes: themeList(),
         onChange(list) { DT.store.saveFormats(list); },
+        onLeave: uncover,
         onClose(id) {
           editor = null;
-          behind.forEach(c => { c.inert = false; });
+          uncover();
           if (after && !destroyed) after(id);
         },
       });
@@ -9305,7 +9336,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         console: !!projector || !!x.console, matchFile: !!preset,
         onNewMatch: () => newMatch(own), newLabel: own ? RESTART_LABEL : null,
         onEdit: formatId => openEditor(formatId), onSetup: () => showSetup(), onProjector: openProjector,
-        blocked: () => !!editor,
+        blocked: () => covered,
       };
       screen = { name: 'timer', handle: mountTimer(root, session, env) };
       pushState();
@@ -9461,8 +9492,14 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   function autoboot() {
     DT.preset.captureSource();   // first, before anything changes the page: an export copies it as loaded
     if (!document.body.hasAttribute('data-dt-autoboot')) return;
-    if (new URLSearchParams(window.location.search).get('exportProbe') === '1') exportProbe();
-    else boot({ root: document.getElementById('app') });
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('exportProbe') === '1') { exportProbe(); return; }
+    const app = boot({ root: document.getElementById('app') });
+    // ?test=1: a read-only look at the app for tests/test_keyboard.py, which drives the page with real input.
+    if (params.get('test') === '1') {
+      const copy = v => (v ? JSON.parse(JSON.stringify(v)) : v);
+      window.__dtTest = { route: () => app.route(), session: () => copy(app.session()) };
+    }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autoboot);
   else autoboot();

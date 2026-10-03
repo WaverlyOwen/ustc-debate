@@ -168,8 +168,13 @@
 
   // ---- actions ----
 
+  // On the title card, which says 空格开始, the first stage starts at once (new spec §3), in one undo step.
   function toggle(session, now) {
-    if (session.cursor < 0) return next(session, now);
+    if (session.cursor < 0) {
+      const entered = next(session, now);
+      if (!currentStage(entered)) return entered;
+      return Object.assign(toggle(entered, now), { history: entered.history });   // Z goes back to the title card
+    }
     const st = currentStage(session);
     if (!st) return noop(session);
     const r0 = getRun(session);

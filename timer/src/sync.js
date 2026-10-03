@@ -99,12 +99,17 @@
   // The projector's end. opts: {target (this window), opener (the console), storage (read for the saved
   // session at start, or null), sessionKey (where the console saves it; a match file has its own),
   // onState({session, settings}), onKey(code, event) for every key pressed here, onEvents(list),
-  // onToast(message)}. Keys other than F go to the console; F stays for full screen here.
+  // onToast(message), onLost() for a key pressed after the console has gone}. Keys other than F go to the
+  // console; F stays for full screen here.
   function createProjectorEnd(opts) {
     const o = opts || {};
     const target = o.target || window;
     const sessionKey = o.sessionKey || SESSION_KEY;
     let stopped = false;
+
+    function consoleOpen() {
+      try { return !!o.opener && !o.opener.closed; } catch (e) { return false; }
+    }
 
     function state(session, settings) {
       if (!stopped && isObj(session)) o.onState({ session, settings: isObj(settings) ? settings : null });
@@ -122,10 +127,13 @@
       if (stopped) return;
       if (o.onKey) o.onKey(e.code, e);
       if (e.code === 'KeyF') return;
-      if (o.opener) {
-        post(o.opener, { type: 'key', code: e.code, shiftKey: !!e.shiftKey, ctrlKey: !!e.ctrlKey,
-          altKey: !!e.altKey, repeat: !!e.repeat });
+      // With the console gone nobody hears the key, so the browser keeps it (new spec §3, P4).
+      if (!consoleOpen()) {
+        if (o.onLost) o.onLost();
+        return;
       }
+      post(o.opener, { type: 'key', code: e.code, shiftKey: !!e.shiftKey, ctrlKey: !!e.ctrlKey,
+        altKey: !!e.altKey, repeat: !!e.repeat });
       // Reload, close, the function keys and the like still belong to the browser.
       const browserKey = e.ctrlKey || e.altKey || e.metaKey || /^F\d+$/.test(e.code || '');
       if (!browserKey && e.preventDefault) e.preventDefault();

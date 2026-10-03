@@ -30,6 +30,22 @@
     h.destroy();
   });
 
+  // P5: a new --tension every frame re-lays out the variable-font digits, and with them the page.
+  DT.test('render: tension is quantized and not rewritten when unchanged', () => {
+    const h = R.mount(host());
+    let s = E.toggle(session(0), T0);
+    h.update(E.view(s, T0 + 60000));
+    const root = document.querySelector('.dt-stage');
+    const first = root.style.getPropertyValue('--tension');
+    assert.equal(Number(first) * 50 % 1, 0, 'a multiple of 0.02');
+    let writes = 0;
+    const orig = root.style.setProperty.bind(root.style);
+    root.style.setProperty = (k, v) => { if (k === '--tension') writes++; return orig(k, v); };
+    h.update(E.view(s, T0 + 60010));
+    assert.equal(writes, 0);
+    h.destroy();
+  });
+
   DT.test('render: single stage sets side, digits and the used fraction', () => {
     const h = R.mount(host());
     let s = E.toggle(session(0), T0);

@@ -49,10 +49,23 @@
     assert.equal(E.fmt(3600000), '60:00');
   });
 
-  DT.test('engine: space on the title card moves to the first stage', () => {
+  // The title card says 空格开始, so one space starts the first stage (new spec §3; → only enters it).
+  DT.test('engine: space on the title card starts the first stage', () => {
     const s = E.toggle(E.createSession(fx(), MATCH, T0), T0);
     assert.equal(s.cursor, 0);
-    assert.equal(E.getRun(s).running, false);
+    assert.ok(E.getRun(s).running);
+  });
+
+  DT.test('engine: space on the title card gives a free debate first stage to its first side, in one undo step', () => {
+    const f = fx();
+    f.stages = [f.stages[3]].concat(f.stages.filter((x, i) => i !== 3));
+    f.stages[0].first = 'con';
+    const s = E.toggle(E.createSession(f, MATCH, T0), T0);
+    const r = E.getRun(s);
+    assert.equal(r.active, 'con');
+    assert.ok(r.running);
+    assert.equal(s.history.length, 1);
+    assert.equal(E.undo(s, T0 + 1000).cursor, -1);
   });
 
   DT.test('engine: single stage accumulates time across pauses', () => {
