@@ -42,8 +42,14 @@ def topic_version(path):
     return CURRENT
 
 
+# old 目录名 -> current 目录名, so a topic left in a folder named before a rename is still recognised
+DIR_ALIASES = {
+    "校赛2025": "校赛",   # v3.3 dropped the year from the school cup
+}
+
+
 def format_dirs():
-    """{目录名: format key} from the 目录名： line of each format file."""
+    """{目录名: format key} from the 目录名： line of each format file, plus DIR_ALIASES."""
     out = {}
     for p in glob.glob(os.path.join(FORMATS_DIR, "*.md")):
         key = os.path.splitext(os.path.basename(p))[0]
@@ -53,6 +59,9 @@ def format_dirs():
             m = re.search(r"^目录名：\s*(\S+)", fh.read(), re.M)
         if m:
             out[m.group(1)] = key
+    for old, new in DIR_ALIASES.items():
+        if new in out and old not in out:
+            out[old] = out[new]
     return out
 
 

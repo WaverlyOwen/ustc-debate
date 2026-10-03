@@ -18,7 +18,7 @@ Two things are checked.
 2. Every number in the 速查 and 文稿 files (Arabic or spoken: 六成, 一千两百多)
    is matched against the numbers in the 论据 column. A number that matches only
    【待核实】 rows is a FAIL: unverified data must never be spoken on stage.
-   Under --strict (the 2025 school cup, where a false datum loses the round)
+   Under --strict (the school cup, where a false datum loses the round)
    a number that matches only 有把握 rows also fails in 文稿 files and warns
    in 速查 files. Numbers that match no row at all are left to
    check_consistency.py. Files are LaTeX (assets/latex/debate.cls).
@@ -107,7 +107,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--canon", required=True, help="the 备赛文档 holding the 论据出处清单")
     ap.add_argument("--strict", action="store_true",
-                    help="2025 校赛 rule: 已核实 needs a link/DOI and a quote; 有把握 may not appear in 文稿")
+                    help="校赛 rule: 已核实 needs a link/DOI and a quote; 有把握 may not appear in 文稿")
     ap.add_argument("files", nargs="*", help="速查 / 文稿 files to check against the list")
     args = ap.parse_args()
 

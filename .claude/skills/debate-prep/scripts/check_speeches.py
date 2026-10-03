@@ -67,7 +67,7 @@ BUILTIN_BANDS = {
         "结辩·反四": (210, 875, 980),
         "结辩·正四": (175, 730, 815),
     },
-    "ustc-school-cup-2025": {
+    "ustc-school-cup": {
         "立论": (180, 750, 840),
         "驳论": (120, 500, 560),
         "驳论·留临场位": (120, 400, 460),
@@ -214,7 +214,7 @@ def detect_format(files):
         if "对辩" in heads and "结辩" in heads and not re.search(r"驳论|盘问|小结|申论|自由辩", heads):
             return "recruit-1v1"
         if re.search(r"奇袭", heads) or re.search(r"[正反]四对辩", heads) or re.search(r"[正反]二质询", heads):
-            return "ustc-school-cup-2025"
+            return "ustc-school-cup"
     return "ustc-freshman-cup"
 
 

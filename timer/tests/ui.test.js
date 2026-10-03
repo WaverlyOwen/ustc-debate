@@ -124,7 +124,7 @@
   });
 
   DT.test('ui: insert menu adds a surprise attack in the school cup', () => {
-    const t = boot({ formatId: 'ustc-school-cup-2025' });
+    const t = boot({ formatId: 'ustc-school-cup' });
     press('Space'); press('Space'); t.clock.advance(1000); press('Space');
     press('KeyX');
     const btn = document.querySelector('.dt-overlay[data-name="insert"] button[data-side="con"][data-variant="0"]');
@@ -250,7 +250,7 @@
   });
 
   DT.test('ui: insert buttons of a used-up side are disabled and say so', () => {
-    const t = boot({ formatId: 'ustc-school-cup-2025' });
+    const t = boot({ formatId: 'ustc-school-cup' });
     press('Space'); press('Space'); t.clock.advance(1000); press('Space');
     t.c.act('insert', '奇袭', 1, 'pro');
     t.c.openOverlay('insert');
@@ -344,8 +344,8 @@
     let t = boot({ storage });
     t.c.act('goto', t.c.session().timeline.length);
     t.done();
-    t = boot({ storage, formatId: 'ustc-school-cup-2025' });
-    assert.equal(t.c.session().format.id, 'ustc-school-cup-2025');
+    t = boot({ storage, formatId: 'ustc-school-cup' });
+    assert.equal(t.c.session().format.id, 'ustc-school-cup');
     t.done();
   });
 
@@ -429,7 +429,7 @@
   });
 
   DT.test('ui: nothing can be inserted on the end card', () => {
-    const t = boot({ formatId: 'ustc-school-cup-2025' });
+    const t = boot({ formatId: 'ustc-school-cup' });
     t.c.act('goto', t.c.session().timeline.length);
     assert.equal(document.querySelector('.dt-dock button[data-act="insert"]').disabled, true);
     press('KeyX');

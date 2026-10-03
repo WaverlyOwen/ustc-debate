@@ -161,6 +161,19 @@
     return list.map(f => (f.id === id ? clone(orig) : f));
   }
 
+  // ---- renamed builtins ----
+  // Builtin ids that changed, old -> new (the school cup dropped its year). A stored edit or a last match
+  // under an old id carries over to the new one.
+  const RENAMED = { 'ustc-school-cup-2025': 'ustc-school-cup' };
+  function renamed(id) { return Object.prototype.hasOwnProperty.call(RENAMED, id) ? RENAMED[id] : null; }
+  function migrateIds(list) {
+    const ids = {};
+    list.forEach(f => { if (isObj(f) && typeof f.id === 'string') ids[f.id] = true; });
+    // An entry already stored under the new id wins; the old one is dropped.
+    return list.filter(f => !(isObj(f) && renamed(f.id) && ids[renamed(f.id)]))
+      .map(f => (isObj(f) && renamed(f.id) ? Object.assign({}, f, { id: renamed(f.id) }) : f));
+  }
+
   // ---- formats persistence ----
   // Stored entries the last load could not use, kept as they were so the next save does not erase them.
   let unread = { from: null, entries: [] };
@@ -169,7 +182,7 @@
     const seen = {};
     const skipped = [];
     // Skip invalid entries, entries without a usable id, and repeated ids (first one wins).
-    const stored = data && Array.isArray(data.formats) ? data.formats.filter(f => {
+    const stored = data && Array.isArray(data.formats) ? migrateIds(data.formats).filter(f => {
       const ok = isObj(f) && typeof f.id === 'string' && !!f.id && !Object.prototype.hasOwnProperty.call(seen, f.id) &&
         !validateFormat(f).length;
       if (!ok) { skipped.push(f); return false; }
@@ -301,7 +314,11 @@
     return Object.assign({ volume: 0.8, muted: false }, isObj(s) ? s : {});
   }
   function saveSettings(obj) { writeJSON(KEYS.settings, obj); }
-  function loadLastMatch() { const m = readJSON(KEYS.lastMatch); return isObj(m) ? m : null; }
+  function loadLastMatch() {
+    const m = readJSON(KEYS.lastMatch);
+    if (!isObj(m)) return null;
+    return renamed(m.formatId) ? Object.assign({}, m, { formatId: renamed(m.formatId) }) : m;
+  }
   function saveLastMatch(match) { writeJSON(KEYS.lastMatch, match); }
 
   DT.store = {
