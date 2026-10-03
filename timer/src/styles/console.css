@@ -12,7 +12,7 @@
   --panel-shadow: 0 1.2em 3em rgb(0 0 0 / .32);
   --console-ease: cubic-bezier(.2, .8, .2, 1);
   /* Words on a solid --accent fill (an armed 重置 / 退出). A theme whose accent is too close to its panel names
-     another (daylight: its ink; ink: its paper); themes.test.js holds every theme to 4.5:1. */
+     another (daylight: its ink; ink: its paper-coloured ink); themes.test.js holds every theme to 4.5:1. */
   --on-accent: var(--panel);
 }
 

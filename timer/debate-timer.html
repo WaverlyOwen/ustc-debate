@@ -652,7 +652,7 @@ body {
   --panel-shadow: 0 1.2em 3em rgb(0 0 0 / .32);
   --console-ease: cubic-bezier(.2, .8, .2, 1);
   /* Words on a solid --accent fill (an armed 重置 / 退出). A theme whose accent is too close to its panel names
-     another (daylight: its ink; ink: its paper); themes.test.js holds every theme to 4.5:1. */
+     another (daylight: its ink; ink: its paper-coloured ink); themes.test.js holds every theme to 4.5:1. */
   --on-accent: var(--panel);
 }
 
@@ -2891,7 +2891,7 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   --ink: #1B1D21;
   --ink-dim: rgb(27 29 33 / .7);
   --accent: #8C5D16;        /* 赭金: ochre gold, dark enough to read as small text on the paper */
-  --on-accent: var(--ground);    /* words on a solid accent (an armed 重置 / 退出): its ochre is too dark for the ink */
+  --on-accent: var(--paper-ink);   /* words on a solid accent (an armed 重置 / 退出): its ochre is too dark for the ink */
   --accent-on-field: #E8C66E;
   --seal: #B8341F;          /* seal paste, brighter than the cinnabar of the stroke */
   --paper-ink: #F2F3EE;     /* ink the colour of paper, for what is written on the stroke */
