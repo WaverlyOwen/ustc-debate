@@ -274,17 +274,47 @@
     } finally { t.done(); }
   });
 
-  DT.test('ui: an armed button gives up when the pointer leaves it', () => {
+  DT.test('ui: an armed button gives up when the mouse leaves it', () => {
     const t = bootSetup(memStorage());
     try {
       const exit = dockBtn('exit');
       exit.click();
       assert.ok(exit.hasAttribute('data-armed'));
-      exit.dispatchEvent(new PointerEvent('pointerleave'));
+      exit.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' }));
       assert.equal(exit.hasAttribute('data-armed'), false);
       t.clock.advance(300); exit.click();
       assert.equal(t.c.route(), 'timer', 'the click after coming back arms it again');
       assert.ok(exit.hasAttribute('data-armed'));
+    } finally { t.done(); }
+  });
+
+  // A tap ends with pointerleave right after pointerup: that must not disarm, or a touchscreen cannot confirm.
+  DT.test('ui: two taps on a touchscreen confirm 退出 and 重置', () => {
+    const t = bootSetup(memStorage());
+    const tap = b => {
+      const o = { pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true };
+      b.dispatchEvent(new PointerEvent('pointerdown', o));
+      b.dispatchEvent(new PointerEvent('pointerup', o));
+      b.dispatchEvent(new PointerEvent('pointerout', o));
+      b.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'touch', isPrimary: true }));
+      b.click();
+    };
+    try {
+      press('Space'); t.clock.advance(5000); press('Space');
+      const left = () => DT.engine.remaining(DT.engine.getRun(t.c.session()), 'main', DT.clock.now());
+      assert.equal(left(), 175000);
+      const reset = dockBtn('reset');
+      tap(reset);
+      assert.ok(reset.hasAttribute('data-armed'), 'the first tap arms 重置');
+      assert.equal(left(), 175000, 'one tap does nothing yet');
+      t.clock.advance(300); tap(reset);
+      assert.equal(reset.hasAttribute('data-armed'), false);
+      assert.equal(left(), 180000, 'the second tap resets');
+      const exit = dockBtn('exit');
+      tap(exit);
+      assert.ok(exit.hasAttribute('data-armed'), 'the first tap arms 退出');
+      t.clock.advance(300); tap(exit);
+      assert.equal(t.c.route(), 'setup', 'the second tap exits');
     } finally { t.done(); }
   });
 

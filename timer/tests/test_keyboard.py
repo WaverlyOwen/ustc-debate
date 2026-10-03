@@ -421,6 +421,33 @@ class TrustedKeyboardTest(unittest.TestCase):
         self.assertEqual(self.js("window.__dtTest.route()"), "timer", "holding Enter does not exit")
         self.assertTrue(self.running())
 
+    def tap(self, selector):
+        """A finger's tap: touchStart and touchEnd at the middle of the element (the browser adds pointerleave)."""
+        left, top, width, height = self.rect(selector)
+        point = {"x": left + width / 2, "y": top + height / 2, "id": 1}
+        self.cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [point]})
+        time.sleep(0.05)
+        self.cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+        time.sleep(0.1)
+
+    def test_9_dock_exit_takes_two_taps_on_a_touchscreen(self):
+        self.open("")
+        self.start_match()
+        self.key("Space")
+        self.js("window.__kbd.leaves = [];"
+                " document.querySelector(\".dt-dock button[data-act='exit']\")"
+                ".addEventListener('pointerleave', e => window.__kbd.leaves.push(e.pointerType))")
+        self.mouse("mouseMoved", 600, 300, 0)
+        self.mouse("mouseMoved", 610, 310, 0)   # the dock shows on pointer movement
+        self.wait("document.querySelector('.dt-dock[data-shown]')")
+        exit_button = ".dt-dock button[data-act='exit']"
+        self.tap(exit_button)
+        self.wait("document.querySelector(\".dt-dock button[data-act='exit'][data-armed]\")")
+        self.assertEqual(self.js("window.__kbd.leaves"), ["touch"], "the tap ends with a touch pointerleave")
+        time.sleep(0.3)
+        self.tap(exit_button)
+        self.wait("window.__dtTest.route() === 'setup'")
+
 
 if __name__ == "__main__":
     unittest.main()

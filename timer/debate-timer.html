@@ -8653,7 +8653,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   // The buttons that reset or exit ask twice (new spec §2.1): the first click arms the button (data-armed), and
   // its CSS shows the words that say what the second click does; a second click 250 ms to 1.5 s after the first runs
   // `run`. A shaky double-click is too quick to count, and stays armed for a deliberate second click. 1.5 s, the
-  // pointer leaving the button, or a press anywhere else disarms it. `words()`, when given, writes those words
+  // mouse leaving the button, or a press anywhere else disarms it. Only the mouse: a finger's tap ends with a
+  // pointerleave of its own, which would disarm the button between two taps. `words()`, when given, writes those words
   // into `ask` as the button arms. data-armed alternates a / b so the 1.5 s drain under the words starts over on
   // every arming. Returns the function that disarms, for a page going away.
   function confirmTwice(button, run, ask, words) {
@@ -8662,10 +8663,11 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       armedAt = null;
       clearTimeout(timer);
       document.removeEventListener('pointerdown', elsewhere, true);
-      button.removeEventListener('pointerleave', disarm);
+      button.removeEventListener('pointerleave', left);
       attr(button, 'data-armed', false);
     }
     function elsewhere(e) { if (!button.contains(e.target)) disarm(); }
+    function left(e) { if (e.pointerType === 'mouse') disarm(); }
     // A held Enter clicks again on every repeat, and one of them would confirm: only a fresh press counts.
     button.addEventListener('keydown', e => {
       if (e.repeat && (e.key === 'Enter' || e.key === ' ')) e.preventDefault();
@@ -8685,7 +8687,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       attr(button, 'data-armed', turn);
       timer = setTimeout(disarm, DOUBLE_MS);
       document.addEventListener('pointerdown', elsewhere, true);
-      button.addEventListener('pointerleave', disarm);
+      button.addEventListener('pointerleave', left);
     });
     return disarm;
   }
@@ -9331,6 +9333,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     root.appendChild(hint);
     attr(root, 'data-layout', 'projector');
     let session = null, raf = null, destroyed = false, away = false;
+    let blank = true;   // nothing of a match on the stage: a clear has nothing to do
     const rung = [];   // the console reports each bell it rings; this window may have seen it first
 
     function pulse(events) {
@@ -9377,14 +9380,18 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       target: env.window, opener: env.window.opener || null, storage: env.storage, sessionKey: env.sessionKey,
       onState(m) {
         session = m.session;
+        blank = false;
         if (typeof m.away === 'boolean') away = m.away;   // a state from storage leaves it as it was
         draw(DT.clock.now());
       },
       onEvents: pulse,
       onToast: message => stage.toast(message),
       onLost: () => stage.toast(CONSOLE_GONE),
-      // The console dropped its match (放弃并新开): nothing of it stays on the wall.
+      // The console dropped its match (放弃并新开): nothing of it stays on the wall. Its heartbeat repeats the
+      // clear every second; once the stage is blank there is nothing more to do.
       onClear() {
+        if (blank) return;
+        blank = true;
         session = null;
         away = false;
         stage.destroy();

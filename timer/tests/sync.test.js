@@ -352,6 +352,33 @@
     } finally { c.destroy(); DT.clock.reset(); }
   });
 
+  // The console's heartbeat repeats its last word, a clear included, every second: a cleared projector stays as it is.
+  DT.test('sync: a clear repeated by the heartbeat leaves a cleared projector alone', () => {
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const me = fakeWin(), opener = fakeWin();
+    me.opener = opener;
+    DT.clock.set(() => T0);
+    const c = DT.app.boot({ root: box.firstChild, route: 'projector', window: me, storage: memStorage(), bells: fakeBells() });
+    const clear = () => me.emit('message', { data: { source: 'debate-timer', type: 'clear' } });
+    try {
+      const s = DT.engine.createSession(freshman(), MATCH, T0);
+      me.emit('message', { data: { source: 'debate-timer', type: 'state', session: s, settings: {}, away: false } });
+      clear();
+      const blank = box.querySelector('.dt-stage');
+      me.emit('message', { data: { source: 'debate-timer', type: 'toast', message: '新的一场' } });
+      clear();
+      clear();
+      assert.equal(box.querySelector('.dt-stage'), blank, 'the blank stage is not built again');
+      assert.equal(box.querySelector('.dt-toast').textContent, '新的一场', 'nor is a toast on it wiped');
+      me.emit('message', { data: { source: 'debate-timer', type: 'state', session: s, settings: {}, away: false } });
+      assert.equal(box.querySelector('.dt-stage').getAttribute('data-mode'), 'title');
+      clear();
+      assert.ok(box.querySelector('.dt-stage') !== blank, 'a match shown again is cleared again');
+      assert.equal(box.querySelector('.dt-stage').hasAttribute('data-mode'), false);
+      assert.equal(c.session(), null);
+    } finally { c.destroy(); DT.clock.reset(); }
+  });
+
   DT.test('sync: bell events reach the projector, and of the toasts only what the room should see', () => {
     const t = bootConsole();
     const toasts = () => t.proj.sent.filter(m => m.type === 'toast').map(m => m.message);
