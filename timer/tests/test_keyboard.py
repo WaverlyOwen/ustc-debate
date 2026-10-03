@@ -270,7 +270,7 @@ class TrustedKeyboardTest(unittest.TestCase):
     def volume(self):
         return self.js("document.querySelector('input[name=volume]').value")
 
-    # ---- the six scenarios of the spec (2026-10-03 §4) ----
+    # ---- the six scenarios of the spec (2026-10-03 §4), and a seventh for §2 ----
 
     def test_1_console_volume_label_keeps_the_timer_keys(self):
         self.open("demo=console")
@@ -357,6 +357,43 @@ class TrustedKeyboardTest(unittest.TestCase):
         self.assertEqual(self.session()["cursor"], 0)
         self.assertTrue(self.running())
         self.assertEqual(self.toggles(), 1)
+
+    # ---- reset and exit (2026-10-03 §2) ----
+
+    def double_click(self, selector):
+        """A real double-click: two presses about 20 ms apart, as a shaky hand gives them."""
+        left, top, width, height = self.rect(selector)
+        x, y = left + width / 2, top + height / 2
+        self.mouse("mouseMoved", x, y, 0)
+        for count in (1, 2):
+            self.cdp.send("Input.dispatchMouseEvent",
+                          {"type": "mousePressed", "x": x, "y": y, "button": "left", "buttons": 1, "clickCount": count})
+            self.cdp.send("Input.dispatchMouseEvent",
+                          {"type": "mouseReleased", "x": x, "y": y, "button": "left", "buttons": 0, "clickCount": count})
+            time.sleep(0.02)
+        time.sleep(0.1)
+
+    def test_7_dock_exit_takes_two_deliberate_clicks_and_keeps_the_match(self):
+        self.open("")
+        self.start_match()
+        self.key("Space")
+        self.assertTrue(self.running())
+        self.mouse("mouseMoved", 600, 300, 0)
+        self.mouse("mouseMoved", 610, 310, 0)   # the dock shows on pointer movement
+        self.wait("document.querySelector('.dt-dock[data-shown]')")
+        exit_button = ".dt-dock button[data-act='exit']"
+        self.double_click(exit_button)
+        self.assertEqual(self.js("window.__dtTest.route()"), "timer", "a double-click does not confirm")
+        time.sleep(1.7)   # the armed button gives up
+        self.click(exit_button)
+        time.sleep(0.35)
+        self.click(exit_button)
+        self.wait("window.__dtTest.route() === 'setup'")
+        self.assertIn("上一场还没打完", self.js("document.querySelector('.dt-setup-resume').textContent"))
+        saved = self.js("JSON.parse(localStorage.getItem('dt.session.v1'))")
+        stage = saved["timeline"][saved["cursor"]]
+        self.assertEqual(saved["cursor"], 0)
+        self.assertFalse(saved["runs"][stage["id"]]["running"], "the clock stopped on the way out")
 
 
 if __name__ == "__main__":

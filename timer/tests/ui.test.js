@@ -128,6 +128,169 @@
     }
   });
 
+  // ---- reset any stage, exit from any screen (2026-10-03 spec §2) ----
+
+  // The app as it opens for real: the setup page first, a match started from it.
+  function bootSetup(storage) {
+    const t = boot({ storage, route: undefined, location: { search: '', hash: '' }, preset: null });
+    const box = document.getElementById('sandbox');
+    assert.equal(t.c.route(), 'setup');
+    box.querySelector('[data-format-id="ustc-freshman-cup"]').click();
+    box.querySelector('button[data-action="start"]').click();
+    assert.equal(t.c.route(), 'timer');
+    return Object.assign(t, { box });
+  }
+  const savedRun = storage => {
+    const s = JSON.parse(storage.getItem('dt.session.v1'));
+    return s.runs[s.timeline[s.cursor].id];
+  };
+  const dockBtn = act => document.querySelector('.dt-dock button[data-act="' + act + '"]');
+
+  DT.test('ui: Q twice exits to the setup page and keeps the match', () => {
+    const storage = memStorage();
+    const t = bootSetup(storage);
+    try {
+      press('Space');
+      t.clock.advance(5000);
+      press('KeyQ');
+      assert.equal(toastText(), '再按一次 Q 退出到开赛页，这一场会保留');
+      assert.equal(t.c.route(), 'timer');
+      press('KeyQ');
+      assert.equal(t.c.route(), 'setup');
+      const banner = t.box.querySelector('.dt-setup-resume');
+      assert.ok(banner && banner.textContent.indexOf('上一场还没打完') >= 0, 'the resume banner is shown');
+      assert.equal(savedRun(storage).running, false);
+      assert.equal(savedRun(storage).clocks.main.used, 5000);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: exiting pauses the running clock', () => {
+    const storage = memStorage();
+    const t = bootSetup(storage);
+    try {
+      press('Space');
+      t.clock.advance(10000);
+      press('KeyQ'); press('KeyQ');
+      t.clock.advance(120000);
+      t.box.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.route(), 'timer');
+      assert.equal(t.c.session().cursor, 0, 'back on the stage it left');
+      assert.equal(left(t), 180000 - 10000, 'the two minutes on the setup page are not charged');
+      assert.equal(run(t).running, false);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a double-click does not confirm exit', () => {
+    const t = bootSetup(memStorage());
+    try {
+      press('Space');
+      const exit = dockBtn('exit');
+      assert.equal(exit.textContent, '退出Q Q');
+      exit.click();
+      assert.ok(exit.hasAttribute('data-armed'));
+      assert.equal(exit.querySelector('span').textContent, '再点一次确认');
+      t.clock.advance(100); exit.click();
+      assert.equal(t.c.route(), 'timer', 'two clicks 100 ms apart are one double-click');
+      t.clock.advance(400); exit.click();
+      assert.equal(t.c.route(), 'setup');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: the dock exit button disarms after 1.5 s or a click elsewhere', () => {
+    const t = bootSetup(memStorage());
+    try {
+      const exit = dockBtn('exit');
+      exit.click();
+      t.clock.advance(1600); exit.click();
+      assert.equal(t.c.route(), 'timer', 'too late: this click arms it again');
+      assert.ok(exit.hasAttribute('data-armed'));
+      dockBtn('stages').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      assert.equal(exit.hasAttribute('data-armed'), false);
+      assert.equal(exit.querySelector('span').textContent, '退出');
+      t.clock.advance(300); exit.click();
+      assert.equal(t.c.route(), 'timer');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: the dock reset button resets the current stage after two clicks', () => {
+    const t = bootSetup(memStorage());
+    try {
+      const reset = dockBtn('reset');
+      assert.equal(reset.disabled, true, 'nothing to reset on the title card');
+      press('Space'); t.clock.advance(20000); press('Space');
+      assert.equal(reset.disabled, false);
+      reset.click(); t.clock.advance(300); reset.click();
+      assert.equal(left(t), 180000);
+      assert.equal(t.c.session().cursor, 0);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a stage-list row resets that stage after two clicks', () => {
+    const t = bootSetup(memStorage());
+    try {
+      press('Space'); t.clock.advance(20000);
+      press('ArrowRight');
+      assert.equal(t.c.session().cursor, 1);
+      press('KeyS');
+      const list = document.querySelector('.dt-overlay[data-name="stages"]');
+      const btn = list.querySelector('button[aria-label="重置第 1 个环节"]');
+      assert.ok(btn, 'the used stage offers a reset');
+      assert.equal(btn.hidden, false);
+      assert.equal(list.querySelector('button[aria-label="重置第 3 个环节"]').hidden, true, 'an unused one does not');
+      btn.click();
+      assert.equal(btn.querySelector('.dt-row-reset-label').textContent, '再点一次确认');
+      assert.equal(t.c.session().cursor, 1, 'one click does nothing yet');
+      assert.ok(t.c.session().runs[t.c.session().timeline[0].id]);
+      t.clock.advance(300); btn.click();
+      const s = t.c.session();
+      assert.equal(s.runs[s.timeline[0].id], undefined, 'stage 1 is fresh');
+      assert.equal(s.cursor, 1, 'the cursor stays');
+      assert.equal(btn.hidden, true);
+      press('KeyZ');
+      assert.equal(DT.engine.remaining(DT.engine.getRun(t.c.session(), t.c.session().timeline[0].id), 'main', DT.clock.now()), 160000);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: the title card and the end card can exit too', () => {
+    const storage = memStorage();
+    const t = bootSetup(storage);
+    try {
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'setup');
+      assert.ok(t.box.textContent.indexOf('还没开始第一个环节') >= 0);
+      t.box.querySelector('button[data-action="resume"]').click();
+      t.c.act('goto', t.c.session().timeline.length);
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'setup');
+      assert.equal(t.box.querySelector('.dt-setup-resume'), null, 'a finished match has nothing to resume');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a match file exits to its ask page, and 继续上次 goes on where it left', () => {
+    let now = T0; DT.clock.set(() => now);
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
+    const t = bootPreset(memStorage(), preset);
+    try {
+      press('Space'); press('ArrowRight'); press('Space');
+      now += 7000;
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'ask');
+      assert.ok(t.box.textContent.indexOf('停在第 2 个环节') >= 0);
+      now += 60000;
+      t.box.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.session().cursor, 1);
+      assert.equal(DT.engine.remaining(run(t), 'main', now), DT.engine.currentStage(t.c.session()).secs * 1000 - 7000);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: the help lists Q Q', () => {
+    const t = boot();
+    press('KeyH');
+    const keys = Array.from(document.querySelectorAll('.dt-keys th')).map(th => th.textContent);
+    assert.ok(keys.indexOf('Q Q') >= 0, keys.join(','));
+    t.done();
+  });
+
   DT.test('ui: A and L give the floor in free debate; Z undoes a wrong switch', () => {
     const t = boot();
     const idx = t.c.session().timeline.findIndex(s => s.name === '自由辩论');

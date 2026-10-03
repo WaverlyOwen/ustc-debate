@@ -98,9 +98,10 @@
 
   // The projector's end. opts: {target (this window), opener (the console), storage (read for the saved
   // session at start, or null), sessionKey (where the console saves it; a match file has its own),
-  // onState({session, settings}), onKey(code, event) for every key pressed here, onEvents(list),
+  // onState({session, settings, away}), onKey(code, event) for every key pressed here, onEvents(list),
   // onToast(message), onLost() for a key pressed after the console has gone}. Keys other than F go to the
-  // console; F stays for full screen here.
+  // console; F stays for full screen here. `away` says whether the console has left the timer for the setup
+  // page (new spec §2.2): true or false from the console, undefined from storage, which cannot tell.
   function createProjectorEnd(opts) {
     const o = opts || {};
     const target = o.target || window;
@@ -111,14 +112,14 @@
       try { return !!o.opener && !o.opener.closed; } catch (e) { return false; }
     }
 
-    function state(session, settings) {
-      if (!stopped && isObj(session)) o.onState({ session, settings: isObj(settings) ? settings : null });
+    function state(session, settings, away) {
+      if (!stopped && isObj(session)) o.onState({ session, settings: isObj(settings) ? settings : null, away });
     }
 
     function onMessage(ev) {
       const d = ev && ev.data;
       if (stopped || !ours(d)) return;
-      if (d.type === 'state') state(d.session, d.settings);
+      if (d.type === 'state') state(d.session, d.settings, !!d.away);
       else if (d.type === 'events' && Array.isArray(d.events) && o.onEvents) o.onEvents(d.events);
       else if (d.type === 'toast' && o.onToast) o.onToast(String(d.message || ''));
     }

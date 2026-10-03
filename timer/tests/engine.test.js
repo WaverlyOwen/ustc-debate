@@ -267,6 +267,25 @@
     assert.equal(rem(s, 'main', T0 + 70000, 's1'), 130000);
   });
 
+  DT.test('engine: reset can target any stage and leaves the cursor alone', () => {
+    let s = E.toggle(at(0), T0); s = E.next(s, T0 + 50000);       // stage 0 used 50 s, now on stage 1
+    s = E.toggle(s, T0 + 50000);                                   // stage 1 running
+    s = E.reset(s, T0 + 60000, 0);
+    assert.equal(s.cursor, 1);
+    assert.equal(E.remaining(E.getRun(s, 's1'), 'main', T0 + 70000), 180000);
+    assert.ok(E.getRun(s).running, 'stage 1 untouched');
+    s = E.undo(s, T0 + 61000);
+    assert.equal(E.remaining(E.getRun(s, 's1'), 'main', T0 + 70000), 130000);
+  });
+
+  DT.test('engine: resetting the running current stage by its index stops it', () => {
+    let s = E.toggle(at(1), T0);
+    s = E.reset(s, T0 + 20000, 1);
+    assert.equal(E.getRun(s).running, false);
+    assert.equal(rem(s, 'main', T0 + 30000), 120000);
+    assert.equal(E.reset(s, T0, 99).history.length, s.history.length, 'no such stage: nothing to undo');
+  });
+
   DT.test('engine: extras insert after the current stage and respect perSide', () => {
     let s = E.toggle(at(0), T0); s = E.toggle(s, T0 + 170000);
     s = E.insertExtra(s, '奇袭', 0, 'con', T0 + 171000);

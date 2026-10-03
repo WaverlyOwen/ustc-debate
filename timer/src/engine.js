@@ -266,8 +266,9 @@
     });
   }
 
-  function reset(session, now) {
-    const st = currentStage(session);
+  // The current stage, or the one at `index` (new spec §2.1); the cursor stays. Dropping the run stops its clock.
+  function reset(session, now, index) {
+    const st = index == null ? currentStage(session) : session.timeline[index];
     if (!st) return noop(session);
     const s = begin(session);
     delete s.runs[st.id];
