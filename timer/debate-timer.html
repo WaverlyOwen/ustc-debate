@@ -953,7 +953,10 @@ body {
    the two clicks. */
 .dt-stagelist-item:has(> .dt-row-reset[data-armed]) > .dt-row { margin-right: 1.85em; }
 
-/* Help: the key table. */
+/* Help: the key table, in two columns where the panel is wide enough (ui.js helpOverlay). */
+.dt-overlay[data-name="help"] .dt-panel { width: min(68em, 94cqw); }
+.dt-keys-cols { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 2.6em; }
+.dt-keys-cols > .dt-keys { flex: 1 1 26em; width: auto; }
 .dt-keys { width: 100%; border-collapse: collapse; }
 .dt-keys th, .dt-keys td { padding: .42em 0; vertical-align: baseline; text-align: left; }
 .dt-keys tr + tr > * { border-top: 1px solid var(--panel-line); }
@@ -8244,7 +8247,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   // setup page with the match remembered from last time; its steps, if any, are a match left unfinished.
   // An `editor` scene opens the format editor over the match (E): `expand` opens a row's details, `typo`
   // leaves [row, text] in a duration box. A `console` scene shows the page as the console beside a projector
-  // window (O).
+  // window (O). An `overlay` scene opens that overlay (help: H).
   const SINGLE = { at: 73, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle']] };
   const DUAL = { at: 137, steps: [[0, 'goto', '自由辩论'], [0, 'floor', 'pro'], [20, 'floor', 'con'], [68, 'floor', 'pro']] };
   const SCENES = {
@@ -8262,6 +8265,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     'seat-right': Object.assign({ seat: 'right' }, DUAL),
     'long': { at: 73, format: longFormat, steps: [[0, 'goto', LONG_NAME], [0, 'toggle']] },
     'dock': Object.assign({ dock: true }, SINGLE),   // the control dock held open over a running stage
+    'help': Object.assign({ overlay: 'help' }, SINGLE),   // the key table (H) over a running stage
     'setup': { setup: true, at: 0, steps: [] },
     'setup-resume': Object.assign({ setup: true }, DUAL),   // the free debate left half way
     'editor': Object.assign({ editor: { expand: 1 } }, SINGLE),
@@ -8294,7 +8298,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
     const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
     if (!scene.setup) {
-      const out = { route: 'timer', session: play(scene, now, theme), dock: !!scene.dock, console: !!scene.console };
+      const out = { route: 'timer', session: play(scene, now, theme), dock: !!scene.dock, console: !!scene.console,
+        overlay: scene.overlay || null };
       if (scene.editor) Object.assign(out, { editor: scene.editor, formats: DT.BUILTIN_FORMATS.concat([weekend()]) });
       return out;
     }
@@ -8971,17 +8976,24 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       };
     }
 
+    // Two tables side by side where the panel is wide enough, so the last keys (O, F, M, H, Esc) are not below the
+    // fold of a 768-high screen; they stack where it is not.
     function helpOverlay(body) {
-      const table = el('table', 'dt-keys');
-      HELP.forEach(([keys, what]) => {
-        const tr = el('tr');
-        const th = el('th');
-        keys.forEach(k => th.appendChild(el('kbd', null, k)));
-        tr.appendChild(th);
-        tr.appendChild(el('td', null, what));
-        table.appendChild(tr);
+      const cols = el('div', 'dt-keys-cols');
+      const half = Math.ceil(HELP.length / 2);
+      [HELP.slice(0, half), HELP.slice(half)].forEach(rows => {
+        const table = el('table', 'dt-keys');
+        rows.forEach(([keys, what]) => {
+          const tr = el('tr');
+          const th = el('th');
+          keys.forEach(k => th.appendChild(el('kbd', null, k)));
+          tr.appendChild(th);
+          tr.appendChild(el('td', null, what));
+          table.appendChild(tr);
+        });
+        cols.appendChild(table);
       });
-      body.appendChild(table);
+      body.appendChild(cols);
       return () => {};
     }
 
@@ -9707,6 +9719,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       showSetup();
     } else if (demo) {
       showTimer(demo.session, { pinDock: demo.dock, console: demo.console });
+      if (demo.overlay) timer().openOverlay(demo.overlay);
       if (demo.editor) {
         openEditor(demo.session.format.id);
         stageEditorDemo(root, demo.editor);

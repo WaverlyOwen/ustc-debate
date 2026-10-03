@@ -22,7 +22,7 @@ from run_js_tests import build, find_browser  # noqa: E402
 
 # Must match DT.demo.names in src/demo.js (test_build.py checks it).
 DEMOS = ["title", "single", "cross", "over", "dual", "dual-locked", "dual-idle", "break", "end",
-         "daylight", "chroma", "seat-right", "long", "dock", "setup", "setup-resume", "editor", "editor-error",
+         "daylight", "chroma", "seat-right", "long", "dock", "help", "setup", "setup-resume", "editor", "editor-error",
          "console"]
 
 

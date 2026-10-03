@@ -408,6 +408,22 @@
     } finally { t.done(); }
   });
 
+  // 2026-10-03 final review: at 1366x768 the last rows (O, F, M, H, Esc) fell below the panel's fold.
+  DT.test('ui: the help shows every key without scrolling at 1366x768', () => {
+    const box = document.getElementById('sandbox');
+    box.innerHTML = '<div style="width:1366px;height:768px;position:relative"></div>';
+    const c = DT.app.boot({ root: box.firstChild, location: { search: '?demo=help&frozen=1', hash: '' } });
+    try {
+      const panel = box.querySelector('.dt-overlay[data-name="help"] .dt-panel-body');
+      assert.ok(panel, 'the help demo opens the help');
+      assert.equal(panel.querySelectorAll('.dt-keys tr').length, 23);
+      assert.ok(panel.scrollHeight <= panel.clientHeight + 1, panel.scrollHeight + ' > ' + panel.clientHeight);
+      const esc = Array.from(panel.querySelectorAll('.dt-keys th')).find(th => th.textContent === 'Esc');
+      const r = esc.getBoundingClientRect(), p = panel.getBoundingClientRect();
+      assert.ok(r.bottom <= p.bottom + 1, 'Esc is in view');
+    } finally { c.destroy(); DT.clock.reset(); }
+  });
+
   DT.test('ui: the help lists Q Q', () => {
     const t = boot();
     press('KeyH');

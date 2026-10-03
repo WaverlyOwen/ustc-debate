@@ -313,7 +313,10 @@
    the two clicks. */
 .dt-stagelist-item:has(> .dt-row-reset[data-armed]) > .dt-row { margin-right: 1.85em; }
 
-/* Help: the key table. */
+/* Help: the key table, in two columns where the panel is wide enough (ui.js helpOverlay). */
+.dt-overlay[data-name="help"] .dt-panel { width: min(68em, 94cqw); }
+.dt-keys-cols { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 2.6em; }
+.dt-keys-cols > .dt-keys { flex: 1 1 26em; width: auto; }
 .dt-keys { width: 100%; border-collapse: collapse; }
 .dt-keys th, .dt-keys td { padding: .42em 0; vertical-align: baseline; text-align: left; }
 .dt-keys tr + tr > * { border-top: 1px solid var(--panel-line); }

@@ -204,12 +204,12 @@ python timer/tests/run_js_tests.py           # JS 测试（用系统自带的 Ed
 python -m unittest discover -s timer/tests -p "test_*.py"   # Python 测试（含 --check，以及 test_keyboard.py：无头 Edge 注入真实键盘鼠标）
 python timer/tests/screenshots.py            # 截图，1920x1080，存到 timer/tests/out/1920x1080/
 python timer/tests/screenshots.py --size 1366x768
-python timer/tests/screenshots.py --size 1280x720 --only dock        # 控制条在常见的 720p 投影上排成一行
-python timer/tests/screenshots.py --size 1024x768 --only dock         # 4:3 投影
+python timer/tests/screenshots.py --size 1280x720 --only dock,help   # 控制条在常见的 720p 投影上排成一行
+python timer/tests/screenshots.py --size 1024x768 --only dock,help    # 4:3 投影
 python timer/tests/screenshots.py --theme ink    # 某一个主题的全部场景
 ```
 
-截图用的是 `?demo=<名字>` 的固定场景（标题、单方、超时、双方、间隔、结束卡、长名字、开赛页、编辑器、操作台等；加 `&theme=<id>` 换主题），可以直接在浏览器里打开 `debate-timer.html?demo=long` 看。
+截图用的是 `?demo=<名字>` 的固定场景（标题、单方、超时、双方、间隔、结束卡、长名字、控制条、键位帮助、开赛页、编辑器、操作台等；加 `&theme=<id>` 换主题），可以直接在浏览器里打开 `debate-timer.html?demo=long` 看。
 
 ## 已知限制
 

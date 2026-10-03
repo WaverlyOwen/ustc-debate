@@ -662,17 +662,24 @@
       };
     }
 
+    // Two tables side by side where the panel is wide enough, so the last keys (O, F, M, H, Esc) are not below the
+    // fold of a 768-high screen; they stack where it is not.
     function helpOverlay(body) {
-      const table = el('table', 'dt-keys');
-      HELP.forEach(([keys, what]) => {
-        const tr = el('tr');
-        const th = el('th');
-        keys.forEach(k => th.appendChild(el('kbd', null, k)));
-        tr.appendChild(th);
-        tr.appendChild(el('td', null, what));
-        table.appendChild(tr);
+      const cols = el('div', 'dt-keys-cols');
+      const half = Math.ceil(HELP.length / 2);
+      [HELP.slice(0, half), HELP.slice(half)].forEach(rows => {
+        const table = el('table', 'dt-keys');
+        rows.forEach(([keys, what]) => {
+          const tr = el('tr');
+          const th = el('th');
+          keys.forEach(k => th.appendChild(el('kbd', null, k)));
+          tr.appendChild(th);
+          tr.appendChild(el('td', null, what));
+          table.appendChild(tr);
+        });
+        cols.appendChild(table);
       });
-      body.appendChild(table);
+      body.appendChild(cols);
       return () => {};
     }
 
@@ -1398,6 +1405,7 @@
       showSetup();
     } else if (demo) {
       showTimer(demo.session, { pinDock: demo.dock, console: demo.console });
+      if (demo.overlay) timer().openOverlay(demo.overlay);
       if (demo.editor) {
         openEditor(demo.session.format.id);
         stageEditorDemo(root, demo.editor);
