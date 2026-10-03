@@ -304,11 +304,51 @@
       const stage = box.querySelector('.dt-stage');
       assert.equal(stage.getAttribute('data-mode'), 'title');
       assert.equal(c.view().mode, 'title');
+      const foot = box.querySelector('.dt-next').textContent;
+      assert.ok(foot.indexOf('比赛暂停') >= 0 && foot.indexOf('停在第 3 个环节：' + s.timeline[2].name) >= 0, foot);
+      assert.equal(foot.indexOf('空格开始'), -1, 'no call to start what the room cannot start from here');
+      me.emit('keydown', { code: 'Space', key: ' ', preventDefault() {} });
+      assert.equal(box.querySelector('.dt-toast').textContent, '计时员在开赛页，回到计时后继续', 'a key here is answered');
       me.emit('storage', { key: 'dt.session.v1', newValue: JSON.stringify(s) });
       assert.equal(stage.getAttribute('data-mode'), 'title', 'the console saving on its way out changes nothing');
       me.emit('message', state({ away: false }));
       assert.equal(stage.getAttribute('data-mode'), 'stage');
       assert.equal(c.session().cursor, 2);
+    } finally { c.destroy(); DT.clock.reset(); }
+  });
+
+  DT.test('sync: 放弃并新开 on the setup page clears the projector, which keeps it cleared', async () => {
+    const t = bootConsole({ route: undefined, location: { search: '', hash: '' }, preset: null });
+    try {
+      t.root.querySelector('[data-format-id="ustc-freshman-cup"]').click();
+      t.root.querySelector('button[data-action="start"]').click();
+      press('KeyO');
+      press('Space');
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'setup');
+      t.root.querySelector('button[data-action="discard"]').click();
+      assert.equal(t.proj.sent[t.proj.sent.length - 1].type, 'clear');
+      await wait(1100);   // the heartbeat
+      assert.equal(t.proj.sent.filter(m => m.type === 'state' || m.type === 'clear').pop().type, 'clear',
+        'the heartbeat does not bring the discarded match back');
+    } finally { t.done(); }
+  });
+
+  DT.test('sync: a cleared projector shows nothing of the discarded match', () => {
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const me = fakeWin(), opener = fakeWin();
+    me.opener = opener;
+    DT.clock.set(() => T0);
+    const c = DT.app.boot({ root: box.firstChild, route: 'projector', window: me, storage: memStorage(), bells: fakeBells() });
+    try {
+      const s = DT.engine.createSession(freshman(), MATCH, T0);
+      me.emit('message', { data: { source: 'debate-timer', type: 'state', session: s, settings: {}, away: true } });
+      assert.equal(box.querySelector('.dt-stage').getAttribute('data-mode'), 'title');
+      me.emit('message', { data: { source: 'debate-timer', type: 'clear' } });
+      assert.equal(c.session(), null);
+      assert.equal(box.querySelectorAll('.dt-stage').length, 1);
+      assert.equal(box.querySelector('.dt-stage').hasAttribute('data-mode'), false, 'a blank stage');
+      assert.equal(box.querySelector('.dt-teams').textContent.indexOf('甲'), -1);
     } finally { c.destroy(); DT.clock.reset(); }
   });
 
@@ -415,7 +455,7 @@
       me.emit('keydown', { code: 'Space', preventDefault() { prevented = true; } });
       assert.equal(opener.sent.length, 0);
       assert.equal(prevented, false);
-      assert.equal(box.querySelector('.dt-toast').textContent, '控制台已关闭。在主窗口按 O 重新连接');
+      assert.equal(box.querySelector('.dt-toast').textContent, '控制台已关闭。关掉这个窗口，在主窗口按 O 重新打开投影');
     } finally { c.destroy(); DT.clock.reset(); }
   });
 

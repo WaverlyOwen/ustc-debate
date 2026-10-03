@@ -72,7 +72,7 @@
 
     function push(message) {
       if (stopped || !isObj(message)) return false;
-      if (message.type === 'state') last = message;
+      if (message.type === 'state' || message.type === 'clear') last = message;   // what the heartbeat repeats
       const w = projector();
       return !!w && post(w, message);
     }
@@ -110,7 +110,8 @@
   // The projector's end. opts: {target (this window), opener (the console), storage (read for the saved
   // session at start, or null), sessionKey (where the console saves it; a match file has its own),
   // onState({session, settings, away}), onKey(code, event) for every key pressed here, onEvents(list),
-  // onToast(message), onLost() for a key pressed after the console has gone}. Keys other than F go to the
+  // onToast(message), onClear() when the console has dropped its match, onLost() for a key pressed after the
+  // console has gone}. Keys other than F go to the
   // console; F stays for full screen here. `away` says whether the console has left the timer for the setup
   // page (new spec §2.2): true or false from the console, undefined from storage, which cannot tell.
   function createProjectorEnd(opts) {
@@ -133,6 +134,7 @@
       if (d.type === 'state') state(d.session, d.settings, !!d.away);
       else if (d.type === 'events' && Array.isArray(d.events) && o.onEvents) o.onEvents(d.events);
       else if (d.type === 'toast' && o.onToast) o.onToast(String(d.message || ''));
+      else if (d.type === 'clear' && o.onClear) o.onClear();
     }
 
     function onKeyDown(e) {

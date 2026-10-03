@@ -17,7 +17,10 @@
   const EXPORTED = '已导出。把这个文件拷到比赛用的电脑上，双击就能直接开始这一场';
   const EXPORT_FAILED = '没能导出这个文件：浏览器没有让它下载。再试一次，或换一个浏览器';
   const RESTART_LABEL = '重新开始这一场';   // 新的一场 on the end card of a match file (new spec §4.1)
-  const CONSOLE_GONE = '控制台已关闭。在主窗口按 O 重新连接';   // a key in a projector window left on its own
+  // A key in a projector window whose console tab was closed. A refreshed console finds this window again by name,
+  // but a console opened anew cannot (its O opens a window of its own), so this one is to be closed.
+  const CONSOLE_GONE = '控制台已关闭。关掉这个窗口，在主窗口按 O 重新打开投影';
+  const CONSOLE_AWAY = '计时员在开赛页，回到计时后继续';         // a key in a projector window while the console is away
   // What ?exportProbe=1 exports, for the end-to-end test (new spec §4.4).
   const PROBE = {
     format: 'ustc-freshman-cup', theme: 'hall',
@@ -197,14 +200,15 @@
     return { name: 'setup' };
   }
 
-  // A saved match worth resuming: unfinished and sound enough to render. Anything else is dropped.
+  // A saved match worth resuming: unfinished (or left with 退出, even from its end card: new spec §5.3) and sound
+  // enough to render. Anything else is dropped.
   function resumable(saved, now) {
     if (!saved) return null;
     const ok = Array.isArray(saved.timeline) && Number.isInteger(saved.cursor) &&
       saved.cursor >= -1 && isObj(saved.runs) && isObj(saved.format) && isObj(saved.extrasUsed) &&
       !DT.store.validateFormat(Object.assign({}, saved.format, { stages: saved.timeline })).length;
     if (!ok) { console.warn('保存的场次已损坏，已丢弃'); return null; }
-    if (saved.cursor >= saved.timeline.length) return null;
+    if (saved.cursor >= saved.timeline.length && !saved.exited) return null;
     try { DT.engine.view(saved, now); } catch (e) { console.warn('保存的场次已损坏，已丢弃'); return null; }
     if (!Array.isArray(saved.history)) saved.history = [];
     return saved;
@@ -248,13 +252,21 @@
     return DT.engine.createSession(format, o.match || {}, now);
   }
 
-  // How the setup page names a match it can resume: its title, else the pro motion, else the format; and the
-  // stage it stopped on.
+  // How the setup page names a match it can resume: its title, else the pro motion, else the format; the stage it
+  // stopped on; whether the timekeeper left it with 退出 (else it was left by closing the page), and on its end card.
   function resumeInfo(session) {
     const m = isObj(session.match) ? session.match : {};
     const title = [m.title, m.proMotion, session.format.name].map(x => String(x || '').trim()).find(x => x);
     const st = session.timeline[session.cursor];
-    return { title: title || '', cursor: session.cursor, stage: st ? st.name : '' };
+    return { title: title || '', cursor: session.cursor, stage: st ? st.name : '', exited: !!session.exited,
+      finished: session.cursor >= session.timeline.length };
+  }
+
+  // What the projector's title card says while the console is away (new spec §2.2), in place of 空格开始.
+  function awayText(session) {
+    const st = session.timeline[session.cursor];
+    if (st) return '停在第 ' + (session.cursor + 1) + ' 个环节：' + st.name;
+    return session.cursor < 0 ? '还没开始第一个环节' : '比赛已经结束';
   }
 
   // What a key does. `hold` lets a held key repeat; `twice` asks for a second press and names the toast.
@@ -992,7 +1004,7 @@
   // its own clock. Every key goes to the console except F, which makes this window full screen. While the
   // console is away on the setup page it shows the match's title card (new spec §2.2).
   function mountProjector(root, env) {
-    const stage = DT.render.mount(root);
+    let stage = DT.render.mount(root);
     const hint = el('div', 'dt-projector-hint');
     hint.append('把这个窗口拖到投影屏幕上，按 ', el('kbd', null, 'F'), ' 全屏');
     root.appendChild(hint);
@@ -1011,7 +1023,11 @@
     }
 
     function viewAt(now) {
-      if (away) return DT.engine.view(Object.assign({}, session, { cursor: -1 }), now);
+      if (away) {
+        const card = DT.engine.view(Object.assign({}, session, { cursor: -1 }), now);
+        card.away = awayText(session);   // render.js says where the match paused instead of 空格开始
+        return card;
+      }
       const v = DT.engine.view(session, now);
       if (v.mode === 'end') v.record = DT.engine.record(session, now);
       return v;
@@ -1046,9 +1062,19 @@
       onEvents: pulse,
       onToast: message => stage.toast(message),
       onLost: () => stage.toast(CONSOLE_GONE),
+      // The console dropped its match (放弃并新开): nothing of it stays on the wall.
+      onClear() {
+        session = null;
+        away = false;
+        stage.destroy();
+        stage = DT.render.mount(root);
+        root.insertBefore(stage.el, hint);
+        root.removeAttribute('data-theme');
+      },
       onKey(code) {
         attr(hint, 'hidden', true);
         if (code === 'KeyF') toggleFullscreen(root);
+        else if (code && away && session) stage.toast(CONSOLE_AWAY);   // the console is on the setup page: say so
       },
     });
     frame();
@@ -1139,6 +1165,11 @@
       if (!projector || !s) return;
       projector.link.push({ type: 'state', session: Object.assign({}, s, { history: [] }),
         settings: { volume: settings.volume, muted: settings.muted }, away: !!away });
+    }
+
+    // The match the projector shows is gone (放弃并新开 on the setup page): it goes blank until the next one.
+    function clearProjector() {
+      if (projector) projector.link.push({ type: 'clear' });
     }
 
     function relay(name, arg) {
@@ -1240,8 +1271,14 @@
     }
 
     // extra: {pinDock, console} for the demos.
-    function showTimer(session, extra) {
+    function showTimer(given, extra) {
       leave();
+      let session = given;
+      if (session.exited) {   // back in a match left with 退出: no longer away, so once over it is not offered again
+        session = Object.assign({}, session);
+        delete session.exited;
+        DT.store.saveSession(session);
+      }
       const x = extra || {};
       const own = presetMatch(session);
       const env = {
@@ -1287,12 +1324,13 @@
     // Begun means past the title card, or with any clock run: a match only opened and closed is not asked about.
     const begun = s => s.cursor >= 0 || Object.keys(s.runs).length > 0;
 
-    // Q Q or 退出, with the match paused and saved (new spec §2.2): the setup page, where 上一场还没打完 offers it
-    // back; a match file asks 继续上次 or 重新开始这一场, as when it is opened again. A match not yet begun or
-    // already over has nothing to ask about. The projector window shows the title card meanwhile.
+    // Q Q or 退出, with the match paused and saved (new spec §2.2): it is saved as left with 退出, so from any card,
+    // the end card too, the setup page's banner offers it back (§5.3); a match file always asks 继续上次 or
+    // 重新开始这一场, never the plain setup page. The projector window shows the title card meanwhile.
     function exitMatch(session) {
+      DT.store.saveSession(Object.assign({}, session, { exited: true }));
       const saved = preset ? resumable(DT.store.loadSession(), DT.clock.now()) : null;
-      if (saved && begun(saved)) showAsk(saved);
+      if (saved) showAsk(saved);
       else showSetup();
       pushState(session, true);
     }
@@ -1333,10 +1371,11 @@
           unlockSound();
           showTimer(saved);
         },
-        // In a match file the discarded match makes way for the file's own, on a fresh title card.
+        // In a match file the discarded match makes way for the file's own, on a fresh title card. In the plain
+        // timer the projector lets go of it too.
         onDiscard() {
           if (preset) newMatch(true);
-          else DT.store.clearSession();
+          else { DT.store.clearSession(); clearProjector(); }
         },
         onEdit() {
           const before = setupDraft(root);

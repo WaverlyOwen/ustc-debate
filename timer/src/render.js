@@ -269,6 +269,7 @@
     }
 
     function nextParts(v, idleSide) {
+      if (v.away) return ['比赛暂停', v.away, ''];   // a projector's title card while the console is away
       if (idleSide) return ['空格开始', '先由' + SIDE_NAME[idleSide] + '发言', ''];
       if (!v.next) return ['', '', ''];
       const time = (v.next.type === 'dual' ? '各 ' : '') + DT.engine.fmt(v.next.secs * 1000);

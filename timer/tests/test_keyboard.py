@@ -396,7 +396,7 @@ class TrustedKeyboardTest(unittest.TestCase):
         time.sleep(0.35)
         self.click(exit_button)
         self.wait("window.__dtTest.route() === 'setup'")
-        self.assertIn("上一场还没打完", self.js("document.querySelector('.dt-setup-resume').textContent"))
+        self.assertIn("这一场暂停了", self.js("document.querySelector('.dt-setup-resume').textContent"))
         saved = self.js("JSON.parse(localStorage.getItem('dt.session.v1'))")
         stage = saved["timeline"][saved["cursor"]]
         self.assertEqual(saved["cursor"], 0)

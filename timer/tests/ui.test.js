@@ -158,7 +158,8 @@
       press('KeyQ');
       assert.equal(t.c.route(), 'setup');
       const banner = t.box.querySelector('.dt-setup-resume');
-      assert.ok(banner && banner.textContent.indexOf('上一场还没打完') >= 0, 'the resume banner is shown');
+      assert.ok(banner && banner.textContent.indexOf('这一场暂停了：中国科学技术大学新生辩论赛，停在第 1 个环节（正方一辩开篇立论）。') >= 0,
+        'the resume banner is shown, saying the match was paused here: ' + (banner && banner.textContent));
       assert.equal(savedRun(storage).running, false);
       assert.equal(savedRun(storage).clocks.main.used, 5000);
     } finally { t.done(); }
@@ -327,10 +328,47 @@
       assert.equal(t.c.route(), 'setup');
       assert.ok(t.box.textContent.indexOf('还没开始第一个环节') >= 0);
       t.box.querySelector('button[data-action="resume"]').click();
+      t.c.act('goto', 0); press('Space'); t.clock.advance(9000); press('Space');
       t.c.act('goto', t.c.session().timeline.length);
       press('KeyQ'); press('KeyQ');
       assert.equal(t.c.route(), 'setup');
-      assert.equal(t.box.querySelector('.dt-setup-resume'), null, 'a finished match has nothing to resume');
+      const banner = t.box.querySelector('.dt-setup-resume');
+      assert.ok(banner, 'the end card can be gone back to (2026-10-03 spec §5.3)');
+      assert.ok(banner.textContent.indexOf('这一场已经打完：中国科学技术大学新生辩论赛，停在结束卡。') >= 0, banner.textContent);
+      banner.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.route(), 'timer');
+      assert.equal(t.c.view().mode, 'end');
+      assert.equal(t.c.view().record[0].used, 9000, 'with its record');
+      assert.equal('exited' in JSON.parse(storage.getItem('dt.session.v1')), false, 'back in the match, it is no longer away');
+      press('ArrowLeft');
+      assert.equal(t.c.session().cursor, t.c.session().timeline.length - 1, 'and the last stage is one ← away');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a match that ended without 退出 is not offered again', () => {
+    const storage = memStorage();
+    const t = bootSetup(storage);
+    try {
+      t.c.act('goto', t.c.session().timeline.length);
+      t.done();
+      const again = boot({ storage, route: undefined, location: { search: '', hash: '' }, preset: null });
+      assert.equal(again.c.route(), 'setup');
+      assert.equal(document.querySelector('.dt-setup-resume'), null);
+      again.done();
+    } finally { DT.clock.reset(); }
+  });
+
+  DT.test('ui: after 退出 the setup page leads with 继续, and 开始这一场 steps back', () => {
+    const t = bootSetup(memStorage());
+    try {
+      const start = () => t.box.querySelector('button[data-action="start"]');
+      press('Space');
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'setup');
+      assert.ok(t.box.querySelector('.dt-setup-resume button[data-action="resume"][data-primary]'));
+      assert.equal(start().hasAttribute('data-primary'), false, 'one strong button on the page');
+      t.box.querySelector('button[data-action="discard"]').click();
+      assert.ok(start().hasAttribute('data-primary'), 'with nothing to resume, 开始这一场 leads again');
     } finally { t.done(); }
   });
 
@@ -348,6 +386,25 @@
       t.box.querySelector('button[data-action="resume"]').click();
       assert.equal(t.c.session().cursor, 1);
       assert.equal(DT.engine.remaining(run(t), 'main', now), DT.engine.currentStage(t.c.session()).secs * 1000 - 7000);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a match file exits to its ask page from its title card and its end card too', () => {
+    let now = T0; DT.clock.set(() => now);
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
+    const t = bootPreset(memStorage(), preset);
+    try {
+      assert.equal(t.c.session().cursor, -1);
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'ask', 'not the plain setup page with another format chosen');
+      t.box.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.session().cursor, -1);
+      t.c.act('goto', t.c.session().timeline.length);
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'ask');
+      assert.ok(t.box.textContent.indexOf('停在结束卡') >= 0, t.box.textContent);
+      t.box.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.view().mode, 'end');
     } finally { t.done(); }
   });
 

@@ -91,11 +91,14 @@
     });
   }
 
-  // 第 N counts every row, breaks included, as the editor and the console number them; the name says which.
+  // 第 N counts every row, breaks included, as the editor and the console number them; the name says which. A match
+  // left with 退出 was paused here on purpose (or left on its end card); any other was left by closing the page.
   function resumeText(r) {
     const name = r.stage ? '（' + r.stage + '）' : '';
-    const where = r.cursor >= 0 ? '停在第 ' + (r.cursor + 1) + ' 个环节' + name : '还没开始第一个环节';
-    return ['上一场还没打完：', String(r.title || ''), '，' + where + '。'];
+    let where = r.cursor >= 0 ? '停在第 ' + (r.cursor + 1) + ' 个环节' + name : '还没开始第一个环节';
+    if (r.finished) where = '停在结束卡';
+    const lead = r.finished ? '这一场已经打完：' : r.exited ? '这一场暂停了：' : '上一场还没打完：';
+    return [lead, String(r.title || ''), '，' + where + '。'];
   }
 
   // The sample stage played out from a fixed moment, so every thumbnail and every screenshot shows one frame: the
@@ -148,10 +151,14 @@
       const acts = el('div', 'dt-setup-resume-acts');
       const resume = button('继续', 'resume', true);
       const discard = button('放弃并新开', 'discard');
+      // One strong button on the page: while 继续 is offered, 开始这一场 (a new match) steps back to an outline.
+      const start = $('button[data-action="start"]');
+      start.removeAttribute('data-primary');
       resume.addEventListener('click', () => { if (o.onResume) o.onResume(); });
       discard.addEventListener('click', () => {
         if (o.onDiscard) o.onDiscard();
         banner.remove();
+        start.setAttribute('data-primary', '');
       });
       acts.appendChild(resume);
       acts.appendChild(discard);
