@@ -132,6 +132,33 @@
     end.stop();
   });
 
+  // 2026-10-03 spec §3: a presenter or an on-screen keyboard that sends no code is read by its key, in the
+  // projector window too.
+  DT.test('sync: codeOf reads a key that comes without a code', () => {
+    assert.equal(DT.sync.codeOf({ code: 'KeyA', key: 'q' }), 'KeyA', 'a code wins');
+    assert.equal(DT.sync.codeOf({ code: '', key: ' ' }), 'Space');
+    assert.equal(DT.sync.codeOf({ code: '', key: 'PageDown' }), 'PageDown');
+    assert.equal(DT.sync.codeOf({ code: '', key: 'f' }), 'KeyF');
+    assert.equal(DT.sync.codeOf({ code: '', key: '?' }), 'Slash');
+    assert.equal(DT.sync.codeOf({ code: '', key: 'Unidentified' }), '');
+    assert.equal(DT.sync.codeOf({}), '');
+  });
+
+  DT.test('sync: the projector forwards a key that comes without a code by its key', () => {
+    const me = fakeWin(), opener = fakeWin(); const seen = [];
+    const end = DT.sync.createProjectorEnd({ target: me, opener, storage: null, onState() {}, onKey: code => seen.push(code) });
+    const ev = extra => Object.assign({ prevented: false, preventDefault() { this.prevented = true; } }, extra);
+    const down = ev({ code: '', key: 'PageDown' }), space = ev({ code: '', key: ' ' }), f = ev({ code: '', key: 'f' });
+    const unknown = ev({ code: '', key: 'Unidentified' });
+    [down, space, f, unknown].forEach(e => me.emit('keydown', e));
+    assert.deepEqual(opener.sent.map(m => m.code), ['PageDown', 'Space'], 'F stays here; an unknown key is not sent');
+    assert.deepEqual(seen.slice(0, 3), ['PageDown', 'Space', 'KeyF'], 'this window hears the key it stands for');
+    assert.equal(down.prevented, true);
+    assert.equal(space.prevented, true);
+    assert.equal(unknown.prevented, false, 'a key the timer cannot read stays with the browser');
+    end.stop();
+  });
+
   DT.test('sync: openProjector returns null when the window is blocked', () => {
     const w = fakeWin();
     w.open = () => null;

@@ -167,16 +167,6 @@
     return tag === 'TEXTAREA' || tag === 'SELECT' || !!target.isContentEditable;
   }
 
-  // The code of a key, or for a presenter or an on-screen keyboard that sends none, the code its key stands for.
-  function codeOf(e) {
-    if (e.code) return e.code;
-    const k = String(e.key || '');
-    if (k === ' ') return 'Space';
-    if (/^[a-z]$/i.test(k)) return 'Key' + k.toUpperCase();
-    if (k === '/' || k === '?') return 'Slash';
-    return /^(Arrow(Up|Down|Left|Right)|Page(Up|Down)|Escape)$/.test(k) ? k : '';
-  }
-
   // Whole seconds, as on the end card.
   function duration(ms) { return DT.engine.fmt(Math.round(ms / 1000) * 1000); }
 
@@ -919,7 +909,7 @@
       if (env.blocked()) return;
       if (isEditable(e.target)) return;
       if (e.isComposing) return;
-      if (key(codeOf(e), e)) e.preventDefault();
+      if (key(DT.sync.codeOf(e), e)) e.preventDefault();
     }
 
     window.addEventListener('keydown', onKeyDown);
