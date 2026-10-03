@@ -325,9 +325,16 @@ class TrustedKeyboardTest(unittest.TestCase):
         self.key("KeyE")
         self.wait("document.querySelector('.dt-editor')")
         time.sleep(0.5)   # fully risen
+        # As a timekeeper would: into a text box of the editor first ('change a time, Esc, Space').
+        self.click(".dt-editor input[type='text']")
+        self.assertEqual(self.js("document.activeElement.tagName + ':' + document.activeElement.type"), "INPUT:text")
+        # Whether the editor was already sinking away when the space came: the test is only worth anything then.
+        self.js("window.addEventListener('keydown', e => { if (e.code === 'Space') window.__kbd.leaving ="
+                " !!document.querySelector('.dt-editor[data-leaving]'); }, true)")
         self.key("Escape", hold=0.01, settle=0)
         self.key("Space", hold=0.01, settle=0)   # well inside the 260 ms the editor takes to sink away
         time.sleep(0.6)
+        self.assertTrue(self.js("window.__kbd.leaving"), "the space came while the editor was closing")
         self.assertFalse(self.js("!!document.querySelector('.dt-editor')"))
         self.assertEqual(self.toggles(), 1, "exactly one toggle")
         self.assertTrue(self.running())
