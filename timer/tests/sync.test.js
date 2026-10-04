@@ -108,6 +108,17 @@
     assert.equal(states.length, 2);
   });
 
+  // P4
+  DT.test('sync: a projector whose console is gone neither forwards nor swallows keys', () => {
+    const me = fakeWin(); const opener = Object.assign(fakeWin(), { closed: true });
+    const end = DT.sync.createProjectorEnd({ target: me, opener, storage: null, onState() {}, onKey() {} });
+    let prevented = false;
+    me.emit('keydown', { code: 'Space', preventDefault() { prevented = true; } });
+    assert.equal(opener.sent.length, 0);
+    assert.equal(prevented, false);
+    end.stop();
+  });
+
   DT.test('sync: the projector leaves browser shortcuts to the browser', () => {
     const me = fakeWin(), opener = fakeWin();
     const end = DT.sync.createProjectorEnd({ target: me, opener, storage: null, onState() {}, onKey() {} });
@@ -118,6 +129,33 @@
     assert.equal(reload.prevented, false);
     assert.equal(f5.prevented, false);
     assert.deepEqual(opener.sent.map(m => [m.type, m.code, m.ctrlKey]), [['key', 'Space', false], ['key', 'KeyR', true], ['key', 'F5', false]]);
+    end.stop();
+  });
+
+  // 2026-10-03 spec §3: a presenter or an on-screen keyboard that sends no code is read by its key, in the
+  // projector window too.
+  DT.test('sync: codeOf reads a key that comes without a code', () => {
+    assert.equal(DT.sync.codeOf({ code: 'KeyA', key: 'q' }), 'KeyA', 'a code wins');
+    assert.equal(DT.sync.codeOf({ code: '', key: ' ' }), 'Space');
+    assert.equal(DT.sync.codeOf({ code: '', key: 'PageDown' }), 'PageDown');
+    assert.equal(DT.sync.codeOf({ code: '', key: 'f' }), 'KeyF');
+    assert.equal(DT.sync.codeOf({ code: '', key: '?' }), 'Slash');
+    assert.equal(DT.sync.codeOf({ code: '', key: 'Unidentified' }), '');
+    assert.equal(DT.sync.codeOf({}), '');
+  });
+
+  DT.test('sync: the projector forwards a key that comes without a code by its key', () => {
+    const me = fakeWin(), opener = fakeWin(); const seen = [];
+    const end = DT.sync.createProjectorEnd({ target: me, opener, storage: null, onState() {}, onKey: code => seen.push(code) });
+    const ev = extra => Object.assign({ prevented: false, preventDefault() { this.prevented = true; } }, extra);
+    const down = ev({ code: '', key: 'PageDown' }), space = ev({ code: '', key: ' ' }), f = ev({ code: '', key: 'f' });
+    const unknown = ev({ code: '', key: 'Unidentified' });
+    [down, space, f, unknown].forEach(e => me.emit('keydown', e));
+    assert.deepEqual(opener.sent.map(m => m.code), ['PageDown', 'Space'], 'F stays here; an unknown key is not sent');
+    assert.deepEqual(seen.slice(0, 3), ['PageDown', 'Space', 'KeyF'], 'this window hears the key it stands for');
+    assert.equal(down.prevented, true);
+    assert.equal(space.prevented, true);
+    assert.equal(unknown.prevented, false, 'a key the timer cannot read stays with the browser');
     end.stop();
   });
 
@@ -174,10 +212,11 @@
       press('KeyO');
       t.host.emit('message', key('Space'));
       assert.equal(t.c.session().cursor, 0);
-      t.host.emit('message', { data: { source: 'other', type: 'key', code: 'Space' } });
-      assert.equal(t.c.session().cursor, 0);
-      t.host.emit('message', key('Space'));
       assert.ok(DT.engine.getRun(t.c.session()).running);
+      t.host.emit('message', { data: { source: 'other', type: 'key', code: 'Space' } });
+      assert.ok(DT.engine.getRun(t.c.session()).running);
+      t.host.emit('message', key('Space'));
+      assert.equal(DT.engine.getRun(t.c.session()).running, false);
     } finally { t.done(); }
   });
 
@@ -203,7 +242,6 @@
       const btn = sel => panel.querySelector('button[data-act="' + sel + '"]');
       btn('toggle').click();
       assert.equal(t.c.session().cursor, 0);
-      btn('toggle').click();
       t.advance(30000);
       panel.querySelector('button[data-act="adjust"][data-ms="5000"]').click();
       assert.equal(DT.engine.remaining(DT.engine.getRun(t.c.session()), 'main', DT.clock.now()), 155000);
@@ -213,9 +251,132 @@
       const rows = t.root.querySelectorAll('.dt-console-list button[data-index]');
       assert.equal(rows[7].getAttribute('aria-current'), 'step');
       assert.equal(rows[0].querySelector('.dt-row-state').textContent, '✓ 0:25');
+      btn('toggle').click();
+      t.advance(4000);
+      const id = t.c.session().timeline[7].id;
+      assert.ok(t.c.session().runs[id]);
       btn('reset').click();
-      assert.equal(t.root.querySelector('.dt-toast').textContent, '再按一次 R 重置本环节');
+      assert.equal(btn('reset').querySelector('.dt-arm-ask').textContent, '再点一次重置');
+      t.advance(300); btn('reset').click();
+      assert.equal(t.c.session().runs[id], undefined, 'the stage is fresh');
+      assert.equal(t.c.session().cursor, 7);
     } finally { t.done(); }
+  });
+
+  // 2026-10-03 spec §2.2: the console's 退出, and the projector window while the console is away.
+  DT.test('sync: the console exits with two clicks and the projector shows the title card meanwhile', () => {
+    const t = bootConsole();
+    try {
+      press('KeyO');
+      const btn = sel => t.root.querySelector('.dt-console-controls button[data-act="' + sel + '"]');
+      press('Space');
+      t.advance(8000);
+      btn('exit').click();
+      assert.equal(btn('exit').querySelector('.dt-arm-ask').textContent, '再点一次退出');
+      t.advance(300); btn('exit').click();
+      assert.equal(t.c.route(), 'setup');
+      assert.equal(t.root.querySelector('.dt-console'), null);
+      const away = t.states().pop();
+      assert.equal(away.away, true, 'the projector is told the console is away');
+      assert.equal(away.session.cursor, 0);
+      assert.equal(DT.engine.getRun(away.session).running, false);
+      t.advance(60000);
+      t.root.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.route(), 'timer');
+      assert.equal(t.root.getAttribute('data-layout'), 'console', 'back as the console, the projector still open');
+      const back = t.states().pop();
+      assert.equal(back.away, false);
+      assert.equal(DT.engine.remaining(DT.engine.getRun(back.session), 'main', DT.clock.now()), 180000 - 8300,
+        'charged up to the confirming click, not for the minute away');
+    } finally { t.done(); }
+  });
+
+  DT.test('sync: a projector shows the title card while the console is away, and storage does not undo that', () => {
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const me = fakeWin(), opener = fakeWin();
+    me.opener = opener;
+    DT.clock.set(() => T0);
+    const c = DT.app.boot({ root: box.firstChild, route: 'projector', window: me, storage: memStorage(), bells: fakeBells() });
+    try {
+      const s = DT.engine.goto(DT.engine.createSession(freshman(), MATCH, T0), 2, T0);
+      const state = extra => ({ data: Object.assign({ source: 'debate-timer', type: 'state', session: s, settings: {} }, extra) });
+      me.emit('message', state({ away: true }));
+      const stage = box.querySelector('.dt-stage');
+      assert.equal(stage.getAttribute('data-mode'), 'title');
+      assert.equal(c.view().mode, 'title');
+      const foot = box.querySelector('.dt-next').textContent;
+      assert.ok(foot.indexOf('比赛暂停') >= 0 && foot.indexOf('停在第 3 个环节：' + s.timeline[2].name) >= 0, foot);
+      assert.equal(foot.indexOf('空格开始'), -1, 'no call to start what the room cannot start from here');
+      me.emit('keydown', { code: 'Space', key: ' ', preventDefault() {} });
+      assert.equal(box.querySelector('.dt-toast').textContent, '计时员在开赛页，回到计时后继续', 'a key here is answered');
+      me.emit('storage', { key: 'dt.session.v1', newValue: JSON.stringify(s) });
+      assert.equal(stage.getAttribute('data-mode'), 'title', 'the console saving on its way out changes nothing');
+      me.emit('message', state({ away: false }));
+      assert.equal(stage.getAttribute('data-mode'), 'stage');
+      assert.equal(c.session().cursor, 2);
+    } finally { c.destroy(); DT.clock.reset(); }
+  });
+
+  DT.test('sync: 放弃并新开 on the setup page clears the projector, which keeps it cleared', async () => {
+    const t = bootConsole({ route: undefined, location: { search: '', hash: '' }, preset: null });
+    try {
+      t.root.querySelector('[data-format-id="ustc-freshman-cup"]').click();
+      t.root.querySelector('button[data-action="start"]').click();
+      press('KeyO');
+      press('Space');
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'setup');
+      t.root.querySelector('button[data-action="discard"]').click();
+      assert.equal(t.proj.sent[t.proj.sent.length - 1].type, 'clear');
+      await wait(1100);   // the heartbeat
+      assert.equal(t.proj.sent.filter(m => m.type === 'state' || m.type === 'clear').pop().type, 'clear',
+        'the heartbeat does not bring the discarded match back');
+    } finally { t.done(); }
+  });
+
+  DT.test('sync: a cleared projector shows nothing of the discarded match', () => {
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const me = fakeWin(), opener = fakeWin();
+    me.opener = opener;
+    DT.clock.set(() => T0);
+    const c = DT.app.boot({ root: box.firstChild, route: 'projector', window: me, storage: memStorage(), bells: fakeBells() });
+    try {
+      const s = DT.engine.createSession(freshman(), MATCH, T0);
+      me.emit('message', { data: { source: 'debate-timer', type: 'state', session: s, settings: {}, away: true } });
+      assert.equal(box.querySelector('.dt-stage').getAttribute('data-mode'), 'title');
+      me.emit('message', { data: { source: 'debate-timer', type: 'clear' } });
+      assert.equal(c.session(), null);
+      assert.equal(box.querySelectorAll('.dt-stage').length, 1);
+      assert.equal(box.querySelector('.dt-stage').hasAttribute('data-mode'), false, 'a blank stage');
+      assert.equal(box.querySelector('.dt-teams').textContent.indexOf('甲'), -1);
+    } finally { c.destroy(); DT.clock.reset(); }
+  });
+
+  // The console's heartbeat repeats its last word, a clear included, every second: a cleared projector stays as it is.
+  DT.test('sync: a clear repeated by the heartbeat leaves a cleared projector alone', () => {
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const me = fakeWin(), opener = fakeWin();
+    me.opener = opener;
+    DT.clock.set(() => T0);
+    const c = DT.app.boot({ root: box.firstChild, route: 'projector', window: me, storage: memStorage(), bells: fakeBells() });
+    const clear = () => me.emit('message', { data: { source: 'debate-timer', type: 'clear' } });
+    try {
+      const s = DT.engine.createSession(freshman(), MATCH, T0);
+      me.emit('message', { data: { source: 'debate-timer', type: 'state', session: s, settings: {}, away: false } });
+      clear();
+      const blank = box.querySelector('.dt-stage');
+      me.emit('message', { data: { source: 'debate-timer', type: 'toast', message: '新的一场' } });
+      clear();
+      clear();
+      assert.equal(box.querySelector('.dt-stage'), blank, 'the blank stage is not built again');
+      assert.equal(box.querySelector('.dt-toast').textContent, '新的一场', 'nor is a toast on it wiped');
+      me.emit('message', { data: { source: 'debate-timer', type: 'state', session: s, settings: {}, away: false } });
+      assert.equal(box.querySelector('.dt-stage').getAttribute('data-mode'), 'title');
+      clear();
+      assert.ok(box.querySelector('.dt-stage') !== blank, 'a match shown again is cleared again');
+      assert.equal(box.querySelector('.dt-stage').hasAttribute('data-mode'), false);
+      assert.equal(c.session(), null);
+    } finally { c.destroy(); DT.clock.reset(); }
   });
 
   DT.test('sync: bell events reach the projector, and of the toasts only what the room should see', () => {
@@ -223,7 +384,7 @@
     const toasts = () => t.proj.sent.filter(m => m.type === 'toast').map(m => m.message);
     try {
       press('KeyO');
-      press('Space'); press('Space');
+      press('Space');
       t.advance(150500);
       press('KeyP');
       const events = t.proj.sent.filter(m => m.type === 'events');
@@ -291,7 +452,7 @@
       assert.equal(hint.textContent, '把这个窗口拖到投影屏幕上，按 F 全屏');
       assert.equal(hint.hidden, false);
       let s = DT.engine.createSession(freshman(), MATCH, T0);
-      s = DT.engine.toggle(DT.engine.toggle(s, T0), T0);
+      s = DT.engine.toggle(s, T0);
       me.emit('message', { data: { source: 'debate-timer', type: 'state', session: s, settings: {} } });
       assert.equal(c.route(), 'projector');
       assert.equal(c.session().cursor, 0);
@@ -307,6 +468,22 @@
       assert.equal(box.querySelector('.dt-toast').textContent, '反方时间已用完');
     } finally { c.destroy(); DT.clock.reset(); }
     assert.equal(box.querySelector('.dt-stage'), null);
+  });
+
+  DT.test('sync: a projector whose console was closed says how to reconnect', () => {
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const me = fakeWin(), opener = fakeWin();
+    me.opener = opener;
+    DT.clock.set(() => T0);
+    const c = DT.app.boot({ root: box.firstChild, route: 'projector', window: me, storage: memStorage(), bells: fakeBells() });
+    try {
+      opener.closed = true;
+      let prevented = false;
+      me.emit('keydown', { code: 'Space', preventDefault() { prevented = true; } });
+      assert.equal(opener.sent.length, 0);
+      assert.equal(prevented, false);
+      assert.equal(box.querySelector('.dt-toast').textContent, '控制台已关闭。关掉这个窗口，在主窗口按 O 重新打开投影');
+    } finally { c.destroy(); DT.clock.reset(); }
   });
 
   DT.test('sync: the projector starts from the saved session and rings a bell once', () => {

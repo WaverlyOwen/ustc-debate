@@ -25,7 +25,7 @@ class ParseTests(unittest.TestCase):
 
     def test_all_five_formats_are_found_and_template_is_skipped(self):
         self.assertEqual(sorted(self.all), ["recruit-1v1", "recruit-2v2", "recruit-3v3",
-                                            "ustc-freshman-cup", "ustc-school-cup-2025"])
+                                            "ustc-freshman-cup", "ustc-school-cup"])
 
     def test_freshman_cup_stage_types(self):
         f = self.all["ustc-freshman-cup"]
@@ -59,7 +59,7 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(len({s["id"] for s in f["stages"]}), 20)
 
     def test_school_cup_surprise_attack_becomes_extras(self):
-        f = self.all["ustc-school-cup-2025"]
+        f = self.all["ustc-school-cup"]
         self.assertEqual(len(f["stages"]), 18)
         self.assertFalse(any("奇袭" in s["name"] for s in f["stages"]))
         self.assertEqual(len(f["extras"]), 1)
@@ -68,6 +68,10 @@ class ParseTests(unittest.TestCase):
         self.assertEqual([(v["name"], v["type"], v["secs"]) for v in ex["variants"]],
                          [("奇袭质询", "single", 150), ("奇袭申论", "single", 120)])
         self.assertIn("双边计时", ex["variants"][0]["note"])
+
+    def test_school_cup_name_has_no_year(self):
+        f = self.all["ustc-school-cup"]
+        self.assertEqual(f["name"], "中国科学技术大学校赛")
 
     def test_defaults(self):
         for f in self.all.values():

@@ -552,6 +552,21 @@
     } finally { t.done(); }
   });
 
+  // 2026-10-03 final review: a box just typed in must not keep the next space while the editor sinks away.
+  DT.test('editor: closing takes focus out of the sinking panel and makes it inert before onLeave', () => {
+    let seen = null;
+    const t = mount({ onLeave: () => { seen = { active: document.activeElement, inert: t.h.el.inert }; } });
+    const input = t.box.querySelector('.dt-editor input[type="text"]');
+    input.focus();
+    assert.equal(document.activeElement, input);
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true }));
+    assert.ok(seen, 'onLeave ran');
+    assert.ok(t.h.el.hasAttribute('data-leaving'));
+    assert.ok(seen.active !== input && !t.h.el.contains(seen.active), 'focus left the panel');
+    assert.equal(seen.inert, true, 'the sinking panel takes no input');
+    t.h.destroy();
+  });
+
   DT.test('ui: the editor demos open on the freshman cup, one with a mistyped duration', () => {
     ['editor', 'editor-error'].forEach(name => {
       const t = bootApp({ storage: undefined, location: { search: '?demo=' + name + '&frozen=1', hash: '' } });

@@ -194,8 +194,8 @@
     });
   });
 
-  // The grain and the misregistration are painted per part and the digits tense up in steps, so the colon's breathing
-  // and the tension do not repaint the whole clock on every frame.
+  // The grain and the misregistration are painted per part, so the colon's breathing does not repaint the whole clock
+  // on every frame; the tension changes only in the renderer's steps of 0.02 (render.test.js).
   DT.test('theme riso: the digits are not painted again on every frame', () => {
     const { stage, root } = mountPoster(singleAt(OPENING, 60));
     const digits = root.querySelector('.dt-clock[data-clock="main"] .dt-digits');
@@ -203,8 +203,7 @@
     assert.equal(cs.filter, 'none');
     assert.ok(!/url/.test(cs.maskImage || cs.webkitMaskImage || 'none'), 'the grain sits on the parts');
     const fvs = t => { root.style.setProperty('--tension', String(t)); return getComputedStyle(digits).fontVariationSettings; };
-    assert.equal(fvs(0.301), fvs(0.309), 'one frame\'s change of tension leaves the digits as they are');
-    assert.ok(fvs(0.301) !== fvs(0.36), 'but they do tense up');
+    assert.ok(fvs(0.3) !== fvs(0.36), 'the digits tense up');
     stage.destroy();
   });
 

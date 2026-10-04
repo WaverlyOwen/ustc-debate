@@ -20,6 +20,17 @@
     } catch (e) { return false; }   // the other window is gone or closing
   }
 
+  // The code of a key, or for a presenter or an on-screen keyboard that sends none, the code its key stands for
+  // (new spec §3). '' for a key the timer cannot read. Both windows read keys through this.
+  function codeOf(e) {
+    if (e.code) return e.code;
+    const k = String(e.key || '');
+    if (k === ' ') return 'Space';
+    if (/^[a-z]$/i.test(k)) return 'Key' + k.toUpperCase();
+    if (k === '/' || k === '?') return 'Slash';
+    return /^(Arrow(Up|Down|Left|Right)|Page(Up|Down)|Escape)$/.test(k) ? k : '';
+  }
+
   function parse(text) {
     try { const v = JSON.parse(text); return isObj(v) ? v : null; } catch (e) { return null; }
   }
@@ -61,7 +72,7 @@
 
     function push(message) {
       if (stopped || !isObj(message)) return false;
-      if (message.type === 'state') last = message;
+      if (message.type === 'state' || message.type === 'clear') last = message;   // what the heartbeat repeats
       const w = projector();
       return !!w && post(w, message);
     }
@@ -98,36 +109,48 @@
 
   // The projector's end. opts: {target (this window), opener (the console), storage (read for the saved
   // session at start, or null), sessionKey (where the console saves it; a match file has its own),
-  // onState({session, settings}), onKey(code, event) for every key pressed here, onEvents(list),
-  // onToast(message)}. Keys other than F go to the console; F stays for full screen here.
+  // onState({session, settings, away}), onKey(code, event) for every key pressed here, onEvents(list),
+  // onToast(message), onClear() when the console has dropped its match, onLost() for a key pressed after the
+  // console has gone}. Keys other than F go to the
+  // console; F stays for full screen here. `away` says whether the console has left the timer for the setup
+  // page (new spec §2.2): true or false from the console, undefined from storage, which cannot tell.
   function createProjectorEnd(opts) {
     const o = opts || {};
     const target = o.target || window;
     const sessionKey = o.sessionKey || SESSION_KEY;
     let stopped = false;
 
-    function state(session, settings) {
-      if (!stopped && isObj(session)) o.onState({ session, settings: isObj(settings) ? settings : null });
+    function consoleOpen() {
+      try { return !!o.opener && !o.opener.closed; } catch (e) { return false; }
+    }
+
+    function state(session, settings, away) {
+      if (!stopped && isObj(session)) o.onState({ session, settings: isObj(settings) ? settings : null, away });
     }
 
     function onMessage(ev) {
       const d = ev && ev.data;
       if (stopped || !ours(d)) return;
-      if (d.type === 'state') state(d.session, d.settings);
+      if (d.type === 'state') state(d.session, d.settings, !!d.away);
       else if (d.type === 'events' && Array.isArray(d.events) && o.onEvents) o.onEvents(d.events);
       else if (d.type === 'toast' && o.onToast) o.onToast(String(d.message || ''));
+      else if (d.type === 'clear' && o.onClear) o.onClear();
     }
 
     function onKeyDown(e) {
       if (stopped) return;
-      if (o.onKey) o.onKey(e.code, e);
-      if (e.code === 'KeyF') return;
-      if (o.opener) {
-        post(o.opener, { type: 'key', code: e.code, shiftKey: !!e.shiftKey, ctrlKey: !!e.ctrlKey,
-          altKey: !!e.altKey, repeat: !!e.repeat });
+      const code = codeOf(e);
+      if (o.onKey) o.onKey(code, e);
+      if (code === 'KeyF' || !code) return;   // F is for this window; a key nobody can read stays with the browser
+      // With the console gone nobody hears the key, so the browser keeps it (new spec §3, P4).
+      if (!consoleOpen()) {
+        if (o.onLost) o.onLost();
+        return;
       }
+      post(o.opener, { type: 'key', code, shiftKey: !!e.shiftKey, ctrlKey: !!e.ctrlKey,
+        altKey: !!e.altKey, repeat: !!e.repeat });
       // Reload, close, the function keys and the like still belong to the browser.
-      const browserKey = e.ctrlKey || e.altKey || e.metaKey || /^F\d+$/.test(e.code || '');
+      const browserKey = e.ctrlKey || e.altKey || e.metaKey || /^F\d+$/.test(code);
       if (!browserKey && e.preventDefault) e.preventDefault();
     }
 
@@ -157,5 +180,5 @@
     };
   }
 
-  DT.sync = { openProjector, findProjector, createConsoleLink, createProjectorEnd };
+  DT.sync = { codeOf, openProjector, findProjector, createConsoleLink, createProjectorEnd };
 })(window.DT = window.DT || {});

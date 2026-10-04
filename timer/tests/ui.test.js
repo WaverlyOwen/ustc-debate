@@ -22,10 +22,11 @@
   }
   const press = (code, opts) => window.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ code, key: 'Process', bubbles: true }, opts || {})));
 
-  DT.test('ui: space leaves the title card, then starts and pauses', () => {
+  DT.test('ui: space on the title card starts the first stage, and pauses it', () => {
     const t = boot();
-    press('Space'); assert.equal(t.c.session().cursor, 0);
-    press('Space'); assert.ok(DT.engine.getRun(t.c.session()).running);
+    press('Space');
+    assert.equal(t.c.session().cursor, 0);
+    assert.ok(DT.engine.getRun(t.c.session()).running);
     t.clock.advance(5000);
     press('Space'); assert.equal(DT.engine.getRun(t.c.session()).running, false);
     t.done();
@@ -47,6 +48,420 @@
     t.done();
   });
 
+  // The console beside a projector window, opened with O in a stand-in window.
+  function bootDesk() {
+    const proj = { closed: false, postMessage() {} };
+    const host = { location: { href: 'file:///C:/x/debate-timer.html' }, addEventListener() {}, removeEventListener() {},
+      open: () => proj };
+    const t = boot({ window: host });
+    press('KeyO');
+    return t;
+  }
+
+  // P1: a focused range input must not swallow timer keys
+  DT.test('ui: keys still work while the volume slider has focus', () => {
+    const t = bootDesk();
+    press('Space');                                     // title card → stage 1, running (new behaviour)
+    const slider = document.querySelector('input[type="range"][name="volume"]');
+    assert.ok(slider, 'the console shows the volume slider');
+    assert.equal(slider.closest('label'), null, 'no label hands a click on 音量 to the slider');
+    assert.equal(slider.getAttribute('aria-label'), '音量');
+    slider.focus();
+    const ev = new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true });
+    slider.dispatchEvent(ev);
+    assert.ok(ev.defaultPrevented);
+    assert.equal(DT.engine.getRun(t.c.session()).running, false);
+    t.done();
+  });
+
+  // P2: mouse clicks in the stage list and overlays leave no focus behind
+  DT.test('ui: clicking a stage-list row does not keep focus', () => {
+    const t = boot();
+    press('KeyS');
+    const row = document.querySelector('.dt-overlay[data-name="stages"] button');
+    const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    row.dispatchEvent(down);
+    assert.ok(down.defaultPrevented);
+    t.done();
+  });
+
+  DT.test('ui: clicking a row of the console\'s stage list does not keep focus', () => {
+    const t = bootDesk();
+    const row = document.querySelector('.dt-console-list button[data-index="2"]');
+    const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    row.dispatchEvent(down);
+    assert.ok(down.defaultPrevented);
+    t.done();
+  });
+
+  // Some presenters and on-screen keyboards send no scan code.
+  DT.test('ui: a key without a code falls back to its key', () => {
+    const t = boot();
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: '', key: 'ArrowRight', bubbles: true, cancelable: true }));
+    assert.equal(t.c.session().cursor, 0);
+    t.done();
+  });
+
+  // P3: the editor's close animation must not eat the keys pressed during it.
+  DT.test('ui: a key pressed while the editor sinks away reaches the timer, once', async () => {
+    const t = boot();
+    const realMatch = window.matchMedia;
+    // Not reduced motion, so the editor takes its 260 ms to close.
+    window.matchMedia = q => ({ matches: false, media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+    try {
+      press('Space');                                   // stage 1 is running
+      press('KeyE');
+      const history = t.c.session().history.length;
+      press('Escape');
+      assert.ok(document.querySelector('.dt-editor'), 'the editor is still sinking away');
+      const root = document.getElementById('app-under-test');
+      assert.ok(Array.from(root.children).every(c => c.classList.contains('dt-editor') || !c.inert), 'the page behind is live again');
+      press('Space');
+      assert.equal(DT.engine.getRun(t.c.session()).running, false, 'the space paused the clock');
+      await new Promise(r => setTimeout(r, 400));
+      assert.equal(document.querySelector('.dt-editor'), null);
+      assert.equal(t.c.session().history.length, history + 1, 'exactly one toggle');
+      assert.equal(DT.engine.getRun(t.c.session()).running, false);
+    } finally {
+      window.matchMedia = realMatch;
+      t.done();
+    }
+  });
+
+  // ---- reset any stage, exit from any screen (2026-10-03 spec §2) ----
+
+  // The app as it opens for real: the setup page first, a match started from it.
+  function bootSetup(storage) {
+    const t = boot({ storage, route: undefined, location: { search: '', hash: '' }, preset: null });
+    const box = document.getElementById('sandbox');
+    assert.equal(t.c.route(), 'setup');
+    box.querySelector('[data-format-id="ustc-freshman-cup"]').click();
+    box.querySelector('button[data-action="start"]').click();
+    assert.equal(t.c.route(), 'timer');
+    return Object.assign(t, { box });
+  }
+  const savedRun = storage => {
+    const s = JSON.parse(storage.getItem('dt.session.v1'));
+    return s.runs[s.timeline[s.cursor].id];
+  };
+  const dockBtn = act => document.querySelector('.dt-dock button[data-act="' + act + '"]');
+
+  DT.test('ui: Q twice exits to the setup page and keeps the match', () => {
+    const storage = memStorage();
+    const t = bootSetup(storage);
+    try {
+      press('Space');
+      t.clock.advance(5000);
+      press('KeyQ');
+      assert.equal(toastText(), '再按一次 Q 退出到开赛页，这一场会保留');
+      assert.equal(t.c.route(), 'timer');
+      press('KeyQ');
+      assert.equal(t.c.route(), 'setup');
+      const banner = t.box.querySelector('.dt-setup-resume');
+      assert.ok(banner && banner.textContent.indexOf('这一场暂停了：中国科学技术大学新生辩论赛，停在第 1 个环节（正方一辩开篇立论）。') >= 0,
+        'the resume banner is shown, saying the match was paused here: ' + (banner && banner.textContent));
+      assert.equal(savedRun(storage).running, false);
+      assert.equal(savedRun(storage).clocks.main.used, 5000);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: exiting pauses the running clock', () => {
+    const storage = memStorage();
+    const t = bootSetup(storage);
+    try {
+      press('Space');
+      t.clock.advance(10000);
+      press('KeyQ'); press('KeyQ');
+      t.clock.advance(120000);
+      t.box.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.route(), 'timer');
+      assert.equal(t.c.session().cursor, 0, 'back on the stage it left');
+      assert.equal(left(t), 180000 - 10000, 'the two minutes on the setup page are not charged');
+      assert.equal(run(t).running, false);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a double-click does not confirm exit', () => {
+    const t = bootSetup(memStorage());
+    try {
+      press('Space');
+      const exit = dockBtn('exit');
+      assert.equal(exit.querySelector('.dt-arm-rest').textContent, '退出Q Q');
+      exit.click();
+      assert.ok(exit.hasAttribute('data-armed'));
+      assert.equal(exit.querySelector('.dt-arm-ask').textContent, '再点一次退出');
+      t.clock.advance(100); exit.click();
+      assert.equal(t.c.route(), 'timer', 'two clicks 100 ms apart are one double-click');
+      t.clock.advance(400); exit.click();
+      assert.equal(t.c.route(), 'setup');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: the dock exit button disarms after 1.5 s or a click elsewhere', () => {
+    const t = bootSetup(memStorage());
+    try {
+      const exit = dockBtn('exit');
+      exit.click();
+      t.clock.advance(1600); exit.click();
+      assert.equal(t.c.route(), 'timer', 'too late: this click arms it again');
+      assert.ok(exit.hasAttribute('data-armed'));
+      dockBtn('stages').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      assert.equal(exit.hasAttribute('data-armed'), false);
+      assert.equal(getComputedStyle(exit.querySelector('.dt-arm-rest')).visibility, 'visible', '退出 again');
+      t.clock.advance(300); exit.click();
+      assert.equal(t.c.route(), 'timer');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: the dock reset button resets the current stage after two clicks', () => {
+    const t = bootSetup(memStorage());
+    try {
+      const reset = dockBtn('reset');
+      assert.equal(reset.disabled, true, 'nothing to reset on the title card');
+      press('Space'); t.clock.advance(20000); press('Space');
+      assert.equal(reset.disabled, false);
+      reset.click(); t.clock.advance(300); reset.click();
+      assert.equal(left(t), 180000);
+      assert.equal(t.c.session().cursor, 0);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a stage-list row resets that stage after two clicks', () => {
+    const t = bootSetup(memStorage());
+    try {
+      press('Space'); t.clock.advance(20000);
+      press('ArrowRight');
+      assert.equal(t.c.session().cursor, 1);
+      press('KeyS');
+      const list = document.querySelector('.dt-overlay[data-name="stages"]');
+      const btn = list.querySelector('button[aria-label="重置第 1 个环节"]');
+      assert.ok(btn, 'the used stage offers a reset');
+      assert.equal(btn.hidden, false);
+      assert.equal(list.querySelector('button[aria-label="重置第 3 个环节"]').hidden, true, 'an unused one does not');
+      btn.click();
+      assert.equal(btn.querySelector('.dt-row-reset-label').textContent, '再点一次重置　✓ 0:20', 'what it throws away');
+      assert.equal(t.c.session().cursor, 1, 'one click does nothing yet');
+      assert.ok(t.c.session().runs[t.c.session().timeline[0].id]);
+      t.clock.advance(300); btn.click();
+      const s = t.c.session();
+      assert.equal(s.runs[s.timeline[0].id], undefined, 'stage 1 is fresh');
+      assert.equal(s.cursor, 1, 'the cursor stays');
+      assert.equal(btn.hidden, true);
+      press('KeyZ');
+      assert.equal(DT.engine.remaining(DT.engine.getRun(t.c.session(), t.c.session().timeline[0].id), 'main', DT.clock.now()), 160000);
+    } finally { t.done(); }
+  });
+
+  // 2026-10-03 final review: the armed state names its action, keeps its footprint, and takes a fresh press.
+  DT.test('ui: arming 重置 or 退出 names the action and moves nothing in the dock', () => {
+    const t = bootSetup(memStorage());
+    try {
+      press('Space'); t.clock.advance(5000); press('Space');
+      const dock = document.querySelector('.dt-dock');
+      [['reset', '再点一次重置'], ['exit', '再点一次退出']].forEach(([act, words]) => {
+        const b = dockBtn(act);
+        const before = [b.getBoundingClientRect().width, dock.getBoundingClientRect().width];
+        b.click();
+        assert.ok(b.hasAttribute('data-armed'), act);
+        assert.equal(b.querySelector('.dt-arm-ask').textContent, words);
+        assert.equal(getComputedStyle(b.querySelector('.dt-arm-ask')).visibility, 'visible', act + ': the words show');
+        assert.equal(getComputedStyle(b.querySelector('.dt-arm-rest')).visibility, 'hidden', act + ': in place of the rest');
+        const after = [b.getBoundingClientRect().width, dock.getBoundingClientRect().width];
+        assert.near(after[0], before[0], 0.5, act + ': the button keeps its width');
+        assert.near(after[1], before[1], 0.5, act + ': so does the dock');
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      });
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: an armed button gives up when the mouse leaves it', () => {
+    const t = bootSetup(memStorage());
+    try {
+      const exit = dockBtn('exit');
+      exit.click();
+      assert.ok(exit.hasAttribute('data-armed'));
+      exit.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' }));
+      assert.equal(exit.hasAttribute('data-armed'), false);
+      t.clock.advance(300); exit.click();
+      assert.equal(t.c.route(), 'timer', 'the click after coming back arms it again');
+      assert.ok(exit.hasAttribute('data-armed'));
+    } finally { t.done(); }
+  });
+
+  // A tap ends with pointerleave right after pointerup: that must not disarm, or a touchscreen cannot confirm.
+  DT.test('ui: two taps on a touchscreen confirm 退出 and 重置', () => {
+    const t = bootSetup(memStorage());
+    const tap = b => {
+      const o = { pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true };
+      b.dispatchEvent(new PointerEvent('pointerdown', o));
+      b.dispatchEvent(new PointerEvent('pointerup', o));
+      b.dispatchEvent(new PointerEvent('pointerout', o));
+      b.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'touch', isPrimary: true }));
+      b.click();
+    };
+    try {
+      press('Space'); t.clock.advance(5000); press('Space');
+      const left = () => DT.engine.remaining(DT.engine.getRun(t.c.session()), 'main', DT.clock.now());
+      assert.equal(left(), 175000);
+      const reset = dockBtn('reset');
+      tap(reset);
+      assert.ok(reset.hasAttribute('data-armed'), 'the first tap arms 重置');
+      assert.equal(left(), 175000, 'one tap does nothing yet');
+      t.clock.advance(300); tap(reset);
+      assert.equal(reset.hasAttribute('data-armed'), false);
+      assert.equal(left(), 180000, 'the second tap resets');
+      const exit = dockBtn('exit');
+      tap(exit);
+      assert.ok(exit.hasAttribute('data-armed'), 'the first tap arms 退出');
+      t.clock.advance(300); tap(exit);
+      assert.equal(t.c.route(), 'setup', 'the second tap exits');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a held Enter or Space cannot confirm an armed button', () => {
+    const t = bootSetup(memStorage());
+    try {
+      const exit = dockBtn('exit');
+      const down = (key, repeat) => {
+        const e = new KeyboardEvent('keydown', { key, code: key === ' ' ? 'Space' : key, repeat, bubbles: true, cancelable: true });
+        exit.dispatchEvent(e);
+        return e.defaultPrevented;
+      };
+      assert.equal(down('Enter', true), true, 'a repeat of Enter does not click');
+      assert.equal(down(' ', true), true, 'nor one of Space');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: arming a row\'s ↺ leaves the row where it was', () => {
+    const t = bootSetup(memStorage());
+    try {
+      press('Space'); t.clock.advance(20000); press('ArrowRight');
+      press('KeyS');
+      const list = document.querySelector('.dt-overlay[data-name="stages"]');
+      const btn = list.querySelector('button[aria-label="重置第 1 个环节"]');
+      const row = btn.parentNode.querySelector('.dt-row');
+      const next = list.querySelectorAll('.dt-row')[1];
+      const box = e => { const r = e.getBoundingClientRect(); return [r.top, r.width, r.height]; };
+      const before = [box(row), box(next)];
+      btn.click();
+      assert.ok(btn.hasAttribute('data-armed'));
+      const after = [box(row), box(next)];
+      [0, 1].forEach(i => [0, 1, 2].forEach(k => assert.near(after[i][k], before[i][k], 0.5, 'row ' + i + ' part ' + k)));
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: the title card and the end card can exit too', () => {
+    const storage = memStorage();
+    const t = bootSetup(storage);
+    try {
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'setup');
+      assert.ok(t.box.textContent.indexOf('还没开始第一个环节') >= 0);
+      t.box.querySelector('button[data-action="resume"]').click();
+      t.c.act('goto', 0); press('Space'); t.clock.advance(9000); press('Space');
+      t.c.act('goto', t.c.session().timeline.length);
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'setup');
+      const banner = t.box.querySelector('.dt-setup-resume');
+      assert.ok(banner, 'the end card can be gone back to (2026-10-03 spec §5.3)');
+      assert.ok(banner.textContent.indexOf('这一场已经打完：中国科学技术大学新生辩论赛，停在结束卡。') >= 0, banner.textContent);
+      banner.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.route(), 'timer');
+      assert.equal(t.c.view().mode, 'end');
+      assert.equal(t.c.view().record[0].used, 9000, 'with its record');
+      assert.equal('exited' in JSON.parse(storage.getItem('dt.session.v1')), false, 'back in the match, it is no longer away');
+      press('ArrowLeft');
+      assert.equal(t.c.session().cursor, t.c.session().timeline.length - 1, 'and the last stage is one ← away');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a match that ended without 退出 is not offered again', () => {
+    const storage = memStorage();
+    const t = bootSetup(storage);
+    try {
+      t.c.act('goto', t.c.session().timeline.length);
+      t.done();
+      const again = boot({ storage, route: undefined, location: { search: '', hash: '' }, preset: null });
+      assert.equal(again.c.route(), 'setup');
+      assert.equal(document.querySelector('.dt-setup-resume'), null);
+      again.done();
+    } finally { DT.clock.reset(); }
+  });
+
+  DT.test('ui: after 退出 the setup page leads with 继续, and 开始这一场 steps back', () => {
+    const t = bootSetup(memStorage());
+    try {
+      const start = () => t.box.querySelector('button[data-action="start"]');
+      press('Space');
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'setup');
+      assert.ok(t.box.querySelector('.dt-setup-resume button[data-action="resume"][data-primary]'));
+      assert.equal(start().hasAttribute('data-primary'), false, 'one strong button on the page');
+      t.box.querySelector('button[data-action="discard"]').click();
+      assert.ok(start().hasAttribute('data-primary'), 'with nothing to resume, 开始这一场 leads again');
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a match file exits to its ask page, and 继续上次 goes on where it left', () => {
+    let now = T0; DT.clock.set(() => now);
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
+    const t = bootPreset(memStorage(), preset);
+    try {
+      press('Space'); press('ArrowRight'); press('Space');
+      now += 7000;
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'ask');
+      assert.ok(t.box.textContent.indexOf('停在第 2 个环节') >= 0);
+      now += 60000;
+      t.box.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.session().cursor, 1);
+      assert.equal(DT.engine.remaining(run(t), 'main', now), DT.engine.currentStage(t.c.session()).secs * 1000 - 7000);
+    } finally { t.done(); }
+  });
+
+  DT.test('ui: a match file exits to its ask page from its title card and its end card too', () => {
+    let now = T0; DT.clock.set(() => now);
+    const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
+    const t = bootPreset(memStorage(), preset);
+    try {
+      assert.equal(t.c.session().cursor, -1);
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'ask', 'not the plain setup page with another format chosen');
+      t.box.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.session().cursor, -1);
+      t.c.act('goto', t.c.session().timeline.length);
+      press('KeyQ'); press('KeyQ');
+      assert.equal(t.c.route(), 'ask');
+      assert.ok(t.box.textContent.indexOf('停在结束卡') >= 0, t.box.textContent);
+      t.box.querySelector('button[data-action="resume"]').click();
+      assert.equal(t.c.view().mode, 'end');
+    } finally { t.done(); }
+  });
+
+  // 2026-10-03 final review: at 1366x768 the last rows (O, F, M, H, Esc) fell below the panel's fold.
+  DT.test('ui: the help shows every key without scrolling at 1366x768', () => {
+    const box = document.getElementById('sandbox');
+    box.innerHTML = '<div style="width:1366px;height:768px;position:relative"></div>';
+    const c = DT.app.boot({ root: box.firstChild, location: { search: '?demo=help&frozen=1', hash: '' } });
+    try {
+      const panel = box.querySelector('.dt-overlay[data-name="help"] .dt-panel-body');
+      assert.ok(panel, 'the help demo opens the help');
+      assert.equal(panel.querySelectorAll('.dt-keys tr').length, 23);
+      assert.ok(panel.scrollHeight <= panel.clientHeight + 1, panel.scrollHeight + ' > ' + panel.clientHeight);
+      const esc = Array.from(panel.querySelectorAll('.dt-keys th')).find(th => th.textContent === 'Esc');
+      const r = esc.getBoundingClientRect(), p = panel.getBoundingClientRect();
+      assert.ok(r.bottom <= p.bottom + 1, 'Esc is in view');
+    } finally { c.destroy(); DT.clock.reset(); }
+  });
+
+  DT.test('ui: the help lists Q Q', () => {
+    const t = boot();
+    press('KeyH');
+    const keys = Array.from(document.querySelectorAll('.dt-keys th')).map(th => th.textContent);
+    assert.ok(keys.indexOf('Q Q') >= 0, keys.join(','));
+    t.done();
+  });
+
   DT.test('ui: A and L give the floor in free debate; Z undoes a wrong switch', () => {
     const t = boot();
     const idx = t.c.session().timeline.findIndex(s => s.name === '自由辩论');
@@ -62,7 +477,7 @@
 
   DT.test('ui: R needs a second press within 1.5 s', () => {
     const t = boot();
-    press('Space'); press('Space'); t.clock.advance(20000); press('Space');
+    press('Space'); t.clock.advance(20000); press('Space');
     press('KeyR');
     assert.equal(DT.engine.remaining(DT.engine.getRun(t.c.session()), 'main', DT.clock.now()), 160000);
     t.clock.advance(2000); press('KeyR');
@@ -74,7 +489,7 @@
 
   DT.test('ui: arrows adjust by one and five seconds', () => {
     const t = boot();
-    press('Space'); press('Space');
+    press('Space');
     t.clock.advance(30000);
     press('ArrowUp'); press('ArrowUp', { shiftKey: true });
     assert.equal(DT.engine.remaining(DT.engine.getRun(t.c.session()), 'main', DT.clock.now()), 156000);
@@ -83,7 +498,7 @@
 
   DT.test('ui: every action saves the session and reschedules bells', () => {
     const t = boot();
-    press('Space'); press('Space');
+    press('Space');
     assert.ok(t.storage.getItem('dt.session.v1'));
     const last = t.bells.log.scheduled[t.bells.log.scheduled.length - 1];
     assert.ok(last.some(b => b.sound === 'double'));
@@ -94,7 +509,7 @@
   DT.test('ui: reload resumes the running clock', () => {
     const storage = memStorage();
     let t = boot({ storage });
-    press('Space'); press('Space');
+    press('Space');
     t.clock.advance(10000);
     t.done();
     let now = T0 + 40000;
@@ -124,8 +539,8 @@
   });
 
   DT.test('ui: insert menu adds a surprise attack in the school cup', () => {
-    const t = boot({ formatId: 'ustc-school-cup-2025' });
-    press('Space'); press('Space'); t.clock.advance(1000); press('Space');
+    const t = boot({ formatId: 'ustc-school-cup' });
+    press('Space'); t.clock.advance(1000); press('Space');
     press('KeyX');
     const btn = document.querySelector('.dt-overlay[data-name="insert"] button[data-side="con"][data-variant="0"]');
     assert.ok(btn); btn.click();
@@ -155,7 +570,7 @@
 
   DT.test('ui: another key between the two presses cancels the double press', () => {
     const t = boot();
-    press('Space'); press('Space'); t.clock.advance(20000); press('Space');
+    press('Space'); t.clock.advance(20000); press('Space');
     press('KeyR'); press('KeyB'); press('KeyR');
     assert.equal(DT.engine.remaining(DT.engine.getRun(t.c.session()), 'main', DT.clock.now()), 160000);
     t.done();
@@ -163,7 +578,7 @@
 
   DT.test('ui: a held key does not repeat switching actions, but adjusting repeats', () => {
     const t = boot();
-    press('Space'); press('Space', { repeat: true });
+    press('ArrowRight'); press('Space', { repeat: true });
     assert.equal(t.c.session().cursor, 0);
     assert.equal(DT.engine.getRun(t.c.session()).running, false);
     press('ArrowUp', { repeat: true });
@@ -232,7 +647,7 @@
     let copied = null;
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: s => { copied = s; return Promise.resolve(); } } });
     try {
-      press('Space'); press('Space'); t.clock.advance(185000); press('Space');
+      press('Space'); t.clock.advance(185000); press('Space');
       t.c.openOverlay('record');
       const panel = document.querySelector('.dt-overlay[data-name="record"]');
       assert.ok(panel.querySelectorAll('tr').length > t.c.session().timeline.length);
@@ -250,8 +665,8 @@
   });
 
   DT.test('ui: insert buttons of a used-up side are disabled and say so', () => {
-    const t = boot({ formatId: 'ustc-school-cup-2025' });
-    press('Space'); press('Space'); t.clock.advance(1000); press('Space');
+    const t = boot({ formatId: 'ustc-school-cup' });
+    press('Space'); t.clock.advance(1000); press('Space');
     t.c.act('insert', '奇袭', 1, 'pro');
     t.c.openOverlay('insert');
     const btn = document.querySelector('.dt-overlay[data-name="insert"] button[data-side="pro"][data-variant="0"]');
@@ -274,7 +689,7 @@
     const dock = document.querySelector('.dt-dock');
     const btn = sel => dock.querySelector('button[data-act="' + sel + '"]');
     assert.equal(btn('prev').disabled, true);
-    press('Space');
+    press('ArrowRight');
     assert.equal(dock.querySelector('button[data-act="floor"][data-side="pro"]').disabled, true);
     assert.equal(btn('insert').disabled, true);
     btn('toggle').click();
@@ -344,8 +759,8 @@
     let t = boot({ storage });
     t.c.act('goto', t.c.session().timeline.length);
     t.done();
-    t = boot({ storage, formatId: 'ustc-school-cup-2025' });
-    assert.equal(t.c.session().format.id, 'ustc-school-cup-2025');
+    t = boot({ storage, formatId: 'ustc-school-cup' });
+    assert.equal(t.c.session().format.id, 'ustc-school-cup');
     t.done();
   });
 
@@ -354,10 +769,10 @@
     const changes = [], events = [];
     t.c.on('change', s => changes.push(s.cursor));
     t.c.on('events', list => list.forEach(e => events.push(e.key)));
-    press('Space'); press('Space');
+    press('Space');
     t.clock.advance(150500);
     press('KeyP');
-    assert.deepEqual(changes, [0, 0, 0]);
+    assert.deepEqual(changes, [0, 0]);
     assert.deepEqual(events, ['w30']);
     t.c.destroy();
     press('Space');
@@ -376,7 +791,7 @@
       createBuffer: (ch, len) => ({ getChannelData: () => new Float32Array(len) }) };
     DT.bells._setContextFactory(() => ctx); DT.bells._resetForTests();
     const t = boot({ bells: DT.bells });
-    press('Space'); press('Space');
+    press('Space');
     const endBell = started.filter(n => n.startAt >= 190 - 0.01);
     assert.ok(endBell.length > 0, 'the end bell is planned at 180 s');
     t.clock.advance(180400); ctx.currentTime = 190.4;   // between the two strikes of the double bell
@@ -394,7 +809,7 @@
 
   DT.test('ui: clicking the current row of the stage list leaves its running clock alone', () => {
     const t = boot();
-    press('Space'); press('Space'); t.clock.advance(5000);
+    press('Space'); t.clock.advance(5000);
     const history = t.c.session().history.length;
     t.c.openOverlay('stages');
     document.querySelector('.dt-overlay[data-name="stages"] button[data-index="0"]').click();
@@ -408,7 +823,7 @@
     const t = boot();
     const events = [];
     t.c.on('events', list => list.forEach(e => events.push(e.key)));
-    press('Space'); press('Space');
+    press('Space');
     t.clock.advance(148000);
     press('ArrowDown', { shiftKey: true });
     assert.deepEqual(t.bells.log.played, ['ding']);
@@ -429,7 +844,7 @@
   });
 
   DT.test('ui: nothing can be inserted on the end card', () => {
-    const t = boot({ formatId: 'ustc-school-cup-2025' });
+    const t = boot({ formatId: 'ustc-school-cup' });
     t.c.act('goto', t.c.session().timeline.length);
     assert.equal(document.querySelector('.dt-dock button[data-act="insert"]').disabled, true);
     press('KeyX');
@@ -441,7 +856,7 @@
 
   DT.test('ui: a held arrow key makes one undo step and saves once it settles', () => {
     const t = boot();
-    press('Space'); press('Space'); t.clock.advance(30000);
+    press('Space'); t.clock.advance(30000);
     const before = t.c.session().history.length;
     press('ArrowUp');
     for (let i = 0; i < 20; i++) { t.clock.advance(33); press('ArrowUp', { repeat: true }); }
@@ -468,7 +883,7 @@
     let t;
     try { t = boot(); } finally { DT.engine.tick = tick; console.warn = warn; }
     try {
-      press('Space'); press('Space');
+      press('Space');
       t.clock.advance(5000);
       await Promise.race([new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))), later(1000)]);
       assert.equal(document.querySelector('.dt-clock[data-clock="main"] .dt-sec').textContent, '55');
@@ -501,7 +916,7 @@
   DT.test('ui: a plain session never leaks into a preset file', () => {
     const storage = memStorage();
     const t = boot({ storage });
-    press('Space'); press('Space');          // a plain match is running
+    press('Space');          // a plain match is running
     t.done();
     const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], { title: '决赛', proMotion: '甲', conMotion: '乙', proTeam: '', conTeam: '', proSeat: 'left' }, 'hall', T0);
     const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
@@ -553,7 +968,7 @@
     const storage = memStorage();
     const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
     let t = bootPreset(storage, preset);
-    press('Space'); press('Space');   // the first stage is running
+    press('Space');   // the first stage is running
     const rehearsal = t.c.session().id;
     t.done();
     now += 3 * 3600 * 1000;           // match day
@@ -598,7 +1013,7 @@
     const storage = memStorage();
     const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
     let t = bootPreset(storage, preset);
-    press('Space'); press('Space'); press('ArrowLeft');
+    press('Space'); press('ArrowLeft');
     assert.equal(t.c.session().cursor, -1);
     t.done();
     t = bootPreset(storage, preset);
@@ -611,7 +1026,7 @@
     const preset = DT.preset.make(DT.BUILTIN_FORMATS[0], PRESET_MATCH, 'hall', T0);
     const t = bootPreset(storage, preset);
     try {
-      press('Space'); press('Space'); press('ArrowLeft');
+      press('Space'); press('ArrowLeft');
       const old = t.c.session().id;
       press('Escape');
       assert.equal(t.c.route(), 'setup');

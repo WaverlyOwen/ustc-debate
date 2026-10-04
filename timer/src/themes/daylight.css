@@ -9,6 +9,7 @@
   --ink: #15171B;
   --ink-dim: rgb(21 23 27 / .68);
   --accent: #B7791F;
+  --on-accent: var(--ink);    /* words on a solid accent (an armed 重置 / 退出): its gold is too light for the panel */
   --on-side: #F7F4EE;
   --digits-on-field: #F7F4EE;
   --digits-off-field: var(--ink);

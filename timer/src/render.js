@@ -118,11 +118,13 @@
     return ids.indexOf(id) >= 0 ? id : 'hall';
   }
 
-  // Digits tighten as time runs out; overtime and finished clocks stay tight; breaks never tense up.
+  // Digits tighten as time runs out; overtime and finished clocks stay tight; breaks never tense up. In steps of
+  // 0.02, so --tension changes about every few seconds rather than every frame: each new value sets the digits'
+  // font-variation-settings again, which lays the whole page out again (new spec §3, P5).
   function tension(clock, kind) {
     if (!clock || kind === 'break') return 0;
     if (clock.phase === 'over' || clock.phase === 'done') return 1;
-    return clamp01(1 - clock.fraction);
+    return Math.round(clamp01(1 - clock.fraction) * 50) / 50;
   }
 
   function stateText(clock, kind) {
@@ -267,6 +269,7 @@
     }
 
     function nextParts(v, idleSide) {
+      if (v.away) return ['比赛暂停', v.away, ''];   // a projector's title card while the console is away
       if (idleSide) return ['空格开始', '先由' + SIDE_NAME[idleSide] + '发言', ''];
       if (!v.next) return ['', '', ''];
       const time = (v.next.type === 'dual' ? '各 ' : '') + DT.engine.fmt(v.next.secs * 1000);

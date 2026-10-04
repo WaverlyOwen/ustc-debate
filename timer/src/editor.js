@@ -945,9 +945,15 @@
       settle(CLOSE, leave);
     }
 
+    // onLeave as the panel starts to sink, so the page behind takes keys again at once; onClose once it is gone.
+    // Focus leaves the sinking panel first: a box just typed in would otherwise keep the next space as typing.
     function leave() {
       closing = true;
-      panel.setAttribute('data-leaving', '');
+      panel.setAttribute('data-leaving', '');   // settle() has flushed what was typed
+      const a = document.activeElement;
+      if (a && panel.contains(a) && a.blur) a.blur();
+      panel.inert = true;
+      if (o.onLeave) o.onLeave();
       setTimeout(() => {
         if (destroyed) return;
         const id = currentId;

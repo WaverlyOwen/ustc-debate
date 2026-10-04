@@ -168,8 +168,13 @@
 
   // ---- actions ----
 
+  // On the title card, which says 空格开始, the first stage starts at once (new spec §3), in one undo step.
   function toggle(session, now) {
-    if (session.cursor < 0) return next(session, now);
+    if (session.cursor < 0) {
+      const entered = next(session, now);
+      if (!currentStage(entered)) return entered;
+      return Object.assign(toggle(entered, now), { history: entered.history });   // Z goes back to the title card
+    }
     const st = currentStage(session);
     if (!st) return noop(session);
     const r0 = getRun(session);
@@ -261,8 +266,9 @@
     });
   }
 
-  function reset(session, now) {
-    const st = currentStage(session);
+  // The current stage, or the one at `index` (new spec §2.1); the cursor stays. Dropping the run stops its clock.
+  function reset(session, now, index) {
+    const st = index == null ? currentStage(session) : session.timeline[index];
     if (!st) return noop(session);
     const s = begin(session);
     delete s.runs[st.id];

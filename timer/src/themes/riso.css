@@ -144,13 +144,6 @@
 @container (max-width: 520px) {
   .dt-stage[data-theme="riso"] .dt-digits > span { -webkit-mask: none; mask: none; }
 }
-/* For the same reason the digits tense up in steps rather than on every frame: 50 steps over a stage. */
-@supports (width: round(nearest, 1px, 1px)) {
-  .dt-stage[data-theme="riso"] .dt-digits {
-    --tension-step: round(nearest, var(--tension), .02);
-    font-variation-settings: "wght" calc(300 + 400 * var(--tension-step)), "wdth" calc(100 - 22 * var(--tension-step));
-  }
-}
 /* One colour on the halftone and off it, so the renderer's second, clipped layer is not needed. The attribute
    selectors only rank these above stage.css's clips, which they remove. */
 .dt-stage[data-theme="riso"] .dt-digits-on { display: none; }

@@ -58,7 +58,7 @@
   // setup page with the match remembered from last time; its steps, if any, are a match left unfinished.
   // An `editor` scene opens the format editor over the match (E): `expand` opens a row's details, `typo`
   // leaves [row, text] in a duration box. A `console` scene shows the page as the console beside a projector
-  // window (O).
+  // window (O). An `overlay` scene opens that overlay (help: H).
   const SINGLE = { at: 73, steps: [[0, 'goto', '正方一辩开篇立论'], [0, 'toggle']] };
   const DUAL = { at: 137, steps: [[0, 'goto', '自由辩论'], [0, 'floor', 'pro'], [20, 'floor', 'con'], [68, 'floor', 'pro']] };
   const SCENES = {
@@ -76,6 +76,7 @@
     'seat-right': Object.assign({ seat: 'right' }, DUAL),
     'long': { at: 73, format: longFormat, steps: [[0, 'goto', LONG_NAME], [0, 'toggle']] },
     'dock': Object.assign({ dock: true }, SINGLE),   // the control dock held open over a running stage
+    'help': Object.assign({ overlay: 'help' }, SINGLE),   // the key table (H) over a running stage
     'setup': { setup: true, at: 0, steps: [] },
     'setup-resume': Object.assign({ setup: true }, DUAL),   // the free debate left half way
     'editor': Object.assign({ editor: { expand: 1 } }, SINGLE),
@@ -108,7 +109,8 @@
     if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
     const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
     if (!scene.setup) {
-      const out = { route: 'timer', session: play(scene, now, theme), dock: !!scene.dock, console: !!scene.console };
+      const out = { route: 'timer', session: play(scene, now, theme), dock: !!scene.dock, console: !!scene.console,
+        overlay: scene.overlay || null };
       if (scene.editor) Object.assign(out, { editor: scene.editor, formats: DT.BUILTIN_FORMATS.concat([weekend()]) });
       return out;
     }

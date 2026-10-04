@@ -236,4 +236,28 @@
     assert.equal(JSON.parse(other.getItem('dt.formats.v1')).formats.some(f => f.id === 'u-odd'), false,
       'another storage does not receive them');
   });
+
+  DT.test('store: an edited 2025 school cup migrates to the new id', () => {
+    const m = new Map();
+    DT.store.useStorage({ getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) });
+    const cup = JSON.parse(JSON.stringify(DT.BUILTIN_FORMATS.find(f => f.id === 'ustc-school-cup')));
+    cup.id = 'ustc-school-cup-2025'; cup.name = '我改过的校赛';
+    m.set('dt.formats.v1', JSON.stringify({ schema: 1, formats: [cup] }));
+    m.set('dt.lastMatch.v1', JSON.stringify({ formatId: 'ustc-school-cup-2025' }));
+    const list = DT.store.loadFormats();
+    const got = list.find(f => f.id === 'ustc-school-cup');
+    assert.equal(got.name, '我改过的校赛');
+    assert.ok(!list.some(f => f.id === 'ustc-school-cup-2025'));
+    assert.equal(DT.store.loadLastMatch().formatId, 'ustc-school-cup');
+  });
+
+  DT.test('store: a stored school cup under the new id wins over one under the old id', () => {
+    const st = memStorage(); S.useStorage(st);
+    const cup = name => Object.assign(JSON.parse(JSON.stringify(DT.BUILTIN_FORMATS.find(f => f.id === 'ustc-school-cup'))), { name });
+    const old = Object.assign(cup('旧的'), { id: 'ustc-school-cup-2025' });
+    st.setItem('dt.formats.v1', JSON.stringify({ schema: 1, formats: [old, cup('新的')] }));
+    const list = S.loadFormats();
+    assert.deepEqual(list.filter(f => /^ustc-school-cup/.test(f.id)).map(f => f.name), ['新的']);
+    assert.equal(list.length, DT.BUILTIN_FORMATS.length);
+  });
 })();

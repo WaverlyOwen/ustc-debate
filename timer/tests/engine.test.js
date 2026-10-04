@@ -49,10 +49,23 @@
     assert.equal(E.fmt(3600000), '60:00');
   });
 
-  DT.test('engine: space on the title card moves to the first stage', () => {
+  // The title card says 空格开始, so one space starts the first stage (new spec §3; → only enters it).
+  DT.test('engine: space on the title card starts the first stage', () => {
     const s = E.toggle(E.createSession(fx(), MATCH, T0), T0);
     assert.equal(s.cursor, 0);
-    assert.equal(E.getRun(s).running, false);
+    assert.ok(E.getRun(s).running);
+  });
+
+  DT.test('engine: space on the title card gives a free debate first stage to its first side, in one undo step', () => {
+    const f = fx();
+    f.stages = [f.stages[3]].concat(f.stages.filter((x, i) => i !== 3));
+    f.stages[0].first = 'con';
+    const s = E.toggle(E.createSession(f, MATCH, T0), T0);
+    const r = E.getRun(s);
+    assert.equal(r.active, 'con');
+    assert.ok(r.running);
+    assert.equal(s.history.length, 1);
+    assert.equal(E.undo(s, T0 + 1000).cursor, -1);
   });
 
   DT.test('engine: single stage accumulates time across pauses', () => {
@@ -252,6 +265,25 @@
     s = E.reset(s, T0 + 60000);
     assert.equal(rem(s, 'main', T0 + 70000), 120000);
     assert.equal(rem(s, 'main', T0 + 70000, 's1'), 130000);
+  });
+
+  DT.test('engine: reset can target any stage and leaves the cursor alone', () => {
+    let s = E.toggle(at(0), T0); s = E.next(s, T0 + 50000);       // stage 0 used 50 s, now on stage 1
+    s = E.toggle(s, T0 + 50000);                                   // stage 1 running
+    s = E.reset(s, T0 + 60000, 0);
+    assert.equal(s.cursor, 1);
+    assert.equal(E.remaining(E.getRun(s, 's1'), 'main', T0 + 70000), 180000);
+    assert.ok(E.getRun(s).running, 'stage 1 untouched');
+    s = E.undo(s, T0 + 61000);
+    assert.equal(E.remaining(E.getRun(s, 's1'), 'main', T0 + 70000), 130000);
+  });
+
+  DT.test('engine: resetting the running current stage by its index stops it', () => {
+    let s = E.toggle(at(1), T0);
+    s = E.reset(s, T0 + 20000, 1);
+    assert.equal(E.getRun(s).running, false);
+    assert.equal(rem(s, 'main', T0 + 30000), 120000);
+    assert.equal(E.reset(s, T0, 99).history.length, s.history.length, 'no such stage: nothing to undo');
   });
 
   DT.test('engine: extras insert after the current stage and respect perSide', () => {

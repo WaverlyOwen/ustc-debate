@@ -3,7 +3,8 @@
    itself, and the frame loop. */
 (function (DT) {
   'use strict';
-  const DOUBLE_MS = 1500;       // the second press of R R / G G must come within this
+  const DOUBLE_MS = 1500;       // the second press of R R / G G / Q Q, or click of 重置 / 退出, must come within this
+  const CONFIRM_MIN_MS = 250;   // a second click sooner than this is one double-click, not a confirmation
   const DOCK_IDLE_MS = 2500;    // the dock folds away after this long without pointer movement
   const RUNG_MEMORY = 32;       // visual events the projector remembers, so one reported twice plays once
   const MERGE_MS = 1000;        // adjusts of one clock this close together are one undo step (a held arrow key)
@@ -16,6 +17,10 @@
   const EXPORTED = '已导出。把这个文件拷到比赛用的电脑上，双击就能直接开始这一场';
   const EXPORT_FAILED = '没能导出这个文件：浏览器没有让它下载。再试一次，或换一个浏览器';
   const RESTART_LABEL = '重新开始这一场';   // 新的一场 on the end card of a match file (new spec §4.1)
+  // A key in a projector window whose console tab was closed. A refreshed console finds this window again by name,
+  // but a console opened anew cannot (its O opens a window of its own), so this one is to be closed.
+  const CONSOLE_GONE = '控制台已关闭。关掉这个窗口，在主窗口按 O 重新打开投影';
+  const CONSOLE_AWAY = '计时员在开赛页，回到计时后继续';         // a key in a projector window while the console is away
   // What ?exportProbe=1 exports, for the end-to-end test (new spec §4.4).
   const PROBE = {
     format: 'ustc-freshman-cup', theme: 'hall',
@@ -33,7 +38,7 @@
     [['←', 'PageUp'], '上一环节'],
     [['↑', '↓'], '当前时钟 +1 / −1 秒'],
     [['Shift+↑', 'Shift+↓'], '当前时钟 +5 / −5 秒'],
-    [['R R'], '重置当前环节（连按两次）'],
+    [['R R'], '重置当前环节（连按两次）；其他环节在环节列表（S）里重置'],
     [['G G'], '当前发言方放弃剩余时间（自由辩 / 对辩，连按两次）'],
     [['B'], '手动敲铃'],
     [['X'], '插入奇袭（赛制有可插入环节时）'],
@@ -41,6 +46,7 @@
     [['Shift+S'], '本场记录'],
     [['E'], '编辑赛制（这一场照常进行）'],
     [['Shift+E'], '开场卡上：回到开赛页'],
+    [['Q Q'], '退出到开赛页，这一场保留，「继续」回到这个环节（连按两次）'],
     [['O'], '打开投影窗口（这个窗口变成操作台）'],
     [['F'], '全屏'],
     [['M'], '静音'],
@@ -57,6 +63,14 @@
       '<path d="m10.4 5.8 4 4.4m0-4.4-4 4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
   };
 
+  // 重置 and 退出 carry the words they show while armed (new spec §2.1) in the same cell as their rest, so the
+  // button is always as wide as the longer of the two and arming moves nothing under the pointer.
+  const armable = (act, label, keys, ask) => '<button type="button" data-act="' + act + '"><span class="dt-arm">' +
+    '<span class="dt-arm-rest"><span>' + label + '</span><kbd>' + keys + '</kbd></span>' +
+    '<span class="dt-arm-ask">' + ask + '</span></span></button>';
+  const RESET_BUTTON = armable('reset', '重置', 'R R', '再点一次重置');
+  const EXIT_BUTTON = armable('exit', '退出', 'Q Q', '再点一次退出');
+
   // Static markup only; session text goes in through textContent.
   const DOCK =
     '<div class="dt-dock-group">' +
@@ -70,11 +84,13 @@
     '<button type="button" data-act="floor" data-side="con"><i class="dt-swatch" data-side="con"></i><span>反方</span><kbd>L</kbd></button></div>' +
     '<div class="dt-dock-group">' +
     '<button type="button" data-act="undo"><span>撤销</span><kbd>Z</kbd></button>' +
+    RESET_BUTTON +
     '<button type="button" data-act="insert"><span>插入奇袭</span><kbd>X</kbd></button>' +
     '<button type="button" data-act="stages"><span>环节</span><kbd>S</kbd></button>' +
     '<button type="button" data-act="editor"><span>赛制</span><kbd>E</kbd></button></div>' +
     '<div class="dt-dock-group"><button type="button" data-act="projector"><span>投影窗口</span><kbd>O</kbd></button>' +
-    '<button type="button" data-act="fullscreen"><span>全屏</span><kbd>F</kbd></button></div>';
+    '<button type="button" data-act="fullscreen"><span>全屏</span><kbd>F</kbd></button></div>' +
+    '<div class="dt-dock-group" data-exit>' + EXIT_BUTTON + '</div>';
   // The console (spec §5.7): stage list, preview, controls. The stage moves into .dt-preview while it is open.
   const ADJUST = [[-5000, '−5'], [-1000, '−1'], [1000, '+1'], [5000, '+5']];
   const CONSOLE =
@@ -100,12 +116,14 @@
     '<button type="button" data-act="next"><span>下一环节</span><kbd>→</kbd></button></div>' +
     '<div class="dt-control-group">' +
     '<button type="button" data-act="undo"><span>撤销</span><kbd>Z</kbd></button>' +
-    '<button type="button" data-act="reset"><span>重置</span><kbd>R R</kbd></button>' +
+    RESET_BUTTON +
     '<button type="button" data-act="insert" data-wide><span>插入奇袭</span><kbd>X</kbd></button></div>' +
     '<div class="dt-control-group">' +
     '<button type="button" data-act="bell"><span>敲铃</span><kbd>B</kbd></button>' +
     '<button type="button" data-act="mute" aria-pressed="false"><span class="dt-mute-label">静音</span><kbd>M</kbd></button>' +
-    '<label class="dt-volume"><span>音量</span><input type="range" name="volume" min="0" max="1" step="0.05"></label></div>' +
+    // Not a <label>: a click on 音量 would give the slider focus (new spec §3, P1).
+    '<div class="dt-volume"><span>音量</span><input type="range" name="volume" aria-label="音量" min="0" max="1" step="0.05"></div></div>' +
+    '<div class="dt-control-group" data-exit>' + EXIT_BUTTON + '</div>' +
     '</aside>';
   const STATUS =
     '<span class="dt-pill" data-kind="sound">按任意键启用声音</span>' +
@@ -148,10 +166,15 @@
 
   const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
 
+  // Inputs that take no typing (a slider, a checkbox…) leave the keys to the timer (new spec §3, P1).
+  const UNTYPED = ['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file'];
+
+  // Where keys are typing: a text box, a select, an editable element.
   function isEditable(target) {
     if (!target || !target.tagName) return false;
     const tag = target.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!target.isContentEditable;
+    if (tag === 'INPUT') return UNTYPED.indexOf(String(target.type).toLowerCase()) < 0;
+    return tag === 'TEXTAREA' || tag === 'SELECT' || !!target.isContentEditable;
   }
 
   // Whole seconds, as on the end card.
@@ -177,14 +200,15 @@
     return { name: 'setup' };
   }
 
-  // A saved match worth resuming: unfinished and sound enough to render. Anything else is dropped.
+  // A saved match worth resuming: unfinished (or left with 退出, even from its end card: new spec §5.3) and sound
+  // enough to render. Anything else is dropped.
   function resumable(saved, now) {
     if (!saved) return null;
     const ok = Array.isArray(saved.timeline) && Number.isInteger(saved.cursor) &&
       saved.cursor >= -1 && isObj(saved.runs) && isObj(saved.format) && isObj(saved.extrasUsed) &&
       !DT.store.validateFormat(Object.assign({}, saved.format, { stages: saved.timeline })).length;
     if (!ok) { console.warn('保存的场次已损坏，已丢弃'); return null; }
-    if (saved.cursor >= saved.timeline.length) return null;
+    if (saved.cursor >= saved.timeline.length && !saved.exited) return null;
     try { DT.engine.view(saved, now); } catch (e) { console.warn('保存的场次已损坏，已丢弃'); return null; }
     if (!Array.isArray(saved.history)) saved.history = [];
     return saved;
@@ -228,13 +252,21 @@
     return DT.engine.createSession(format, o.match || {}, now);
   }
 
-  // How the setup page names a match it can resume: its title, else the pro motion, else the format; and the
-  // stage it stopped on.
+  // How the setup page names a match it can resume: its title, else the pro motion, else the format; the stage it
+  // stopped on; whether the timekeeper left it with 退出 (else it was left by closing the page), and on its end card.
   function resumeInfo(session) {
     const m = isObj(session.match) ? session.match : {};
     const title = [m.title, m.proMotion, session.format.name].map(x => String(x || '').trim()).find(x => x);
     const st = session.timeline[session.cursor];
-    return { title: title || '', cursor: session.cursor, stage: st ? st.name : '' };
+    return { title: title || '', cursor: session.cursor, stage: st ? st.name : '', exited: !!session.exited,
+      finished: session.cursor >= session.timeline.length };
+  }
+
+  // What the projector's title card says while the console is away (new spec §2.2), in place of 空格开始.
+  function awayText(session) {
+    const st = session.timeline[session.cursor];
+    if (st) return '停在第 ' + (session.cursor + 1) + ' 个环节：' + st.name;
+    return session.cursor < 0 ? '还没开始第一个环节' : '比赛已经结束';
   }
 
   // What a key does. `hold` lets a held key repeat; `twice` asks for a second press and names the toast.
@@ -251,6 +283,7 @@
       case 'ArrowDown': return { act: ['adjust', shift ? -5000 : -1000], hold: true };
       case 'KeyR': return { act: ['reset'], twice: '再按一次 R 重置本环节' };
       case 'KeyG': return { act: ['yield'], twice: '再按一次 G 放弃剩余时间' };
+      case 'KeyQ': return { act: ['exit'], twice: '再按一次 Q 退出到开赛页，这一场会保留' };
       case 'KeyB': return { act: ['bell'] };
       case 'KeyM': return { act: ['mute'] };
       case 'KeyF': return { act: ['fullscreen'] };
@@ -273,7 +306,7 @@
     next: (s, now) => DT.engine.next(s, now),
     prev: (s, now) => DT.engine.prev(s, now),
     adjust: (s, now, ms, clockId) => DT.engine.adjust(s, ms, now, clockId),
-    reset: (s, now) => DT.engine.reset(s, now),
+    reset: (s, now, index) => DT.engine.reset(s, now, index),
     yield: (s, now) => DT.engine.yieldTime(s, now),
     goto: (s, now, index) => DT.engine.goto(s, index, now),
     insert: (s, now, group, variant, side) => DT.engine.insertExtra(s, group, variant, side, now),
@@ -291,22 +324,66 @@
     const b = sel => box.querySelector('button[data-act="' + sel + '"]');
     const toggle = b('toggle');
     return {
-      prev: b('prev'), next: b('next'), toggle, new: b('new'), undo: b('undo'), insert: b('insert'),
+      prev: b('prev'), next: b('next'), toggle, new: b('new'), undo: b('undo'), insert: b('insert'), reset: b('reset'),
       pro: box.querySelector('button[data-side="pro"]'), con: box.querySelector('button[data-side="con"]'),
       icon: toggle.querySelector('.dt-icon'), label: toggle.querySelector('.dt-toggle-label'),
     };
   }
 
-  // A mouse click must not leave focus on a button, or the next space would press it as well as toggle.
+  // A mouse click must not leave focus on a button, or the next space would press it as well as toggle, and Enter
+  // would press it again. Every box of buttons gets this: the dock, the console's columns, the overlays.
   function keepFocus(box) {
     box.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+  }
+
+  // The buttons that reset or exit ask twice (new spec §2.1): the first click arms the button (data-armed), and
+  // its CSS shows the words that say what the second click does; a second click 250 ms to 1.5 s after the first runs
+  // `run`. A shaky double-click is too quick to count, and stays armed for a deliberate second click. 1.5 s, the
+  // mouse leaving the button, or a press anywhere else disarms it. Only the mouse: a finger's tap ends with a
+  // pointerleave of its own, which would disarm the button between two taps. `words()`, when given, writes those words
+  // into `ask` as the button arms. data-armed alternates a / b so the 1.5 s drain under the words starts over on
+  // every arming. Returns the function that disarms, for a page going away.
+  function confirmTwice(button, run, ask, words) {
+    let armedAt = null, timer = null, turn = 'b';
+    function disarm() {
+      armedAt = null;
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', elsewhere, true);
+      button.removeEventListener('pointerleave', left);
+      attr(button, 'data-armed', false);
+    }
+    function elsewhere(e) { if (!button.contains(e.target)) disarm(); }
+    function left(e) { if (e.pointerType === 'mouse') disarm(); }
+    // A held Enter clicks again on every repeat, and one of them would confirm: only a fresh press counts.
+    button.addEventListener('keydown', e => {
+      if (e.repeat && (e.key === 'Enter' || e.key === ' ')) e.preventDefault();
+    });
+    button.addEventListener('click', () => {
+      const now = DT.clock.now();
+      if (armedAt !== null && now - armedAt <= DOUBLE_MS) {
+        if (now - armedAt < CONFIRM_MIN_MS) return;
+        disarm();
+        run();
+        return;
+      }
+      disarm();
+      armedAt = now;
+      if (words) text(ask, words());
+      turn = turn === 'a' ? 'b' : 'a';
+      attr(button, 'data-armed', turn);
+      timer = setTimeout(disarm, DOUBLE_MS);
+      document.addEventListener('pointerdown', elsewhere, true);
+      button.addEventListener('pointerleave', left);
+    });
+    return disarm;
   }
 
   // The timer page for one match. env: {bells, settings, still (a screenshot: no sound hint), pinDock,
   // console (open as the console beside a projector), emit(name, arg) to the app's listeners, onNewMatch() for
   // 新的一场 on the end card and newLabel to call it something else, onEdit(formatId) for E, onSetup() for
   // Shift+E on the title card (and Esc there when matchFile: this page is a match file), onProjector() for O
-  // (false when no window could open), blocked() true while the editor covers the timer and its keys}.
+  // (false when no window could open), onExit(session) for Q Q and 退出 once the match is paused and saved,
+  // blocked() true while the editor covers the timer and its keys}.
   function mountTimer(root, first, env) {
     const bells = env.bells, settings = env.settings, still = !!env.still, emit = env.emit;
     let session = first;
@@ -328,6 +405,7 @@
     let raf = null, destroyed = false, overlay = null, armed = null, dockTimer = null, dockPinned = false;
     let desk = null;   // the console's handle while a projector window is open
     let lastAdjust = null, saveTimer = null;   // {key, at} of the last adjust; a save held back while a key repeats
+    const disarms = [];   // one per 重置 / 退出 of the dock and the console, to put its label back when the page goes
 
     function viewAt(now) {
       const v = DT.engine.view(session, now);
@@ -370,6 +448,7 @@
       });
       btn.undo.disabled = !(session.history && session.history.length);
       btn.insert.disabled = !v.extras.length || v.mode === 'end';
+      btn.reset.disabled = !st;
     }
 
     function paintStatus() {
@@ -444,7 +523,22 @@
       DT.store.saveSettings(settings);
     }
 
-    const OTHER_ACTS = { bell: () => bells.play('ding'), mute: toggleMute, fullscreen: () => toggleFullscreen(root) };
+    // Leaving for the setup page (new spec §2.2): the clock is settled and stopped first, so the time spent away is
+    // not charged, and the match is saved for 继续. Leaving is not a timing step, so it is no undo step either.
+    function exit() {
+      const now = DT.clock.now();
+      const out = DT.engine.tick(session, now);
+      pulse(out.events);
+      session = out.session;
+      if (DT.engine.currentStage(session) && DT.engine.getRun(session).running) {
+        session = Object.assign(DT.engine.pause(session, now), { history: session.history });
+      }
+      save(false);
+      emit('change', session);
+      env.onExit(session);
+    }
+
+    const OTHER_ACTS = { bell: () => bells.play('ding'), mute: toggleMute, fullscreen: () => toggleFullscreen(root), exit };
 
     function act(name) {
       if (destroyed) return false;
@@ -521,13 +615,13 @@
           sig = s;
           list.textContent = '';
           rows = tl.map((st, i) => {
-            const li = el('li');
+            const li = el('li', 'dt-stagelist-item');
+            attr(li, 'data-gap', i > 0 && (st.block || '') !== (tl[i - 1].block || ''));
             const b = el('button', 'dt-row');
             b.type = 'button';
             attr(b, 'data-index', i);
             attr(b, 'data-side', st.side || 'none');
             attr(b, 'data-kind', st.type);
-            attr(b, 'data-gap', i > 0 && (st.block || '') !== (tl[i - 1].block || ''));
             const state = el('span', 'dt-row-state');
             const dot = state.appendChild(el('span', 'dt-row-dot'));
             const time = state.appendChild(el('span'));
@@ -537,15 +631,27 @@
               if (i !== session.cursor) act('goto', i);   // the current row: a click must not stop its clock
               closeOverlay();
             });
+            // Any stage that has been timed resets on its own, from here, without moving the cursor (new spec §2.1).
+            const reset = el('button', 'dt-row-reset');
+            reset.type = 'button';
+            attr(reset, 'aria-label', '重置第 ' + (i + 1) + ' 个环节');
+            attr(reset, 'title', '重置');
+            reset.appendChild(el('span', 'dt-row-reset-icon', '↺')).setAttribute('aria-hidden', 'true');
+            const label = reset.appendChild(el('span', 'dt-row-reset-label', '重置'));
+            // Armed, it says what it does and what it throws away: the time the row shows (✓ 2:57, + 0:06, 1:12).
+            confirmTwice(reset, () => act('reset', i), label,
+              () => '再点一次重置' + (time.textContent ? '　' + time.textContent : ''));   // rebuilt with the list
             li.appendChild(b);
+            li.appendChild(reset);
             list.appendChild(li);
-            return { b, dot, time };
+            return { b, dot, time, reset };
           });
         }
         const rec = DT.engine.record(session, now);
         const active = v.clocks.find(c => c.active) || v.clocks[0];
         rows.forEach((r, i) => {
           const cur = i === session.cursor;
+          attr(r.reset, 'hidden', !(session.runs[tl[i].id] && (rec[i].used > 0 || rec[i].yielded > 0)));
           attr(r.b, 'aria-current', cur ? 'step' : null);
           attr(r.b, 'data-over', !cur && rec[i].over >= 1000);
           let s = '';
@@ -558,17 +664,24 @@
       };
     }
 
+    // Two tables side by side where the panel is wide enough, so the last keys (O, F, M, H, Esc) are not below the
+    // fold of a 768-high screen; they stack where it is not.
     function helpOverlay(body) {
-      const table = el('table', 'dt-keys');
-      HELP.forEach(([keys, what]) => {
-        const tr = el('tr');
-        const th = el('th');
-        keys.forEach(k => th.appendChild(el('kbd', null, k)));
-        tr.appendChild(th);
-        tr.appendChild(el('td', null, what));
-        table.appendChild(tr);
+      const cols = el('div', 'dt-keys-cols');
+      const half = Math.ceil(HELP.length / 2);
+      [HELP.slice(0, half), HELP.slice(half)].forEach(rows => {
+        const table = el('table', 'dt-keys');
+        rows.forEach(([keys, what]) => {
+          const tr = el('tr');
+          const th = el('th');
+          keys.forEach(k => th.appendChild(el('kbd', null, k)));
+          tr.appendChild(th);
+          tr.appendChild(el('td', null, what));
+          table.appendChild(tr);
+        });
+        cols.appendChild(table);
       });
-      body.appendChild(table);
+      body.appendChild(cols);
       return () => {};
     }
 
@@ -698,6 +811,7 @@
       text(wrap.querySelector('h2'), OVERLAY_TITLE[name]);
       wrap.querySelector('.dt-scrim').addEventListener('click', closeOverlay);
       wrap.querySelector('.dt-close').addEventListener('click', closeOverlay);
+      keepFocus(wrap);
       overlay = { name, el: wrap, refresh: OVERLAYS[name](wrap.querySelector('.dt-panel-body')) };
       root.appendChild(wrap);
       const now = DT.clock.now();
@@ -729,13 +843,19 @@
       attr(root, 'data-idle', true);
     }
 
-    // What a button on the dock or the console does; the double-press ones go through their keys.
+    // What a button on the dock or the console does. 重置 and 退出 are not here: they ask twice (confirmControls).
     const CONTROL_ACTS = {
       prev: () => act('prev'), next: () => act('next'), toggle: () => act('toggle'), undo: () => act('undo'),
       insert: () => openOverlay('insert'), stages: () => openOverlay('stages'), fullscreen: () => act('fullscreen'),
-      new: () => env.onNewMatch(), editor: () => key('KeyE'), projector: () => key('KeyO'), reset: () => key('KeyR'),
+      new: () => env.onNewMatch(), editor: () => key('KeyE'), projector: () => key('KeyO'),
       bell: () => act('bell'), mute: () => act('mute'),
     };
+    function confirmControls(box) {
+      ['reset', 'exit'].forEach(name => {
+        const b = box.querySelector('button[data-act="' + name + '"]');
+        disarms.push(confirmTwice(b, () => act(name)));
+      });
+    }
     function onControlClick(e) {
       const b = e.target.closest('button');
       if (!b || b.disabled) return;
@@ -744,6 +864,7 @@
       else if (CONTROL_ACTS[b.dataset.act]) CONTROL_ACTS[b.dataset.act]();
     }
     dock.addEventListener('click', onControlClick);
+    confirmControls(dock);
     keepFocus(dock);
     dock.addEventListener('focusin', showDock);
     dock.addEventListener('focusout', showDock);
@@ -769,9 +890,10 @@
       const list = box.querySelector('.dt-console-scroll');
       const refreshList = stagesOverlay(list);
       controls.addEventListener('click', onControlClick);
+      confirmControls(controls);
       keepFocus(controls);
+      keepFocus(list);
       volume.addEventListener('input', () => setVolume(Number(volume.value)));
-      volume.addEventListener('pointerup', () => volume.blur());   // so the next space reaches the timer
       root.insertBefore(box, root.firstChild);
       attr(root, 'data-layout', 'console');
       let cursor = null;
@@ -824,7 +946,7 @@
       if (env.blocked()) return;
       if (isEditable(e.target)) return;
       if (e.isComposing) return;
-      if (key(e.code, e)) e.preventDefault();
+      if (key(DT.sync.codeOf(e), e)) e.preventDefault();
     }
 
     window.addEventListener('keydown', onKeyDown);
@@ -877,6 +999,7 @@
         window.removeEventListener('pointerdown', gesture);
         window.removeEventListener('pointermove', showDock);
         bells.cancelAll();
+        disarms.forEach(f => f());
         closeOverlay();
         dock.remove();
         status.remove();
@@ -887,14 +1010,16 @@
   }
 
   // The projector window (spec §5.11): draws what the console sends and works out the time in between with
-  // its own clock. Every key goes to the console except F, which makes this window full screen.
+  // its own clock. Every key goes to the console except F, which makes this window full screen. While the
+  // console is away on the setup page it shows the match's title card (new spec §2.2).
   function mountProjector(root, env) {
-    const stage = DT.render.mount(root);
+    let stage = DT.render.mount(root);
     const hint = el('div', 'dt-projector-hint');
     hint.append('把这个窗口拖到投影屏幕上，按 ', el('kbd', null, 'F'), ' 全屏');
     root.appendChild(hint);
     attr(root, 'data-layout', 'projector');
-    let session = null, raf = null, destroyed = false;
+    let session = null, raf = null, destroyed = false, away = false;
+    let blank = true;   // nothing of a match on the stage: a clear has nothing to do
     const rung = [];   // the console reports each bell it rings; this window may have seen it first
 
     function pulse(events) {
@@ -908,6 +1033,11 @@
     }
 
     function viewAt(now) {
+      if (away) {
+        const card = DT.engine.view(Object.assign({}, session, { cursor: -1 }), now);
+        card.away = awayText(session);   // render.js says where the match paused instead of 空格开始
+        return card;
+      }
       const v = DT.engine.view(session, now);
       if (v.mode === 'end') v.record = DT.engine.record(session, now);
       return v;
@@ -934,12 +1064,31 @@
 
     const end = DT.sync.createProjectorEnd({
       target: env.window, opener: env.window.opener || null, storage: env.storage, sessionKey: env.sessionKey,
-      onState(m) { session = m.session; draw(DT.clock.now()); },
+      onState(m) {
+        session = m.session;
+        blank = false;
+        if (typeof m.away === 'boolean') away = m.away;   // a state from storage leaves it as it was
+        draw(DT.clock.now());
+      },
       onEvents: pulse,
       onToast: message => stage.toast(message),
+      onLost: () => stage.toast(CONSOLE_GONE),
+      // The console dropped its match (放弃并新开): nothing of it stays on the wall. Its heartbeat repeats the
+      // clear every second; once the stage is blank there is nothing more to do.
+      onClear() {
+        if (blank) return;
+        blank = true;
+        session = null;
+        away = false;
+        stage.destroy();
+        stage = DT.render.mount(root);
+        root.insertBefore(stage.el, hint);
+        root.removeAttribute('data-theme');
+      },
       onKey(code) {
         attr(hint, 'hidden', true);
         if (code === 'KeyF') toggleFullscreen(root);
+        else if (code && away && session) stage.toast(CONSOLE_AWAY);   // the console is on the setup page: say so
       },
     });
     frame();
@@ -1011,7 +1160,8 @@
 
     const listeners = { change: [], events: [], toast: [] };
     let screen = null, destroyed = false;   // {name: 'setup' | 'ask' | 'timer', handle}
-    let editor = null;                       // the format editor's handle while it covers the screen
+    let editor = null;                       // the format editor's handle, until it has closed
+    let covered = false;                     // the editor covers the screen: from opening until it starts to leave
     let projector = null;                    // {win, link} while a projector window is open
 
     function emit(name, arg) {
@@ -1022,12 +1172,18 @@
 
     // ---- the projector window: this page is the console while one is open (spec §5.11) ----
 
-    // The undo history stays here: it is the bulk of a session and the projector never undoes.
-    function pushState(session) {
+    // The undo history stays here: it is the bulk of a session and the projector never undoes. `away`: this page
+    // has left the timer for the setup page, and the projector shows the title card until it is back.
+    function pushState(session, away) {
       const s = session || (timer() ? timer().session() : null);
       if (!projector || !s) return;
       projector.link.push({ type: 'state', session: Object.assign({}, s, { history: [] }),
-        settings: { volume: settings.volume, muted: settings.muted } });
+        settings: { volume: settings.volume, muted: settings.muted }, away: !!away });
+    }
+
+    // The match the projector shows is gone (放弃并新开 on the setup page): it goes blank until the next one.
+    function clearProjector() {
+      if (projector) projector.link.push({ type: 'clear' });
     }
 
     function relay(name, arg) {
@@ -1048,7 +1204,7 @@
     function connect(win) {
       const link = DT.sync.createConsoleLink({
         target: host, pollMs: o.pollMs, getWindow: () => win,
-        onKey(code, k) { if (timer() && !editor) timer().key(code, k); },
+        onKey(code, k) { if (timer() && !covered) timer().key(code, k); },
         onClosed() { if (projector && projector.link === link) disconnect(); },
       });
       projector = { win, link };
@@ -1095,19 +1251,26 @@
     // Starting or resuming is a click or a key press, so the sound can be unlocked right there.
     function unlockSound() { if (!bells.isUnlocked()) bells.unlock(); }
 
-    // The editor covers the page; what is behind it is out of reach until it closes, then `after(formatId)` runs.
+    // The editor covers the page; what is behind it is out of reach until it starts to sink away (new spec §3, P3),
+    // and `after(formatId)` runs once it is gone. Until then `editor` stays set, so it cannot open twice.
     function openEditor(selectedId, after) {
       if (editor || destroyed) return;
       const behind = Array.from(root.children);
+      const uncover = () => {
+        covered = false;
+        behind.forEach(c => { c.inert = false; });
+      };
       behind.forEach(c => { c.inert = true; });
+      covered = true;
       editor = DT.editor.mount(root, {
         formats: DT.store.loadFormats(),
         selectedId,
         themes: themeList(),
         onChange(list) { DT.store.saveFormats(list); },
+        onLeave: uncover,
         onClose(id) {
           editor = null;
-          behind.forEach(c => { c.inert = false; });
+          uncover();
           if (after && !destroyed) after(id);
         },
       });
@@ -1122,8 +1285,14 @@
     }
 
     // extra: {pinDock, console} for the demos.
-    function showTimer(session, extra) {
+    function showTimer(given, extra) {
       leave();
+      let session = given;
+      if (session.exited) {   // back in a match left with 退出: no longer away, so once over it is not offered again
+        session = Object.assign({}, session);
+        delete session.exited;
+        DT.store.saveSession(session);
+      }
       const x = extra || {};
       const own = presetMatch(session);
       const env = {
@@ -1131,7 +1300,7 @@
         console: !!projector || !!x.console, matchFile: !!preset,
         onNewMatch: () => newMatch(own), newLabel: own ? RESTART_LABEL : null,
         onEdit: formatId => openEditor(formatId), onSetup: () => showSetup(), onProjector: openProjector,
-        blocked: () => !!editor,
+        onExit: exitMatch, blocked: () => covered,
       };
       screen = { name: 'timer', handle: mountTimer(root, session, env) };
       pushState();
@@ -1169,6 +1338,17 @@
     // Begun means past the title card, or with any clock run: a match only opened and closed is not asked about.
     const begun = s => s.cursor >= 0 || Object.keys(s.runs).length > 0;
 
+    // Q Q or 退出, with the match paused and saved (new spec §2.2): it is saved as left with 退出, so from any card,
+    // the end card too, the setup page's banner offers it back (§5.3); a match file always asks 继续上次 or
+    // 重新开始这一场, never the plain setup page. The projector window shows the title card meanwhile.
+    function exitMatch(session) {
+      DT.store.saveSession(Object.assign({}, session, { exited: true }));
+      const saved = preset ? resumable(DT.store.loadSession(), DT.clock.now()) : null;
+      if (saved) showAsk(saved);
+      else showSetup();
+      pushState(session, true);
+    }
+
     // `typed`: what was on the page before the editor, with the format last looked at in the editor chosen.
     function showSetup(typed) {
       leave();
@@ -1205,10 +1385,11 @@
           unlockSound();
           showTimer(saved);
         },
-        // In a match file the discarded match makes way for the file's own, on a fresh title card.
+        // In a match file the discarded match makes way for the file's own, on a fresh title card. In the plain
+        // timer the projector lets go of it too.
         onDiscard() {
           if (preset) newMatch(true);
-          else DT.store.clearSession();
+          else { DT.store.clearSession(); clearProjector(); }
         },
         onEdit() {
           const before = setupDraft(root);
@@ -1231,6 +1412,7 @@
       showSetup();
     } else if (demo) {
       showTimer(demo.session, { pinDock: demo.dock, console: demo.console });
+      if (demo.overlay) timer().openOverlay(demo.overlay);
       if (demo.editor) {
         openEditor(demo.session.format.id);
         stageEditorDemo(root, demo.editor);
@@ -1287,8 +1469,14 @@
   function autoboot() {
     DT.preset.captureSource();   // first, before anything changes the page: an export copies it as loaded
     if (!document.body.hasAttribute('data-dt-autoboot')) return;
-    if (new URLSearchParams(window.location.search).get('exportProbe') === '1') exportProbe();
-    else boot({ root: document.getElementById('app') });
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('exportProbe') === '1') { exportProbe(); return; }
+    const app = boot({ root: document.getElementById('app') });
+    // ?test=1: a read-only look at the app for tests/test_keyboard.py, which drives the page with real input.
+    if (params.get('test') === '1') {
+      const copy = v => (v ? JSON.parse(JSON.stringify(v)) : v);
+      window.__dtTest = { route: () => app.route(), session: () => copy(app.session()) };
+    }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autoboot);
   else autoboot();
