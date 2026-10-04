@@ -987,7 +987,7 @@
     return {
       session: () => session,
       view: () => viewAt(DT.clock.now()),
-      key, act, openOverlay, closeOverlay, setConsole,
+      key, act, pulse, openOverlay, closeOverlay, setConsole,
       destroy() {
         if (destroyed) return;
         if (desk) setConsole(false);
@@ -1118,7 +1118,7 @@
     const handle = mountProjector(root, { window: host, storage, sessionKey: DT.store.sessionKey() });
     return {
       route: () => 'projector', session: handle.session, view: handle.view,
-      key: () => false, act: () => false, openOverlay: () => false, closeOverlay() {},
+      key: () => false, act: () => false, pulse() {}, openOverlay: () => false, closeOverlay() {},
       on: () => () => {},
       destroy() {
         handle.destroy();
@@ -1435,6 +1435,8 @@
       view: () => (timer() ? timer().view() : null),
       key: (code, k) => (timer() ? timer().key(code, k) : false),
       act() { const t = timer(); return t ? t.act.apply(null, arguments) : false; },
+      // Shows bell events as if their clock had rung them (the ?test=1 hook: a countdown no format has).
+      pulse(events) { if (timer()) timer().pulse(events); },
       openOverlay: name => (timer() ? timer().openOverlay(name) : false),
       closeOverlay() { if (timer()) timer().closeOverlay(); },
       on(name, fn) {
@@ -1472,10 +1474,32 @@
     const params = new URLSearchParams(window.location.search);
     if (params.get('exportProbe') === '1') { exportProbe(); return; }
     const app = boot({ root: document.getElementById('app') });
-    // ?test=1: a read-only look at the app for tests/test_keyboard.py, which drives the page with real input.
+    // ?test=1: a look at the app for tests/test_keyboard.py, which drives the page with real input, and the levers
+    // tests/motion.py samples moments with: the controller's actions, bell events, and a clock it can move on and
+    // slow down. That clock takes over DT.clock only once advance or setRate is first called.
     if (params.get('test') === '1') {
       const copy = v => (v ? JSON.parse(JSON.stringify(v)) : v);
-      window.__dtTest = { route: () => app.route(), session: () => copy(app.session()) };
+      let clock = null;   // {at: DT.clock time at `real`, real: performance.now() then, rate}
+      const own = () => {
+        if (clock) return;
+        clock = { at: DT.clock.now(), real: performance.now(), rate: 1 };
+        DT.clock.set(() => clock.at + (performance.now() - clock.real) * clock.rate);
+      };
+      window.__dtTest = {
+        route: () => app.route(), session: () => copy(app.session()), view: () => copy(app.view()),
+        act() { return app.act.apply(null, arguments); },
+        pulse: events => app.pulse(events),
+        advance(ms) { own(); clock.at += ms; },
+        // The match clock, the renderer's timers and with them a painter's time run at `r` of real time; the
+        // caller slows the CSS animations to match (Animation.setPlaybackRate).
+        setRate(r) {
+          own();
+          clock.at = DT.clock.now();
+          clock.real = performance.now();
+          clock.rate = r;
+          DT.render.setRate(r);
+        },
+      };
     }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autoboot);

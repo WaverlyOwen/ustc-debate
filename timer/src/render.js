@@ -12,6 +12,7 @@
   const BUMP_MS = 240;
   const ACTIVE_COL = 58;       // percent of the width the speaking half takes in a dual stage
   const FRAME_MS = 33;         // a theme's painter draws at most 30 frames a second
+  const MOMENT_MS = 1200;      // how long an is-m-<moment> class stays, unless the theme sets --moment-ms
 
   const DIGITS = '<span class="dt-sign"></span><span class="dt-min"></span><span class="dt-colon">:</span>' +
     '<span class="dt-sec"></span>';
@@ -61,10 +62,17 @@
   // A frozen demo (?demo=…&frozen=1) is a still for review: painters draw it as they would under reduced motion.
   const frozenPage = () => /[?&]frozen=1(?:&|$)/.test(window.location.search || '');
 
+  // How fast the renderer's own timers run against the page clock: 1, or slower while tests/motion.py samples a
+  // moment frame by frame (the ?test=1 hook slows DT.clock and the CSS animations to match).
+  let rate = 1;
+
   // ---- the theme registry (spec §1.2): what themes/*.js add beyond their stylesheet ----
   // spec: {defs?: SVG markup put into the document once, painter?: (canvas, ctx, {thumbnail, reducedMotion,
-  // frozen}) => {frame(view, now), resize(w, h), destroy()}}. resize gets the stage's size in CSS pixels on a
-  // context already scaled to the canvas's pixel ratio; the renderer decides when frame runs.
+  // frozen}) => {frame(view, now), resize(w, h), destroy(), moment?(name, detail)}, decorate?: (stageEl,
+  // {thumbnail, reducedMotion, frozen}) => {update?(view), moment?(name, detail), destroy?()}}. resize gets the
+  // stage's size in CSS pixels on a context already scaled to the canvas's pixel ratio; the renderer decides when
+  // frame runs. decorate puts the theme's own elements into a stage and drives them at its moments (motion spec
+  // §1.1); neither moment hook is called on a still stage, where those elements show their end state.
   const registry = {};
 
   // mulberry32; a string seed is hashed with 32-bit FNV-1a first. The only randomness a painter may use.
@@ -180,9 +188,12 @@
     let paint = null;       // while that theme has a painter: its canvas, context, instance and frame bookkeeping
     let lastView = null, lastSig = null;
     let painterWarned = false;
+    let deco = null, decoWarned = false;   // the theme's decorate instance, while it has one
+    let was = null;                        // what the last update showed, to tell this one's moments from
+    const momentTimers = {};               // per moment, the timer that takes its class off again
 
     function later(fn, ms) {
-      const id = setTimeout(() => { timers.delete(id); fn(); }, ms);
+      const id = setTimeout(() => { timers.delete(id); fn(); }, ms / rate);
       timers.add(id);
       return id;
     }
@@ -328,6 +339,33 @@
       }
     }
 
+    // A theme's decoration is as optional as its painter: one that throws is dropped (said once in the console).
+    function decoCall(fn) {
+      try {
+        fn();
+        return true;
+      } catch (e) {
+        if (!decoWarned) console.warn('主题装饰出错，已停用，只保留样式：', e);
+        decoWarned = true;
+        stopDecor();
+        return false;
+      }
+    }
+
+    function startDecor(factory) {
+      const flags = { thumbnail, reducedMotion: reducedMotion(), frozen: frozenPage() };
+      decoCall(() => { deco = factory(stage, flags) || null; });
+    }
+
+    function stopDecor() {
+      if (!deco) return;
+      const d = deco;
+      deco = null;
+      try {
+        if (typeof d.destroy === 'function') d.destroy();
+      } catch (e) { /* it is going anyway */ }
+    }
+
     function stopPainter() {
       if (!paint) return;
       const p = paint;
@@ -343,9 +381,11 @@
       if (id === theme) return;
       theme = id;
       stopPainter();
+      stopDecor();
       injectDefs(stage.ownerDocument, id);
       const spec = DT.themes.get(id);
       if (spec && typeof spec.painter === 'function') startPainter(spec.painter);
+      if (spec && typeof spec.decorate === 'function') startDecor(spec.decorate);
     }
 
     // Animated: at most one frame per FRAME_MS. Still (thumbnail, reduced motion, frozen demo): a frame when the
@@ -444,6 +484,62 @@
       lastView = v;
       lastSig = [key, active ? active.phase : '', active ? active.side : '', seat].join('|');
       draw(v, lastSig);
+      if (deco && typeof deco.update === 'function') decoCall(() => deco.update(v));
+
+      const shown = {
+        key, card: v.mode !== 'stage' || kind === 'break', running: !!v.running,
+        side: active ? active.side : null, clock: active ? active.id : null, phase: active ? active.phase : null,
+        locked: kind === 'dual' ? v.clocks.filter(c => c.locked).map(c => c.id) : [],
+      };
+      momentsBetween(was, shown).forEach(m => moment(m[0], m[1]));
+      was = shown;
+    }
+
+    // The moments a view brings (motion spec §1.1): a new stage or card enters; on the same one, a clock that starts
+    // or stops (not one that ran out), a change of floor, a dual side that locks, a single clock going into overtime.
+    // warn, count and end come from pulse.
+    function momentsBetween(a, b) {
+      const here = { side: b.side, clock: b.clock };
+      if (!a || a.key !== b.key) return b.card ? [['enter', here], ['title', here]] : [['enter', here]];
+      const out = [];
+      if (b.running && !a.running) out.push(['start', here]);
+      else if (!b.running && a.running && b.phase !== 'done') out.push(['pause', here]);
+      // Switch before lock: a yield both hands over and locks, and data-m-side then names the side that locked.
+      if (a.side && b.side && a.side !== b.side) out.push(['switch', here]);
+      b.locked.forEach(id => { if (a.locked.indexOf(id) < 0) out.push(['lock', { side: id, clock: id }]); });
+      if (b.phase === 'over' && a.phase !== 'over') out.push(['over', here]);
+      return out;
+    }
+
+    // A theme may hold its moment classes longer or shorter with --moment-ms (a number of ms, or seconds with s).
+    function momentMs() {
+      const raw = getComputedStyle(stage).getPropertyValue('--moment-ms').trim();
+      const n = parseFloat(raw);
+      if (!(n > 0)) return MOMENT_MS;
+      return /[^m]s$/.test(raw) ? n * 1000 : n;
+    }
+
+    // One moment of the motion vocabulary: its class replayed on the stage for --moment-ms, its side in
+    // data-m-side, and the theme's decoration and painter told. Nothing on a still stage (thumbnail, frozen demo,
+    // reduced motion), where the theme's elements stay at their end state.
+    function moment(name, detail) {
+      if (destroyed || thumbnail || frozenPage() || reducedMotion()) return;
+      const d = { side: (detail && detail.side) || null, clock: (detail && detail.clock) || null,
+        key: (detail && detail.key) || null };
+      const cls = 'is-m-' + name;
+      attr(stage, 'data-m-side', d.side || 'none');
+      replay(stage, cls);
+      cancel(momentTimers[name] || null);
+      momentTimers[name] = later(() => { delete momentTimers[name]; stage.classList.remove(cls); }, momentMs());
+      if (deco && typeof deco.moment === 'function') decoCall(() => deco.moment(name, d));
+      if (paint && paint.painter && typeof paint.painter.moment === 'function') guard(() => paint.painter.moment(name, d));
+    }
+
+    // The side a bell's clock speaks for: a dual clock is its side; the main clock is the stage's.
+    function sideOf(clockId) {
+      if (clockId === 'pro' || clockId === 'con') return clockId;
+      const c = lastView && (lastView.clocks || []).find(x => x.id === clockId);
+      return (c && c.side) || null;
     }
 
     // A ring centred on the digits of the clock that rang.
@@ -467,6 +563,10 @@
 
     function pulse(event) {
       if (destroyed || thumbnail || !event || reducedMotion()) return;
+      // 'switch' is not one here: update sees the floor change, on this page and on a projector alike.
+      if (event.type === 'warn' || event.type === 'count' || event.type === 'end') {
+        moment(event.type, { side: sideOf(event.clock), clock: event.clock, key: event.key });
+      }
       if (event.type === 'count') {
         const parts = clocks[event.clock] || clocks.main;
         replay(parts.el, 'is-bump');
@@ -477,7 +577,7 @@
         ring(event.clock);
         later(() => ring(event.clock), RING_GAP_MS);
       }
-      // 'switch' needs nothing extra: the halves' own transition is the animation.
+      // 'switch' needs no ring: the halves' own transition is the animation.
     }
 
     function toast(message) {
@@ -493,13 +593,17 @@
       destroyed = true;
       stage.ownerDocument.removeEventListener('visibilitychange', onVisible);
       stopPainter();
+      stopDecor();
       timers.forEach(id => clearTimeout(id));
       timers.clear();
       stage.remove();
     }
 
-    return { update, pulse, toast, destroy, el: stage };
+    return { update, pulse, toast, moment, destroy, el: stage };
   }
 
-  DT.render = { mount };
+  // tests/motion.py (through the ?test=1 hook): the renderer's timers run at this fraction of real time.
+  function setRate(r) { rate = r > 0 && isFinite(r) ? r : 1; }
+
+  DT.render = { mount, setRate };
 })(window.DT = window.DT || {});
