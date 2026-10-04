@@ -235,9 +235,9 @@
 .dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-half-field { opacity: 0; }
 
 /* The digits sit on their stroke, and change colour where its solid body ends: the clock spans the half, so --cut
-   is that point's distance from the seat in the clock's own box. */
+   is that point's distance from the seat in the clock's own box, which is scaled about its centre by --clock-scale. */
 .dt-stage[data-theme="ink"] .dt-half .dt-clock {
-  --cut: max(0px, var(--remain, 1) * (100% - var(--gap)) - var(--stroke-dry));
+  --cut: calc(50% + (max(0px, var(--remain, 1) * (100% - var(--gap)) - var(--stroke-dry)) - 50%) / var(--clock-scale));
   left: 0;
   right: 0;
   top: var(--row);

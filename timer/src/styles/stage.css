@@ -2,12 +2,16 @@
 
 /* ---- frame ---- */
 
+/* A registered number, so the dual clocks' scale transitions (and the digits' cut follows it frame by frame). */
+@property --clock-scale { syntax: "<number>"; inherits: true; initial-value: 1; }
+
 .dt-stage {
   --side-color: color-mix(in oklab, var(--ground) 90%, var(--ink));
   --side-deep: var(--ground);
   --clock-y: 55%;                 /* vertical centre of the main digits */
   --ease-out: cubic-bezier(.2, .8, .2, 1);
   --ease-spring: cubic-bezier(.34, 1.36, .64, 1);
+  --ease-std: cubic-bezier(.4, 0, .2, 1);   /* a colour or filter change: no browser-default `ease` (motion spec §1.2) */
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -22,8 +26,9 @@
 .dt-stage[data-side="pro"] { --side-color: var(--pro); --side-deep: var(--pro-deep); }
 .dt-stage[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
 
-/* ---- layers, bottom to top (spec §1.5): backdrop, canvas, deco, field / halves, deco-over, warn line, content,
-   rings, toast ---- */
+/* ---- layers, bottom to top (spec §1.5): backdrop, canvas, deco, field / halves, deco-over, warn line and rings,
+   content, toast. The rings sit under the digits (motion spec §1.2); after the warn line in the markup, they pass
+   over it. In a dual stage a ring goes into its own half, under that half's clock (render.js ring()). ---- */
 
 .dt-backdrop, .dt-canvas, .dt-deco, .dt-field, .dt-halves, .dt-deco-over, .dt-warnline, .dt-rings {
   position: absolute;
@@ -37,8 +42,8 @@
 .dt-field, .dt-halves { z-index: 2; }
 .dt-deco-over { z-index: 3; }           /* decoration over the field and the halves: seals, marks, grain */
 .dt-warnline { z-index: 4; }
+.dt-rings { z-index: 4; overflow: hidden; }
 .dt-top, .dt-head, .dt-clock, .dt-card, .dt-bottom { position: relative; z-index: 5; }
-.dt-rings { z-index: 6; overflow: hidden; }
 .dt-toast { z-index: 7; }
 
 /* The colour field: time is taken back toward the speaking side's own seat. */
@@ -69,7 +74,7 @@
     transparent 90cqh calc(100% - 1.6cqh), #000 calc(100% - 1.6cqh));
   -webkit-mask-image: var(--warn-mask);
   mask-image: var(--warn-mask);
-  transition: opacity 400ms ease;
+  transition: opacity 400ms var(--ease-out);
 }
 .dt-stage[data-pro-seat="right"][data-side="pro"] .dt-warnline,
 .dt-stage[data-pro-seat="left"][data-side="con"] .dt-warnline {
@@ -148,9 +153,9 @@
   letter-spacing: -.01em;
   /* Numerals have no descenders: drop them a little so the glyphs, not the line box, sit on the centre line. */
   translate: 0 .07em;
-  transition: color 300ms ease;
+  transition: color 300ms var(--ease-std);
 }
-.dt-colon { padding: 0 .03em; opacity: .55; transition: color 300ms ease; }
+.dt-colon { padding: 0 .03em; opacity: .55; transition: color 300ms var(--ease-std); }
 .dt-clock[data-running="true"] .dt-colon { animation: dt-breathe 1000ms ease-in-out infinite; }
 .dt-clock[data-phase="warn"] .dt-colon,
 .dt-clock[data-phase="count"] .dt-colon { color: var(--accent); }
@@ -158,7 +163,7 @@
 .dt-sign { margin-right: .04em; }
 .dt-sign:empty { display: none; }
 .dt-clock[data-phase="over"] .dt-sign { animation: dt-breathe 2000ms ease-in-out infinite; }
-.dt-clock.is-bump .dt-digits { animation: dt-bump 240ms ease-out; }
+.dt-clock.is-bump .dt-digits { animation: dt-bump 240ms var(--ease-out); }
 
 /* Two layers of the same digits (spec §1.5): .dt-digits in --digits-off-field, and over it .dt-digits-on in
    --digits-on-field, each clipped to its own side of the field's edge, so the digits read on both. --cut is
@@ -188,7 +193,9 @@
 }
 
 .dt-half { --field-top: calc((1 - var(--remain, 1)) * 100cqh); }   /* a theme with another field geometry sets it */
-.dt-half .dt-clock { --cut: calc(var(--field-top) - 52cqh + 50% - .07em); }
+/* The half's clock is scaled about its centre (52cqh) by --clock-scale, so the cut, a length in the digits' own
+   box, is the field's distance from that centre divided by the scale. */
+.dt-half .dt-clock { --cut: calc((var(--field-top) - 52cqh) / var(--clock-scale) + 50% - .07em); }
 .dt-half .dt-digits-on { clip-path: inset(calc(var(--cut) - 1px) -50% -50% -50%); }
 .dt-half .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% calc(100% - var(--cut)) -50%); }
 
@@ -204,12 +211,14 @@
   text-indent: .5em;
   white-space: nowrap;
   opacity: .72;
-  transition: opacity 200ms ease;
+  transition: opacity 200ms var(--ease-out);
 }
 .dt-state:empty { opacity: 0; }
 
 /* ---- dual: two halves by seat, the speaking side widens to 58% ---- */
 
+/* The columns are the one layout property that animates (motion spec §1.2, waiver): the halves' content is laid out
+   on their widths, and only the clocks' boxes and the team lines move, at their fixed size. */
 .dt-halves {
   display: none;
   grid-template-columns: var(--left-col, 50%) var(--right-col, 50%);
@@ -227,7 +236,7 @@
   min-width: 0;
   overflow: hidden;
   background: var(--half-ground, var(--side-deep));   /* a painter theme sets it transparent to show its canvas */
-  transition: filter 300ms ease;
+  transition: filter 300ms var(--ease-std);
 }
 .dt-half[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
 .dt-half + .dt-half { box-shadow: inset 1px 0 0 color-mix(in oklab, var(--ink) 16%, transparent); }
@@ -240,6 +249,14 @@
   height: calc(var(--remain, 1) * 100%);
   background: var(--side-color);
   clip-path: inset(0);
+}
+/* A side that locks drains what it had left rather than losing it in one frame: --remain is 0 once locked, so the
+   field keeps its height at --lock-from (the time left when it locked) and is cut away from the top. A theme with
+   its own field geometry sets its own height and clip-path, and its own lock. */
+.dt-half[data-locked] .dt-half-field {
+  height: calc(var(--lock-from, 0) * 100%);
+  clip-path: inset(100% 0 0 0);
+  transition: clip-path 600ms var(--ease-std);
 }
 
 .dt-team {
@@ -277,13 +294,16 @@
   top: 52%;
   translate: -50% -50%;
   color: var(--on-side);
+  /* The digits are set at the speaking side's size and the clock is scaled down from it: half size waiting, .8 before
+     anyone has spoken. Only the scale moves on a switch (motion spec §1.2), never the font size. */
+  --clock-scale: .5;
+  scale: var(--clock-scale);
+  transition: --clock-scale 520ms var(--ease-spring);
 }
-.dt-half .dt-digits {
-  font-size: min(15cqh, 9cqw);
-  transition: font-size 520ms var(--ease-spring), color 300ms ease;
-}
-.dt-halves[data-idle] .dt-digits { font-size: min(24cqh, 14cqw); }
-.dt-half[data-active] .dt-digits { font-size: min(30cqh, 17cqw); }
+.dt-halves[data-idle] .dt-half .dt-clock { --clock-scale: .8; }
+.dt-half[data-active] .dt-clock,
+.dt-halves .dt-half[data-locked] .dt-clock { --clock-scale: 1; }   /* 「时间到」 / 「已放弃」 at its own size, idle or not */
+.dt-half .dt-digits { font-size: min(30cqh, 17cqw); }
 .dt-half[data-locked] .dt-digits { display: none; }
 .dt-half[data-locked] .dt-state {
   position: static;
@@ -497,8 +517,9 @@
   border: .45cqh solid var(--accent);
   border-radius: 50%;
   opacity: 0;
-  animation: dt-ring 1100ms ease-out forwards;
+  animation: dt-ring 1100ms var(--ease-out) forwards;
 }
+.dt-half > .dt-ring { z-index: 0; }   /* a dual clock's ring: over its half's field, under its clock and team */
 
 .dt-toast {
   position: absolute;

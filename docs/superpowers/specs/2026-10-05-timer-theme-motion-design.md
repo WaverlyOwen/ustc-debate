@@ -36,6 +36,7 @@
 
 - 时长 150–1200ms（`over` 与 `title` 的环境动作除外）；曲线写明（不准用浏览器默认 `ease`）
 - 只动 `transform`、`opacity`、`clip-path`、`mask-position`、`stroke-dashoffset` 与 CSS 变量；**不准持续动画 SVG 滤镜或 `filter: blur()`**（一次性的、≤ 600ms 的滤镜过渡可以）
+  - 豁免（Task 32 评审）：双方环节换手时 `.dt-halves` 的 `grid-template-columns`（58% / 42%，520ms）仍是过渡。两半里的队名、时钟都按各自半边的宽度排布，所有主题的双方布局都建立在这上面，改成 transform 驱动要重做 8 个主题的双方布局；数字不再改字号（定在发言方的大小，时钟用 `scale` 缩小，`--clock-scale` 过渡），所以每帧只是两个盒子挪位置，不重排、不重新栅格化大字。这一过渡仍受帧耗时 p95 ≤ 20ms 约束
 - 动画期间数字始终清楚可读：任何遮罩、粒子都在数字之下，或不覆盖数字区域
 - reduced-motion：全部直接到终态，`over` 不呼吸，环境动作停止
 - 1920×1080 无头 Edge 下，每个时刻动画期间的帧耗时 p95 ≤ 20ms（动作取样工具测量）

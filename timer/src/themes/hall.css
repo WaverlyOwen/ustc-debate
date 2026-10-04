@@ -30,3 +30,65 @@
 
 /* On a stage the top bar sits on the field: cream reaches only 5.2:1 on 朱, so it is barely dimmed there. */
 .dt-stage[data-theme="hall"][data-mode="stage"] .dt-top { color: rgb(244 239 228 / .92); }
+
+/* ---- motion (motion spec §2.6): the sweep pulls the field in like a length of cloth, a thin bright edge riding
+   its leading edge and fading as it comes to rest. Same 560 ms and curve as stage.css's sweep, so the line stays on
+   the clip edge; it sits over the field and under the digits. ---- */
+
+/* One stage: on the deco-over layer, above the field and outside its clip-path. */
+.dt-stage[data-theme="hall"][data-mode="stage"][data-kind="single"].is-m-enter .dt-deco-over::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: max(1px, .08cqw);
+  margin-left: calc(-1 * max(1px, .08cqw));   /* the line's right edge is the field's */
+  background: rgb(255 255 255 / .55);
+  opacity: 0;
+  animation: dt-hall-edge-l 560ms var(--ease-out);
+}
+/* Taken back toward the right-hand seat: the field sweeps in from the right. */
+.dt-stage[data-theme="hall"][data-mode="stage"][data-kind="single"][data-pro-seat="right"][data-side="pro"].is-m-enter .dt-deco-over::after,
+.dt-stage[data-theme="hall"][data-mode="stage"][data-kind="single"][data-pro-seat="left"][data-side="con"].is-m-enter .dt-deco-over::after {
+  left: 100%;
+  margin-left: 0;
+  animation-name: dt-hall-edge-r;
+}
+@keyframes dt-hall-edge-l {
+  from { transform: translateX(0); opacity: 1; }
+  80% { opacity: 1; }
+  to { transform: translateX(calc((1 - var(--used)) * 100cqw)); opacity: 0; }
+}
+@keyframes dt-hall-edge-r {
+  from { transform: translateX(0); opacity: 1; }
+  80% { opacity: 1; }
+  to { transform: translateX(calc((var(--used) - 1) * 100cqw)); opacity: 0; }
+}
+
+/* Free debate: each half's field sweeps in from its own seat across the half, so each half carries its own line:
+   a box the half's size with the line drawn on its leading side, travelling one half-width (translate % is its own
+   width). It is the half's last child, so it lies over the field and under the team line, the clock and the floor. */
+.dt-stage[data-theme="hall"][data-mode="stage"][data-kind="dual"].is-m-enter .dt-half::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to left, rgb(255 255 255 / .55) max(1px, .08cqw), transparent 0);
+  opacity: 0;
+  pointer-events: none;
+  animation: dt-hall-edge-half-l 560ms var(--ease-out);
+}
+.dt-stage[data-theme="hall"][data-mode="stage"][data-kind="dual"].is-m-enter .dt-half:last-child::after {
+  background: linear-gradient(to right, rgb(255 255 255 / .55) max(1px, .08cqw), transparent 0);
+  animation-name: dt-hall-edge-half-r;
+}
+@keyframes dt-hall-edge-half-l {
+  from { transform: translateX(-100%); opacity: 1; }
+  80% { opacity: 1; }
+  to { transform: translateX(0); opacity: 0; }
+}
+@keyframes dt-hall-edge-half-r {
+  from { transform: translateX(100%); opacity: 1; }
+  80% { opacity: 1; }
+  to { transform: translateX(0); opacity: 0; }
+}

@@ -458,6 +458,9 @@
           attr(h.el, 'data-active', !idle && c.active);
           attr(h.el, 'data-locked', c.locked);
           cssVar(h.el, '--remain', c.locked ? 0 : c.fraction);
+          // What was left when it locked (a yield books the rest as used, so it is the yielded time): stage.css
+          // drains the field from there instead of dropping it in one frame.
+          cssVar(h.el, '--lock-from', c.locked ? clamp01((Math.max(0, c.remaining) + (c.yielded || 0)) / c.total) : 1);
           cssVar(h.el, '--tension', tension(c, kind));
           paintClock(clocks[c.id], c, kind);
         });
@@ -542,11 +545,13 @@
       return (c && c.side) || null;
     }
 
-    // A ring centred on the digits of the clock that rang.
+    // A ring centred on the digits of the clock that rang, under them (motion spec §1.2): on the stage's ring layer
+    // for the main clock, inside its own half for a dual clock (the halves are a layer of their own).
     function ring(clockId) {
       if (destroyed) return;
       const parts = clocks[clockId] || clocks.main;
-      const box = stage.getBoundingClientRect();
+      const layer = parts === clocks.main ? els.rings : parts.el.parentNode;
+      const box = layer.getBoundingClientRect();
       const r = parts.el.querySelector('.dt-digits').getBoundingClientRect();
       const x = box.width && r.width ? (r.left + r.width / 2 - box.left) / box.width * 100 : 50;
       const y = box.height && r.height ? (r.top + r.height / 2 - box.top) / box.height * 100 : 50;
@@ -558,7 +563,7 @@
       const done = () => { cancel(fallback); el.remove(); };
       el.addEventListener('animationend', done);
       fallback = later(done, RING_MS);
-      els.rings.appendChild(el);
+      layer.appendChild(el);
     }
 
     function pulse(event) {
