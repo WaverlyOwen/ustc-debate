@@ -2996,6 +2996,7 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   --stroke-box: 48cqh;           /* the stroke's box; the ink itself is about 44cqh of it (spec §2.1) */
   --stroke-tail: 3cqw;           /* the stroke begins off screen, behind its seat's edge */
   --stroke-dry: 7cqw;            /* the stroke's last stretch: loose hairs only, the brush's dry tip */
+  --moment-ms: 1500ms;           /* the entrance's brush, title and seal follow one another (render.js) */
 }
 
 .dt-stage[data-theme="ink"] { --ink-stroke: var(--side-color); }
@@ -3068,6 +3069,27 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-stage[data-theme="ink"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-clock {
   --cut: calc(var(--used) * 100cqw + var(--stroke-dry) - 50cqw + 50%);
 }
+/* While the brush lands (motion below) its body reaches --ink-reach from the seat (where its mask's solid ends, less
+   the 2.5% its ragged, rounded end trails by), and the digits turn paper-coloured only behind it: before it they stay
+   ink on the paper. At rest --ink-land is 1 and --ink-cut is --cut. */
+.dt-stage[data-theme="ink"][data-kind="single"] .dt-clock {
+  --ink-reach: calc((100cqw + 2 * var(--stroke-tail)) * (1 - 1.08 * (1 - var(--ink-land)) - .025) - var(--stroke-tail));
+  --ink-cut: min(var(--cut), var(--ink-reach) - 50cqw + 50%);
+}
+.dt-stage[data-theme="ink"][data-kind="single"] .dt-digits-on { clip-path: inset(-50% calc(100% - var(--ink-cut) - 1px) -50% -50%); }
+.dt-stage[data-theme="ink"][data-kind="single"] .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% -50% var(--ink-cut)); }
+.dt-stage[data-theme="ink"][data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-clock,
+.dt-stage[data-theme="ink"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-clock {
+  --ink-cut: max(var(--cut), 50cqw - var(--ink-reach) + 50%);
+}
+.dt-stage[data-theme="ink"][data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-digits-on,
+.dt-stage[data-theme="ink"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-digits-on {
+  clip-path: inset(-50% -50% -50% calc(var(--ink-cut) - 1px));
+}
+.dt-stage[data-theme="ink"][data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-digits:not(.dt-digits-on),
+.dt-stage[data-theme="ink"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-digits:not(.dt-digits-on) {
+  clip-path: inset(-50% calc(100% - var(--ink-cut)) -50% -50%);
+}
 .dt-stage[data-theme="ink"] .dt-digits-on { filter: drop-shadow(0 0 .012em var(--digits-on-halo, rgb(27 29 33 / .6))); }
 .dt-stage[data-theme="ink"] .dt-digits:not(.dt-digits-on) {
   filter: drop-shadow(0 0 .012em var(--paper-ink)) drop-shadow(0 0 .02em var(--paper-ink)) drop-shadow(0 0 .02em var(--paper-ink));
@@ -3119,14 +3141,14 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   /* The box is as wide as its one column of type plus equal padding either side, so the column sits in its middle
      (a vertical-rl column fills from the right, and text-align centres only along it). */
   padding: .5cqh .55cqh;
-  border: .36cqh solid var(--seal);
+  border: .36cqh solid;
   border-radius: .6cqh;
   font-family: var(--font-title);
   font-size: 3.2cqh;
   font-weight: 700;
   line-height: 1.02;
   text-align: center;
-  color: var(--seal);
+  color: var(--seal-pressed);
   writing-mode: vertical-rl;
   white-space: nowrap;
   letter-spacing: .06em;
@@ -3140,14 +3162,16 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-stage[data-theme="ink"] .dt-speaker { font-family: var(--font-title); letter-spacing: .18em; }
 .dt-stage[data-theme="ink"] .dt-top { font-family: var(--font-title); letter-spacing: .16em; }
 
-/* Overtime: a larger seal, pressed at a slant against the digits' upper corner. */
-.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::after {
+/* Overtime: a larger seal, pressed at a slant against the digits' upper corner; under it (::before) the same seal,
+   blurred, is its paste bleeding slowly into the paper (the motion below). */
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::after,
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::before {
   content: "超时";
   position: absolute;
   left: calc(50% + 35cqh);
   top: calc(var(--clock-y) - 25cqh);
   padding: .6cqh 1.6cqh .8cqh;
-  border: .6cqh solid var(--seal);
+  border: .6cqh solid;
   border-radius: 1cqh;
   font-family: var(--font-title);
   font-size: 6.4cqh;
@@ -3155,7 +3179,7 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   line-height: 1.1;
   letter-spacing: .12em;
   text-indent: .12em;
-  color: var(--seal);
+  color: var(--seal-pressed);
   rotate: -5deg;
   filter: url(#dt-ink-seal);
 }
@@ -3191,27 +3215,41 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   right: calc(-1 * var(--stroke-tail));
   background-position: 100% 50%;
 }
-/* 提笔再落笔: the side taking the floor presses its brush down to a full, dense stroke; the side yielding it lifts
-   the brush, and its stroke thins and pales. */
-.dt-stage[data-theme="ink"] .dt-half-field { transition: transform 520ms var(--ease-spring); }
+/* 提笔再落笔 (motion spec §2.1): the side yielding the floor lifts its brush, and in ≈240 ms its stroke pales and
+   thins; the side taking it lands its brush again from its seat (the motion below), dense at once under the mask. */
+.dt-stage[data-theme="ink"] .dt-half { transition: --ink-stroke 240ms cubic-bezier(.3, 0, .2, 1); }
+.dt-stage[data-theme="ink"] .dt-half[data-active] { transition-duration: 0s; }
+.dt-stage[data-theme="ink"] .dt-half-field { transition: transform 240ms cubic-bezier(.3, 0, .2, 1), opacity 600ms var(--ease-std); }
 .dt-stage[data-theme="ink"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-half-field { transform: scaleY(.7); }
-/* A side out of time has no ink left, not even the dry end of its brush at the edge. */
-.dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-half-field { opacity: 0; }
+/* A side out of time, or that gave the rest up, fades in ≈600 ms to pale grey ink as long as the time it had left
+   (none when it ran out), and a small 止 seal is pressed beside its 时间到 / 已放弃. */
+.dt-stage[data-theme="ink"][data-mode="stage"] .dt-halves .dt-half[data-locked][data-side] {
+  --ink-stroke: color-mix(in oklab, var(--ink) 26%, var(--ground));
+  transition-duration: 600ms;
+}
+.dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-half-field {
+  --stroke-len: calc(var(--stroke-tail) + var(--lock-from, 0) * (100% - var(--stroke-tail) - var(--gap)));
+  clip-path: none;   /* stage.css drains a locked field from the top; this one stays and pales */
+  opacity: .7;
+}
 
 /* The digits sit on their stroke, and change colour where its solid body ends: the clock spans the half, so --cut
    is that point's distance from the seat in the clock's own box, which is scaled about its centre by --clock-scale. */
 .dt-stage[data-theme="ink"] .dt-half .dt-clock {
   --cut: calc(50% + (max(0px, var(--remain, 1) * (100% - var(--gap)) - var(--stroke-dry)) - 50%) / var(--clock-scale));
+  /* While its brush lands, no further than the body has reached from the seat (as on a single stage). */
+  --ink-reach: calc((100% + var(--stroke-tail)) * (1 - 1.08 * (1 - var(--ink-land)) - .025) - var(--stroke-tail));
+  --ink-cut: calc(50% + (min(max(0px, var(--remain, 1) * (100% - var(--gap)) - var(--stroke-dry)), var(--ink-reach)) - 50%) / var(--clock-scale));
   left: 0;
   right: 0;
   top: var(--row);
   translate: 0 -50%;
   text-align: center;
 }
-.dt-stage[data-theme="ink"] .dt-half:first-child .dt-digits-on { clip-path: inset(-50% calc(100% - var(--cut) - 1px) -50% -50%); }
-.dt-stage[data-theme="ink"] .dt-half:first-child .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% -50% var(--cut)); }
-.dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits-on { clip-path: inset(-50% -50% -50% calc(100% - var(--cut) - 1px)); }
-.dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% var(--cut) -50% -50%); }
+.dt-stage[data-theme="ink"] .dt-half:first-child .dt-digits-on { clip-path: inset(-50% calc(100% - var(--ink-cut) - 1px) -50% -50%); }
+.dt-stage[data-theme="ink"] .dt-half:first-child .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% -50% var(--ink-cut)); }
+.dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits-on { clip-path: inset(-50% -50% -50% calc(100% - var(--ink-cut) - 1px)); }
+.dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% var(--ink-cut) -50% -50%); }
 .dt-stage[data-theme="ink"] .dt-half .dt-clock .dt-state { top: calc(50% + 21cqh); }
 .dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-clock { color: var(--ink); }
 .dt-stage[data-theme="ink"] .dt-team { color: var(--ink); }
@@ -3235,26 +3273,356 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   filter: url(#dt-ink-drop);
 }
 
-/* Break: a pale 圆相, the circle a painter draws in one breath, rests behind the digits. */
-.dt-stage[data-theme="ink"][data-kind="break"] .dt-clock::before {
+/* ==== motion (motion spec §2.1): the brush's 起—行—收, the ink's 落—洇—干 ====
+   Each moment's class on the stage (render.js) plays it once; the pieces ink.js puts in (.dt-ink-*) rest at their
+   end state without one, as on a thumbnail or under reduced motion. Only transform, opacity, clip-path, masks and
+   registered variables move; the one-shot blurs (the title seeping in) are under 600 ms. */
+
+/* How far the landing brush has come: 0 before it, 1 landed (and at rest). The stroke's mask and the digits' colour
+   change both follow it, so the paper-coloured digits never run ahead of the ink. */
+@property --ink-land { syntax: "<number>"; inherits: true; initial-value: 1; }
+/* A seal as it lands: its paste darkens once (0 → 1 → 0). */
+@property --ink-press { syntax: "<number>"; inherits: false; initial-value: 0; }
+/* The stroke's ink, registered so a lifted brush's stroke pales and a locked one greys over time. */
+@property --ink-stroke { syntax: "<color>"; inherits: true; initial-value: transparent; }
+
+/* The hall's sweep and rise (stage.css) give way to the brush ([data-mode] ranks this with its per-seat sweeps; the
+   entrance below ranks with it again and comes after). */
+.dt-stage[data-theme="ink"].is-entering[data-mode] :is(.dt-field, .dt-half-field, .dt-title, .dt-speaker, .dt-team, .dt-clock, .dt-card) {
+  animation: none;
+}
+/* No gold rings and no bump: ink answers a bell with a drop and a halo of its own. */
+.dt-stage[data-theme="ink"] .dt-ring { display: none; }
+.dt-stage[data-theme="ink"] .dt-clock.is-bump .dt-digits { animation: none; }
+
+.dt-stage[data-theme="ink"] .dt-head::before,
+.dt-stage[data-theme="ink"] .dt-deco-over::after,
+.dt-stage[data-theme="ink"] .dt-ink-seal {
+  --seal-pressed: color-mix(in oklab, var(--seal), #4a0a02 calc(var(--ink-press) * 40%));
+}
+
+/* ---- enter: ① 起笔, the brush pressed down at the seat (≈120 ms); ② 行笔, the stroke pushed out fast then slow
+   (520 ms) behind a front of dry hairs; ③ 收笔, the ink bleeding into the paper round it (400 ms); then the title
+   seeping from pale ink to dense (360 ms) and the small seal pressed (420 ms). ---- */
+
+.dt-stage[data-theme="ink"].is-m-enter { animation: dt-ink-land 520ms cubic-bezier(.16, .84, .24, 1) 120ms both; }
+/* From .16, where the body's head reaches about 7cqw past a single stage's seat: the 起笔 is that head appearing. */
+@keyframes dt-ink-land { from { --ink-land: .16; } to { --ink-land: 1; } }
+
+/* The mask is twice the field wide: the solid body, the 飞白 front (8% of the field), then nothing; it slides from
+   wholly off the seat's side (108%) to wholly over the field (0%). */
+.dt-stage[data-theme="ink"].is-m-enter .dt-field,
+.dt-stage[data-theme="ink"].is-m-enter .dt-half:first-child .dt-half-field,
+.dt-stage[data-theme="ink"].is-m-switch .dt-half[data-active]:first-child .dt-half-field {
+  -webkit-mask: var(--ink-front-l) calc((1 - var(--ink-land)) * 108%) 0 / 200% 100% no-repeat;
+  mask: var(--ink-front-l) calc((1 - var(--ink-land)) * 108%) 0 / 200% 100% no-repeat;
+}
+.dt-stage[data-theme="ink"].is-m-enter[data-pro-seat="right"][data-side="pro"] .dt-field,
+.dt-stage[data-theme="ink"].is-m-enter[data-pro-seat="left"][data-side="con"] .dt-field,
+.dt-stage[data-theme="ink"].is-m-enter .dt-half:last-child .dt-half-field,
+.dt-stage[data-theme="ink"].is-m-switch .dt-half[data-active]:last-child .dt-half-field {
+  -webkit-mask: var(--ink-front-r) calc(var(--ink-land) * 108% - 8%) 0 / 200% 100% no-repeat;
+  mask: var(--ink-front-r) calc(var(--ink-land) * 108% - 8%) 0 / 200% 100% no-repeat;
+}
+
+/* ① The brush comes down at the seat: the stroke's head appears (scale .7 → 1, 0 → 1 in 120 ms) while --ink-land
+   holds at its start, wet and dense: a blot of thicker ink lies on it and soaks away as the stroke runs out. */
+.dt-stage[data-theme="ink"][data-mode].is-m-enter :is(.dt-field, .dt-half-field) { animation: dt-ink-head 120ms cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes dt-ink-head { from { opacity: 0; transform: scaleY(.7); } }
+.dt-stage[data-theme="ink"] .dt-ink-press {
+  display: none;
+  position: absolute;
+  top: var(--clock-y);
+  left: -5cqw;
+  width: 15cqw;
+  height: 44cqh;
+  translate: 0 -50%;
+  border-radius: 38% 62% 58% 42% / 50% 54% 46% 50%;
+  background: radial-gradient(70% 56% at 34% 48%, color-mix(in oklab, var(--side-color) 62%, var(--ink)) 30%,
+    color-mix(in oklab, var(--side-color) 80%, var(--ink)) 60%, transparent 96%);
+  opacity: 0;
+  transform-origin: 0 50%;
+  filter: url(#dt-ink-drop);
+}
+.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] .dt-ink-press,
+.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] .dt-ink-press {
+  left: auto;
+  right: -5cqw;
+  border-radius: 62% 38% 42% 58% / 54% 50% 50% 46%;
+  background: radial-gradient(70% 56% at 66% 48%, color-mix(in oklab, var(--side-color) 62%, var(--ink)) 30%,
+    color-mix(in oklab, var(--side-color) 80%, var(--ink)) 60%, transparent 96%);
+  transform-origin: 100% 50%;
+}
+.dt-stage[data-theme="ink"].is-m-enter .dt-ink-press { animation: dt-ink-press 900ms cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes dt-ink-press {
+  from { opacity: 0; transform: scale(.7); }
+  13% { opacity: .85; transform: scale(1); }
+  45% { opacity: .85; }
+  to { opacity: 0; transform: scale(1.06, 1); }
+}
+
+/* ③ The bleed: a wash of the stroke's ink a little wider than it, under it, as long as it, so it shows only at its
+   edges. It comes up once the brush stops, and stays. Its length steps with the stroke's (see the field). */
+.dt-stage[data-theme="ink"] .dt-ink-bleed {
+  --bleed-len: calc(max(6cqw, (1 - var(--used)) * 100cqw) + var(--stroke-tail) + 1.5cqw);
+  display: none;
+  position: absolute;
+  top: var(--clock-y);
+  left: calc(-1 * var(--stroke-tail));
+  width: var(--bleed-len);
+  height: calc(var(--stroke-box) * 1.06);
+  translate: 0 -50%;
+  background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--side-color) 15%, transparent) 9% 91%, transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 9cqw), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 9cqw), transparent);
+}
+@supports (width: round(nearest, 1px, 1px)) {
+  .dt-stage[data-theme="ink"] .dt-ink-bleed { width: round(nearest, var(--bleed-len), .2cqw); }
+}
+.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] .dt-ink-bleed,
+.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] .dt-ink-bleed {
+  left: auto;
+  right: calc(-1 * var(--stroke-tail));
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 9cqw), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 9cqw), transparent);
+}
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"] :is(.dt-ink-press, .dt-ink-bleed) { display: block; }
+.dt-stage[data-theme="ink"].is-m-enter .dt-ink-bleed { animation: dt-ink-bleed 400ms cubic-bezier(.2, .7, .3, 1) 600ms both; }
+@keyframes dt-ink-bleed { from { opacity: 0; transform: scaleY(.88); } }
+
+/* The digits are there from the first frame, in ink on the paper; the stroke passes under them (--ink-cut). */
+.dt-stage[data-theme="ink"][data-mode].is-m-enter .dt-clock { animation: dt-ink-appear 200ms cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes dt-ink-appear { from { opacity: 0; } }
+/* The title, the speaker and a free debate's teams seep from pale ink to dense once the brush has stopped. */
+.dt-stage[data-theme="ink"][data-mode].is-m-enter :is(.dt-title, .dt-team) { animation: dt-ink-seep 360ms cubic-bezier(.3, .6, .3, 1) 520ms both; }
+.dt-stage[data-theme="ink"][data-mode].is-m-enter .dt-speaker { animation: dt-ink-seep 360ms cubic-bezier(.3, .6, .3, 1) 600ms both; }
+@keyframes dt-ink-seep { from { opacity: .2; filter: blur(.5cqh); } }
+/* A card (title, break, end) seeps in whole, while its 圆相 is drawn. */
+.dt-stage[data-theme="ink"][data-mode].is-m-enter .dt-card { animation: dt-ink-seep 520ms cubic-bezier(.3, .6, .3, 1) both; }
+/* The small seal is pressed last: down from 1.12 times its size at a slant, its paste darkening as it lands. */
+.dt-stage[data-theme="ink"].is-m-enter .dt-head::before { animation: dt-ink-seal-press 420ms linear 760ms both; }
+@keyframes dt-ink-seal-press {
+  from { opacity: 0; transform: scale(1.12) rotate(-4deg); animation-timing-function: cubic-bezier(.55, 0, .9, .45); }
+  25% { opacity: 1; }
+  60% { opacity: 1; transform: scale(1) rotate(0deg); --ink-press: 1; animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  to { opacity: 1; transform: scale(1) rotate(0deg); --ink-press: 0; }
+}
+
+/* ---- switch: 提笔—落笔. The yielding side's lift is its transition (above); the taking side lands its brush again
+   from its own seat, the stroke part of the entrance in 420 ms. ---- */
+.dt-stage[data-theme="ink"].is-m-switch .dt-half[data-active] { animation: dt-ink-land 420ms cubic-bezier(.16, .84, .24, 1) both; }
+
+/* ---- start / pause: a resumed brush's dry front flicks once at the stroke's end; 暂停 seeps out in pale ink ---- */
+.dt-stage[data-theme="ink"] :is(.dt-ink-tip, .dt-ink-dry) {
+  display: none;
+  position: absolute;
+  top: var(--clock-y);
+  height: 42cqh;
+  translate: 0 -50%;
+  opacity: 0;
+  background-color: var(--side-color);
+  -webkit-mask: var(--ink-hairs-l) 0 0 / 100% 100% no-repeat;
+  mask: var(--ink-hairs-l) 0 0 / 100% 100% no-repeat;
+  transform-origin: 0 50%;
+}
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"] :is(.dt-ink-tip, .dt-ink-dry) { display: block; }
+.dt-stage[data-theme="ink"] .dt-ink-tip {
+  left: calc((1 - var(--used)) * 100cqw - var(--stroke-dry));
+  width: calc(var(--stroke-dry) + 4cqw);
+}
+.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] :is(.dt-ink-tip, .dt-ink-dry),
+.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] :is(.dt-ink-tip, .dt-ink-dry) {
+  -webkit-mask-image: var(--ink-hairs-r);
+  mask-image: var(--ink-hairs-r);
+  transform-origin: 100% 50%;
+}
+.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] .dt-ink-tip,
+.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] .dt-ink-tip {
+  left: auto;
+  right: calc((1 - var(--used)) * 100cqw - var(--stroke-dry));
+}
+.dt-stage[data-theme="ink"].is-m-start .dt-ink-tip { animation: dt-ink-tip 420ms cubic-bezier(.2, .7, .3, 1) both; }
+@keyframes dt-ink-tip {
+  from { opacity: 0; transform: scaleX(.7); }
+  30% { opacity: .9; transform: scaleX(1.12); }
+  to { opacity: 0; transform: scaleX(1); }
+}
+.dt-stage[data-theme="ink"].is-m-pause .dt-clock .dt-state { animation: dt-ink-seep 480ms cubic-bezier(.3, .6, .3, 1) both; }
+
+/* ---- warn: a drop of ink falls ≈8cqh onto the bell point (260 ms, gathering speed), and on the paper spreads into
+   a pale ring (700 ms) as the point itself fades. ---- */
+.dt-stage[data-theme="ink"] :is(.dt-ink-fall, .dt-ink-bloom) {
+  display: none;
+  position: absolute;
+  /* The bell point's centre (.dt-warnline). */
+  top: calc(var(--clock-y) + var(--stroke-box) / 2 + 2.7cqh);
+  left: clamp(1.3cqh, calc(var(--warn-at) * 100%), calc(100% - 1.3cqh));
+  opacity: 0;
+}
+.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] :is(.dt-ink-fall, .dt-ink-bloom),
+.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] :is(.dt-ink-fall, .dt-ink-bloom) {
+  left: clamp(1.3cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 1.3cqh));
+}
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"] :is(.dt-ink-fall, .dt-ink-bloom) { display: block; }
+.dt-stage[data-theme="ink"] .dt-ink-fall {
+  width: 1.7cqh;
+  height: 2.3cqh;
+  margin: -1.15cqh 0 0 -.85cqh;
+  border-radius: 50% 50% 50% 50% / 64% 64% 36% 36%;
+  background: var(--ink);
+}
+.dt-stage[data-theme="ink"] .dt-ink-bloom {
+  width: 14cqh;
+  height: 14cqh;
+  margin: -7cqh 0 0 -7cqh;
+  /* Not a ring but a stain: dense where the drop struck, a pale wash round it, the water's darker edge, and lobes
+     where the paper took it unevenly. */
+  border-radius: 46% 54% 50% 50% / 52% 46% 54% 48%;
+  background:
+    radial-gradient(closest-side, color-mix(in oklab, var(--ink) 55%, transparent), color-mix(in oklab, var(--ink) 20%, transparent) 30%, transparent 46%),
+    radial-gradient(48% 40% at 66% 60%, color-mix(in oklab, var(--ink) 12%, transparent) 70%, transparent),
+    radial-gradient(closest-side, color-mix(in oklab, var(--ink) 9%, transparent) 60%, color-mix(in oklab, var(--ink) 22%, transparent) 88%, transparent);
+  filter: url(#dt-ink-drop);
+}
+.dt-stage[data-theme="ink"].is-m-warn .dt-ink-fall { animation: dt-ink-fall 300ms linear both; }
+@keyframes dt-ink-fall {
+  from { opacity: 0; transform: translateY(-8cqh) scale(.8, 1.3); animation-timing-function: cubic-bezier(.5, 0, 1, .5); }
+  12% { opacity: 1; }
+  87% { opacity: 1; transform: translateY(0) scale(.9, 1.2); animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
+  to { opacity: 0; transform: translateY(.3cqh) scale(1.7, .5); }
+}
+.dt-stage[data-theme="ink"].is-m-warn .dt-ink-bloom { animation: dt-ink-bloom 700ms cubic-bezier(.15, .6, .3, 1) 260ms both; }
+@keyframes dt-ink-bloom {
+  from { opacity: .85; transform: scale(.2); }
+  to { opacity: 0; transform: scale(1.6); }
+}
+
+/* ---- count: each second a very faint ring of ink spreads behind the digits (300 ms); the digits do not jump ---- */
+.dt-stage[data-theme="ink"][data-mode="stage"] .dt-clock::before {
   content: "";
   position: absolute;
   z-index: -1;
   left: 50%;
-  top: 50%;
-  width: 40cqh;
-  height: 40cqh;
-  translate: -50% -48%;
+  top: 54%;
+  width: 118%;
+  height: 128%;
+  translate: -50% -50%;
   border-radius: 50%;
-  background: radial-gradient(closest-side, transparent 83%, color-mix(in oklab, var(--ink) 20%, transparent) 85% 97%, transparent 99%);
-  -webkit-mask-image: conic-gradient(from 200deg, transparent 0 14deg, #000 60deg 300deg, rgb(0 0 0 / .35) 336deg, transparent 346deg);
-  mask-image: conic-gradient(from 200deg, transparent 0 14deg, #000 60deg 300deg, rgb(0 0 0 / .35) 336deg, transparent 346deg);
-  filter: url(#dt-ink-drop);
+  background: radial-gradient(closest-side, transparent 58%, color-mix(in oklab, var(--ink) 7%, transparent) 76%,
+    color-mix(in oklab, var(--ink) 12%, transparent) 90%, transparent);
+  opacity: 0;
+  pointer-events: none;
 }
+.dt-stage[data-theme="ink"].is-m-count[data-kind="single"] .dt-clock[data-clock="main"]::before,
+.dt-stage[data-theme="ink"].is-m-count[data-m-side="pro"] .dt-half[data-side="pro"] .dt-clock::before,
+.dt-stage[data-theme="ink"].is-m-count[data-m-side="con"] .dt-half[data-side="con"] .dt-clock::before {
+  animation: dt-ink-halo 300ms cubic-bezier(.2, .7, .3, 1);
+}
+@keyframes dt-ink-halo {
+  from { opacity: 0; transform: scale(.88); }
+  35% { opacity: 1; }
+  to { opacity: 0; transform: scale(1.1); }
+}
+
+/* ---- end: the last of the stroke runs dry, its hairs flung out and gone (500 ms); then a 朱文 seal 时 is pressed
+   at the digits' lower right, and stays while the time is out. ---- */
+.dt-stage[data-theme="ink"] .dt-ink-dry { left: 3cqw; width: 12cqw; }
+.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] .dt-ink-dry,
+.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] .dt-ink-dry { left: auto; right: 3cqw; }
+.dt-stage[data-theme="ink"].is-m-end .dt-ink-dry { animation: dt-ink-dry 500ms cubic-bezier(.25, .6, .3, 1) both; }
+@keyframes dt-ink-dry {
+  from { opacity: .95; transform: translateX(-2cqw) scaleX(.6); }
+  35% { opacity: .85; }
+  to { opacity: 0; transform: translateX(3cqw) scaleX(1.35); }
+}
+.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"].is-m-end .dt-ink-dry,
+.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"].is-m-end .dt-ink-dry { animation-name: dt-ink-dry-r; }
+@keyframes dt-ink-dry-r {
+  from { opacity: .95; transform: translateX(2cqw) scaleX(.6); }
+  35% { opacity: .85; }
+  to { opacity: 0; transform: translateX(-3cqw) scaleX(1.35); }
+}
+
+.dt-stage[data-theme="ink"] .dt-ink-seal {
+  display: none;
+  position: absolute;
+  z-index: 1;
+  padding: .35cqh .45cqh .45cqh;
+  border: .32cqh solid;
+  border-radius: .5cqh;
+  font-family: var(--font-title);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--seal-pressed);
+  filter: url(#dt-ink-seal);
+  pointer-events: none;
+}
+.dt-stage[data-theme="ink"] .dt-ink-seal-time {
+  left: calc(100% + 1.6cqh);
+  top: 62%;
+  font-size: 5.2cqh;
+  rotate: 4deg;
+}
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"]:is([data-phase="over"], [data-phase="done"]) .dt-ink-seal-time,
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="break"][data-phase="done"] .dt-ink-seal-time { display: block; }
+.dt-stage[data-theme="ink"].is-m-end .dt-ink-seal-time { animation: dt-ink-seal-press 420ms linear 380ms both; }
+
+/* ---- over: the 超时 seal is pressed after the 时 (its own moment comes with the end); then its paste bleeds very
+   slowly into the paper at its edge, a 2.4 s breath. ---- */
+.dt-stage[data-theme="ink"].is-m-over .dt-deco-over::after { animation: dt-ink-seal-press 420ms linear 640ms both; }
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::before {
+  filter: url(#dt-ink-seal) blur(.35cqh);
+  /* Once the seal is down: overtime begins with the end's 时 and this seal's press. */
+  animation: dt-ink-ooze 2400ms cubic-bezier(.45, 0, .55, 1) 1060ms infinite backwards;
+}
+@keyframes dt-ink-ooze {
+  0%, 100% { opacity: 0; transform: scale(1); }
+  50% { opacity: .45; transform: scale(1.035); }
+}
+
+/* ---- lock: the side's stroke greys (its transition, above); a small seal 止 is pressed beside 时间到 / 已放弃 ---- */
+.dt-stage[data-theme="ink"] .dt-ink-seal-stop {
+  left: calc(50% + 12.5cqh);
+  top: var(--row);
+  translate: 0 -50%;
+  font-size: 3.8cqh;
+  rotate: -5deg;
+}
+.dt-stage[data-theme="ink"] .dt-half[data-locked] > .dt-ink-seal-stop { display: block; }
+.dt-stage[data-theme="ink"].is-m-lock[data-m-side="pro"] .dt-half[data-side="pro"] > .dt-ink-seal-stop,
+.dt-stage[data-theme="ink"].is-m-lock[data-m-side="con"] .dt-half[data-side="con"] > .dt-ink-seal-stop {
+  animation: dt-ink-seal-press 420ms linear 300ms both;
+}
+
+/* ---- title: the 圆相 drawn in one breath at the card's centre (1.4 s, its mask's stroke-dashoffset), under the
+   words; in a break it rests behind the digits and pales away as the break runs down. ---- */
+.dt-stage[data-theme="ink"] .dt-ink-enso {
+  display: none;
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  overflow: visible;
+  color: var(--ink);
+  pointer-events: none;
+  filter: url(#dt-ink-drop);   /* the paper's fibres at its edges */
+}
+.dt-stage[data-theme="ink"][data-mode="title"] .dt-card > .dt-ink-enso { display: block; width: 76cqh; height: 76cqh; opacity: .15; }
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="break"] .dt-clock > .dt-ink-enso {
+  display: block;
+  width: 46cqh;
+  height: 46cqh;
+  opacity: calc(.22 * (1 - .85 * var(--used)));
+}
+.dt-stage[data-theme="ink"] .dt-ink-enso-reveal { stroke-dasharray: 1 1; stroke-dashoffset: 0; }
+.dt-stage[data-theme="ink"].is-m-title .dt-ink-enso-reveal { animation: dt-ink-enso-draw 1400ms cubic-bezier(.5, .05, .35, 1) both; }
+@keyframes dt-ink-enso-draw { from { stroke-dashoffset: 1; } }
 
 /* On a smaller projector (1366×768) the small seal wears lightly, so its two characters stay legible. */
 @container (max-width: 1600px) {
-  .dt-stage[data-theme="ink"] .dt-head::before { filter: url(#dt-ink-seal-light); }
+  .dt-stage[data-theme="ink"] .dt-head::before,
+  .dt-stage[data-theme="ink"] .dt-ink-seal { filter: url(#dt-ink-seal-light); }
 }
 
 /* The seal, the drop and the dabs have pixel-sized filters: on a thumbnail they would smear, so they go flat. */
@@ -3263,8 +3631,12 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   .dt-stage[data-theme="ink"] .dt-warnline,
   .dt-stage[data-theme="ink"] .dt-motion::before,
   .dt-stage[data-theme="ink"] .dt-teams::before,
-  .dt-stage[data-theme="ink"] .dt-clock::before,
-  .dt-stage[data-theme="ink"] .dt-deco-over::after { filter: none; }
+  .dt-stage[data-theme="ink"] .dt-deco-over::after,
+  .dt-stage[data-theme="ink"] .dt-ink-seal,
+  .dt-stage[data-theme="ink"] .dt-ink-press,
+  .dt-stage[data-theme="ink"] .dt-ink-bloom,
+  .dt-stage[data-theme="ink"] .dt-ink-enso { filter: none; }
+  .dt-stage[data-theme="ink"] .dt-deco-over::before { filter: blur(.35cqh); }
 }
 
 /* === themes/riso.css === */
@@ -6439,7 +6811,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 })(window.DT = window.DT || {});
 
 /* === themes/ink.js === */
-/* themes/ink.js: 墨's SVG filters (spec §2.1): the brush stroke's bled edge and dry tip, the worn seal, the drop. */
+/* themes/ink.js: 墨's SVG filters (spec §2.1): the brush stroke's bled edge and dry tip, the worn seal, the drop; and
+   the pieces its motion moves (motion spec §2.1): the brush's dry front, the falling drop, the seals, the 圆相. */
 (function (DT) {
   'use strict';
   // The filters work in screen pixels, so there is one brush per stage size and ink.css picks it by the stage's
@@ -6492,9 +6865,146 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     '<feDisplacementMap in="SourceGraphic" in2="fibre" scale="4.5" xChannelSelector="R" yChannelSelector="G"/>' +
     '</filter>';
 
+  // ---- the brush's motion (motion spec §2.1): images the stylesheet masks with, and the pieces decorate adds ----
+
+  const rnd = DT.themes.rng('ink');
+  const r2 = x => Math.round(x * 100) / 100;
+  const uri = svg => 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")';
+  // Drawn rooted at the left; the right-hand seat's copy is the same image mirrored.
+  const image = (w, h, body) => ['l', 'r'].map(side => uri('<svg xmlns="http://www.w3.org/2000/svg" width="' + w +
+    '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none"><defs><linearGradient id="dt-ink-f">' +
+    '<stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>' +
+    '<linearGradient id="dt-ink-b"><stop offset=".78" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>' +
+    (side === 'l' ? body : '<g transform="matrix(-1 0 0 1 ' + w + ' 0)">' + body + '</g>') + '</svg>'));
+  // Loose hairs of a dry brush, rows across the stroke's ink (4%–94% of its box), each ending at its own place and
+  // fading as it goes: from x0, up to len long.
+  function hairs(n, x0, len, min) {
+    let out = '';
+    for (let i = 0; i < n; i++) {
+      const y = 4 + rnd() * 88, h = 0.5 + rnd() * 2.2, l = len * (min + (1 - min) * rnd());
+      out += '<rect x="' + r2(x0) + '" y="' + r2(y) + '" width="' + r2(l) + '" height="' + r2(h) +
+        '" fill="url(#dt-ink-f)" opacity="' + r2(0.45 + 0.55 * rnd()) + '"/>';
+    }
+    return out;
+  }
+  // The stroke's mask while the brush lands, twice the field wide: its left half the solid body, its end rounded like
+  // a brush's tip (the middle leads) and ragged row by row, then a front of dry hairs 8% of the field long (飞白),
+  // then nothing. ink.css slides it across the field.
+  function frontBody() {
+    let out = '<rect width="955" height="100" fill="#fff"/>';
+    for (let y = 0; y < 100; y += 1.25) {
+      const u = (y + 0.6 - 49) / 46, end = 1000 - 24 * u * u + (rnd() - 0.5) * 10;
+      out += '<rect x="954" y="' + r2(y) + '" width="' + r2(end - 954) + '" height="1.35" fill="url(#dt-ink-b)"/>';
+    }
+    return out;
+  }
+  const FRONT = image(2000, 100, frontBody() + hairs(34, 990, 90, 0.2));
+  // The dry hairs alone: the front a resumed brush flicks, the last of the ink running out.
+  const HAIRS = image(100, 100, hairs(30, 0, 100, 0.3));
+  const IMAGES = { '--ink-front-l': FRONT[0], '--ink-front-r': FRONT[1], '--ink-hairs-l': HAIRS[0], '--ink-hairs-r': HAIRS[1] };
+
+  // The 圆相: a circle drawn in one breath, clockwise from the lower left. The ink is a filled shape, heavy where the
+  // brush came down and thinning as it runs dry, its last stretch broken into hairs; it shows through a mask whose
+  // stroke along the brush's path ink.css draws out with stroke-dashoffset, so it appears as if painted.
+  const ENSO = (() => {
+    const R = 100, W = 25, A0 = 112, SWEEP = 322, N = 160;
+    const ph = [0, 1, 2, 3].map(() => rnd() * 2 * Math.PI);
+    const radius = t => R + 1.6 * Math.sin(t * 8.2 + ph[0]) + 0.9 * Math.sin(t * 23 + ph[1]) + 4 * t * t;
+    // Heaviest where the brush came down, then thinning steadily as it runs dry.
+    const width = t => t < 0.05 ? W * (1.14 - 0.14 * Math.sin(t / 0.05 * Math.PI / 2))
+      : W * (1 - 0.7 * Math.pow((t - 0.05) / 0.95, 1.2));
+    const at = (t, off) => {
+      const a = (A0 + SWEEP * t) * Math.PI / 180, r = radius(t) + off;
+      return [Math.cos(a) * r, Math.sin(a) * r];
+    };
+    const fmt = p => r2(p[0]) + ' ' + r2(p[1]);
+    // The paper's tooth along each edge.
+    const rough = (t, k) => 0.45 * Math.sin(t * 97 + ph[k]) + 0.3 * Math.sin(t * 211 + ph[k] * 2);
+    const END = 0.88;   // the solid body ends here; hairs carry on
+    const outer = [], inner = [];
+    for (let i = 0; i <= N; i++) {
+      const t = END * i / N, w = width(t) * (i > N - 8 ? 0.4 + 0.6 * (N - i) / 8 : 1);
+      outer.push(at(t, w / 2 + rough(t, 2)));
+      inner.push(at(t, -w / 2 + rough(t, 3)));
+    }
+    // A round end where the brush came down: half a circle behind the first point.
+    const cap = [];
+    const a0 = A0 * Math.PI / 180, c = at(0, 0), rc = width(0) / 2;
+    for (let k = 1; k < 12; k++) {
+      const f = -Math.PI / 2 + Math.PI * k / 12;   // from the inner edge, round the back, to the outer
+      const back = [Math.sin(a0), -Math.cos(a0)], out = [Math.cos(a0), Math.sin(a0)];
+      cap.push([c[0] + rc * (Math.cos(f) * back[0] + Math.sin(f) * out[0]), c[1] + rc * (Math.cos(f) * back[1] + Math.sin(f) * out[1])]);
+    }
+    const body = 'M' + outer.map(fmt).join('L') + 'L' + inner.reverse().map(fmt).join('L') + 'L' + cap.map(fmt).join('L') + 'Z';
+    const line = (t0, t1, off, steps) => {
+      const pts = [];
+      for (let i = 0; i <= steps; i++) pts.push(at(t0 + (t1 - t0) * i / steps, off(t0 + (t1 - t0) * i / steps)));
+      return 'M' + pts.map(fmt).join('L');
+    };
+    // 飞白: hairs running on past the body, and streaks of paper opening inside its last stretch; along the whole
+    // body, the paler lines its hairs leave, more of them and clearer as it dries.
+    const strands = [];
+    for (let i = 0; i < 7; i++) {
+      const o = (i / 6 - 0.5) * 0.8, t0 = 0.66 + rnd() * 0.12, t1 = 0.93 + rnd() * 0.065;
+      strands.push({ d: line(t0, t1, t => o * width(t) + 0.6 * Math.sin(t * 40 + i), 40), w: r2(0.7 + rnd() * 1.1), o: r2(0.5 + rnd() * 0.45) });
+    }
+    let gaps = '';
+    for (let i = 0; i < 5; i++) {
+      const o = (rnd() - 0.5) * 0.7, t0 = 0.5 + rnd() * 0.2;
+      gaps += '<path d="' + line(t0, END + 0.02, t => o * width(t), 30) + '" stroke-width="1.1"/>';
+    }
+    for (let i = 0; i < 16; i++) {
+      const o = (rnd() - 0.5) * 0.85, t0 = rnd() * 0.6, t1 = Math.min(END + 0.02, t0 + 0.12 + rnd() * 0.35);
+      gaps += '<path d="' + line(t0, t1, t => o * width(t), 40) + '" stroke-width="' + r2(0.5 + rnd()) +
+        '" stroke-opacity="' + r2(t0 > 0.4 ? 0.35 + 0.3 * rnd() : 0.08 + 0.2 * rnd()) + '"/>';
+    }
+    return { body, strands, gaps, reveal: line(-0.03, 1.03, () => 0, 180) };
+  })();
+  const enso = id => '<svg class="dt-ink-enso" viewBox="-125 -125 250 250" aria-hidden="true" focusable="false">' +
+    '<mask id="' + id + '" maskUnits="userSpaceOnUse" x="-125" y="-125" width="250" height="250">' +
+    '<path class="dt-ink-enso-reveal" pathLength="1" d="' + ENSO.reveal + '" fill="none" stroke="#fff" stroke-width="40"/>' +
+    '<g fill="none" stroke="#000" stroke-linecap="round">' + ENSO.gaps + '</g></mask>' +
+    '<g mask="url(#' + id + ')"><path d="' + ENSO.body + '" fill="currentColor"/>' +
+    ENSO.strands.map(s => '<path d="' + s.d + '" fill="none" stroke="currentColor" stroke-width="' + s.w +
+      '" stroke-linecap="round" opacity="' + s.o + '"/>').join('') + '</g></svg>';
+
+  let stages = 0;   // numbers each stage's masks: two stages on one page (the console and its preview) share no id
+
+  // The pieces the stylesheet moves: under the stroke, the bleed round it; over it, the wet blot where the brush came
+  // down, the falling drop and its bloom, the dry front and the last dry hairs; a 时 seal by the digits,
+  // a 止 seal in each half, a 圆相 on the title card and one behind a break's digits. None is driven from here: each
+  // moment's class on the stage (render.js) plays them, and without one they rest at their end state.
+  function decorate(stage) {
+    const doc = stage.ownerDocument, n = ++stages, added = [];
+    const put = (parent, html) => {
+      if (!parent) return;
+      const box = doc.createElement('div');
+      box.innerHTML = html;
+      added.push(parent.appendChild(box.firstChild));
+    };
+    const q = sel => stage.querySelector(sel);
+    const piece = name => '<i class="dt-ink-' + name + '" aria-hidden="true"></i>';
+    const seal = (name, word) => '<span class="dt-ink-seal dt-ink-seal-' + name + '" aria-hidden="true">' + word + '</span>';
+    put(q('.dt-deco'), piece('bleed'));
+    ['press', 'fall', 'bloom', 'tip', 'dry'].forEach(name => put(q('.dt-deco-over'), piece(name)));
+    const main = q('.dt-clock[data-clock="main"]');
+    put(main, seal('time', '时'));
+    put(main, enso('dt-ink-enso-' + n + '-break'));
+    put(q('.dt-card'), enso('dt-ink-enso-' + n + '-title'));
+    stage.querySelectorAll('.dt-half').forEach(half => put(half, seal('stop', '止')));
+    Object.keys(IMAGES).forEach(name => stage.style.setProperty(name, IMAGES[name]));
+    return {
+      destroy() {
+        added.forEach(el => el.remove());
+        Object.keys(IMAGES).forEach(name => stage.style.removeProperty(name));
+      },
+    };
+  }
+
   DT.themes.register('ink', {
     defs: '<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>' +
       Object.keys(SIZES).map(name => brush(name, SIZES[name])).join('') + SEAL + DROP + '</defs></svg>',
+    decorate,
   });
 })(window.DT = window.DT || {});
 

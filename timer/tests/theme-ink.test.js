@@ -112,7 +112,7 @@
   // Spec §2.1: a wide stroke of about 44vh across the screen, its edges bled and dry-brushed by the filter.
   DT.test('theme ink: the field is one wide brush stroke across the screen, clear of the head', () => {
     const { stage, root } = mountInk(singleAt(OPENING, 60));
-    root.classList.remove('is-entering');   // measure the stroke at rest, not its entrance sweep
+    root.classList.remove('is-entering', 'is-m-enter');   // measure the stroke at rest, not as the brush lands
     const box = root.getBoundingClientRect();
     const field = root.querySelector('.dt-field');
     const f = field.getBoundingClientRect();
@@ -147,7 +147,7 @@
   DT.test('theme ink: the paper-coloured digits end where the solid body of the stroke ends, not at its dry tip', () => {
     [[OPENING, 'left', 'left'], [OPENING, 'right', 'right'], [REBUTTAL, 'left', 'right'], [REBUTTAL, 'right', 'left']].forEach(([name, seat, from]) => {
       const { stage, root } = mountInk(singleAt(name, 60, seat));
-      root.classList.remove('is-entering');
+      root.classList.remove('is-entering', 'is-m-enter');
       const S = root.getBoundingClientRect().width;
       const on = root.querySelector('.dt-clock[data-clock="main"] .dt-digits-on');
       const tip = tipX(root.querySelector('.dt-field'), from);
@@ -160,7 +160,7 @@
   DT.test('theme ink: in free debate too the digits change colour at the end of the stroke\'s body', () => {
     ['left', 'right'].forEach(seat => {
       const { stage, root } = mountInk(dualAt(30, seat));
-      root.classList.remove('is-entering');
+      root.classList.remove('is-entering', 'is-m-enter');
       const S = root.getBoundingClientRect().width;
       root.querySelectorAll('.dt-half').forEach((h, i) => {
         const from = i === 0 ? 'left' : 'right';
@@ -318,7 +318,7 @@
     [[OPENING, 'left', 'left', '--pro'], [OPENING, 'right', 'right', '--pro'], [REBUTTAL, 'left', 'right', '--con'], [REBUTTAL, 'right', 'left', '--con']].forEach(([name, seat, from, color]) => {
       [179, 187].forEach(secs => {
         const { stage, root } = mountInk(singleAt(name, secs, seat));
-        root.classList.remove('is-entering');
+        root.classList.remove('is-entering', 'is-m-enter');
         const where = name + ' / ' + seat + ' @' + secs;
         const field = root.querySelector('.dt-field');
         const box = root.getBoundingClientRect(), S = box.width;
@@ -332,5 +332,358 @@
         stage.destroy();
       });
     });
+  });
+
+  // ---- motion (motion spec §2.1): 起—行—收 of the brush, 落—洇—干 of the ink ----
+
+  const anim = (el, which) => getComputedStyle(el, which || null).animationName;
+  const ink = (root, sel) => root.querySelector(sel);
+  const titleView = () => E.view(E.createSession(F(), MATCH, T0, { theme: 'ink' }), T0);
+  function breakAt(secs) {
+    const s = E.toggle(session('评委打分'), T0);
+    return E.view(E.tick(s, T0 + secs * 1000).session, T0 + secs * 1000);
+  }
+  // A length (a custom property, say) resolved in el's own box, as a probe's width: a negative one comes out 0.
+  function lengthIn(el, expr) {
+    const probe = document.createElement('i');
+    probe.style.cssText = 'position:absolute;left:0;top:0;height:1px;width:' + expr;
+    el.appendChild(probe);
+    const w = probe.getBoundingClientRect().width;
+    probe.remove();
+    return w;
+  }
+  const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  // The stage at rest: no moment class, no entrance.
+  const rest = root => Array.from(root.classList).filter(c => c.indexOf('is-m-') === 0 || c === 'is-entering')
+    .forEach(c => root.classList.remove(c));
+  // Every element the theme put in, by its dt-ink- class.
+  const inked = root => Array.from(root.querySelectorAll('[class*="dt-ink-"]'));
+  const nameOf = el => el.className.baseVal !== undefined ? el.className.baseVal : el.className;
+
+  DT.test('theme ink: decorate puts the brush, the drop, the seals and the 圆相 into the stage, ids prefixed dt-ink-', () => {
+    const { stage, root } = mountInk(dualAt(30));
+    // A second stage on the same page.
+    const other = R.mount(document.getElementById('sandbox').appendChild(document.createElement('div')));
+    other.update(singleAt(OPENING, 60));
+    const count = sel => root.querySelectorAll(sel).length;
+    assert.equal(count('.dt-deco > .dt-ink-bleed'), 1, 'the bleed under the stroke');
+    ['.dt-ink-press', '.dt-ink-fall', '.dt-ink-bloom', '.dt-ink-tip', '.dt-ink-dry'].forEach(s => assert.equal(count('.dt-deco-over > ' + s), 1, s));
+    assert.equal(count('.dt-clock[data-clock="main"] > .dt-ink-seal-time'), 1, 'the 时 seal');
+    assert.equal(count('.dt-half > .dt-ink-seal-stop'), 2, 'a 止 seal in each half');
+    assert.equal(count('.dt-card > svg.dt-ink-enso'), 1, 'the title card\'s 圆相');
+    assert.equal(count('.dt-clock[data-clock="main"] > svg.dt-ink-enso'), 1, 'the break\'s 圆相');
+    assert.equal(ink(root, '.dt-ink-seal-time').textContent, '时');
+    assert.equal(ink(root, '.dt-ink-seal-stop').textContent, '止');
+    inked(root).forEach(el => assert.ok(el.closest('[aria-hidden="true"]'), nameOf(el) + ' is hidden from screen readers'));
+    const ids = Array.from(document.querySelectorAll('#sandbox .dt-stage [id]')).map(n => n.id);
+    assert.ok(ids.length >= 4, ids.join(','));
+    ids.forEach(id => assert.ok(id.indexOf('dt-ink-') === 0, id));
+    assert.equal(new Set(ids).size, ids.length, 'two stages on one page share no id: ' + ids.join(','));
+    // Each 圆相's mask is in its own drawing.
+    const masked = root.querySelectorAll('svg.dt-ink-enso [mask]');
+    assert.equal(masked.length, 2);
+    masked.forEach(g => {
+      const id = g.getAttribute('mask').match(/#([\w-]+)/)[1];
+      assert.ok(g.ownerSVGElement.querySelector('[id="' + id + '"]'), id);
+    });
+    stage.destroy(); other.destroy();
+  });
+
+  // Spec §2.1 enter: 起笔 at the seat, 行笔 with a 飞白 front, 收笔 bleeding into the paper; then the title seeps
+  // from pale ink to dense and the small seal is pressed. Not the hall's sweep and rise.
+  DT.test('theme ink: a new stage lands the brush from the seat, then seeps the title in and presses the seal', () => {
+    const { stage, root } = mountInk(singleAt(OPENING, 60));   // its first view enters
+    assert.ok(root.classList.contains('is-m-enter'));
+    assert.equal(anim(root), 'dt-ink-land', 'the brush\'s reach, which the stroke and the digits follow');
+    assert.equal(anim(ink(root, '.dt-ink-press')), 'dt-ink-press');
+    assert.equal(anim(ink(root, '.dt-ink-bleed')), 'dt-ink-bleed');
+    assert.equal(anim(ink(root, '.dt-title')), 'dt-ink-seep');
+    assert.equal(anim(ink(root, '.dt-head'), '::before'), 'dt-ink-seal-press');
+    const field = ink(root, '.dt-field'), cs = getComputedStyle(field);
+    assert.equal(cs.animationName, 'dt-ink-head', 'the stroke\'s head comes down (not the hall\'s clip-path sweep)');
+    assert.ok(/url\(/.test(cs.maskImage || cs.webkitMaskImage), 'the stroke is shown through its 飞白 front');
+    ['.dt-clock[data-clock="main"]', '.dt-speaker'].forEach(s => assert.ok(!/dt-rise/.test(anim(ink(root, s))), s));
+    // The brush moves fast, then slow (spec: cubic-bezier(.16,.84,.24,1), ≈520 ms after a ≈120 ms press).
+    const st = getComputedStyle(root);
+    assert.equal(st.animationTimingFunction, 'cubic-bezier(0.16, 0.84, 0.24, 1)');
+    assert.equal(st.animationDuration, '0.52s');
+    assert.equal(st.animationDelay, '0.12s');
+    stage.destroy();
+  });
+
+  // While the brush lands, the digits are ink on the paper until the stroke's body is under them: they turn paper
+  // coloured behind its front, so they read in every frame (motion spec §1.2).
+  DT.test('theme ink: while the brush lands the digits turn paper-coloured only behind its front', () => {
+    ['left', 'right'].forEach(seat => {
+      const { stage, root } = mountInk(singleAt(OPENING, 60, seat), 1920, 1080);
+      rest(root);
+      const S = root.getBoundingClientRect(), on = ink(root, '.dt-clock[data-clock="main"] .dt-digits-on');
+      const body = lengthIn(on, 'var(--cut)');
+      const at = land => { root.style.setProperty('--ink-land', String(land)); return lengthIn(on, 'var(--ink-cut)'); };
+      const box = on.getBoundingClientRect();
+      // Before the brush: the paper-coloured layer is clipped away.
+      if (seat === 'left') assert.equal(at(0), 0, seat + ': none before the brush');
+      else assert.ok(at(0) >= box.width, seat + ': none before the brush: ' + at(0));
+      // Half way: at the body's front, in the digits' own box.
+      const C = S.width * 1.06, tail = S.width * 0.03;
+      const reach = C * (1 - 1.08 * 0.5 - 0.025) - tail;   // less what the brush's ragged end trails by
+      const x = seat === 'left' ? reach : S.width - reach;
+      assert.near(at(0.5), x - (box.left - S.left), 2, seat + ': at its front');
+      // Landed: where the body ends, as at rest.
+      assert.near(at(1), body, 1, seat + ': landed');
+      root.style.removeProperty('--ink-land');
+      stage.destroy();
+    });
+  });
+
+  DT.test('theme ink: in free debate the side taking the floor lands its brush again, the other lifts its own', () => {
+    let s = E.floor(session('自由辩论'), 'pro', T0);
+    const { stage, root } = mountInk(E.view(s, T0 + 10000));   // pro speaking
+    rest(root);
+    s = E.floor(s, 'con', T0 + 20000);
+    stage.update(E.view(s, T0 + 20000));                         // con takes the floor
+    assert.ok(root.classList.contains('is-m-switch'));
+    const con = ink(root, '.dt-half[data-side="con"]'), pro = ink(root, '.dt-half[data-side="pro"]');
+    assert.equal(anim(con), 'dt-ink-land', 'the taking side lands its brush');
+    assert.equal(getComputedStyle(con).animationDuration, '0.42s');
+    assert.equal(anim(pro), 'none');
+    // The yielding side lifts its brush: its stroke pales and thins over ≈240 ms.
+    const t = getComputedStyle(pro);
+    const props = t.transitionProperty.split(',').map(x => x.trim()), durs = t.transitionDuration.split(',').map(x => x.trim());
+    assert.ok(props.indexOf('--ink-stroke') >= 0, t.transitionProperty);
+    assert.equal(durs[props.indexOf('--ink-stroke')], '0.24s');
+    assert.equal(getComputedStyle(pro.querySelector('.dt-half-field')).transitionDuration.split(',')[0].trim(), '0.24s');
+    // The taking side's digits, too, are ink until its stroke is under them.
+    rest(root);
+    const on = con.querySelector('.dt-digits-on');
+    con.style.setProperty('--ink-land', '0');
+    const none = lengthIn(on, 'var(--ink-cut)');
+    con.style.setProperty('--ink-land', '1');
+    const landed = lengthIn(on, 'var(--ink-cut)');
+    assert.equal(none, 0, 'no paper-coloured digits before the brush (the cut is measured from its seat)');
+    assert.near(landed, lengthIn(on, 'var(--cut)'), 1, 'landed');
+    stage.destroy();
+  });
+
+  // Spec §2.1 warn: a drop of ink falls ≈8vh onto the bell point and spreads into a pale ring; no gold ring.
+  DT.test('theme ink: at the warn bell a drop of ink falls onto the bell point and blooms', () => {
+    const { stage, root } = mountInk(singleAt(OPENING, 120));
+    rest(root);
+    const dot = ink(root, '.dt-warnline').getBoundingClientRect();
+    stage.pulse({ type: 'warn', clock: 'main' });
+    const fall = ink(root, '.dt-ink-fall'), bloom = ink(root, '.dt-ink-bloom');
+    assert.equal(anim(fall), 'dt-ink-fall');
+    assert.equal(anim(bloom), 'dt-ink-bloom');
+    assert.equal(getComputedStyle(fall).animationDuration, '0.3s');
+    assert.equal(getComputedStyle(bloom).animationDuration, '0.7s');
+    assert.ok(root.querySelectorAll('.dt-ring').length > 0);
+    root.querySelectorAll('.dt-ring').forEach(r => assert.equal(getComputedStyle(r).display, 'none', 'no gold ring'));
+    // Both centred on the bell point.
+    rest(root);
+    [fall, bloom].forEach(el => {
+      const r = el.getBoundingClientRect();
+      assert.near(r.left + r.width / 2, dot.left + dot.width / 2, 1.5, nameOf(el));
+      assert.near(r.top + r.height / 2, dot.top + dot.height / 2, 1.5, nameOf(el));
+      assert.equal(getComputedStyle(el).opacity, '0', nameOf(el) + ' is gone at rest');
+    });
+    stage.destroy();
+  });
+
+  DT.test('theme ink: each second of a countdown leaves a faint ring of ink behind the digits, which do not jump', () => {
+    const { stage, root } = mountInk(singleAt(OPENING, 176));
+    rest(root);
+    stage.pulse({ type: 'count', clock: 'main', key: 'c4' });
+    const clock = ink(root, '.dt-clock[data-clock="main"]');
+    assert.equal(anim(clock, '::before'), 'dt-ink-halo');
+    assert.equal(getComputedStyle(clock, '::before').animationDuration, '0.3s');
+    assert.equal(getComputedStyle(clock, '::before').zIndex, '-1', 'behind the digits');
+    assert.ok(clock.classList.contains('is-bump'));
+    clock.querySelectorAll('.dt-digits').forEach(d => assert.equal(anim(d), 'none', 'no bump'));
+    stage.destroy();
+  });
+
+  // Spec §2.1 end: the last of the stroke runs dry, then a 朱文 seal 时 is pressed at the digits' lower right.
+  DT.test('theme ink: when the time runs out the brush runs dry and a 时 seal is pressed beside the digits', () => {
+    const calm = mountInk(singleAt(OPENING, 60));
+    assert.equal(getComputedStyle(ink(calm.root, '.dt-ink-seal-time')).display, 'none', 'no seal while time is left');
+    calm.stage.destroy();
+    [singleAt(OPENING, 181), singleAt(OPENING, 181, 'right'), breakAt(400)].forEach(view => {
+      const { stage, root } = mountInk(view, 1920, 1080);
+      rest(root);
+      const where = root.dataset.kind + ' ' + root.dataset.phase + ' ' + root.dataset.proSeat;
+      const seal = ink(root, '.dt-ink-seal-time');
+      assert.ok(['over', 'done'].indexOf(root.dataset.phase) >= 0, where);
+      assert.ok(getComputedStyle(seal).display !== 'none' && getComputedStyle(seal).opacity === '1', where + ': the seal stays');
+      const s = seal.getBoundingClientRect(), d = ink(root, '.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect();
+      assert.ok(s.width > 0 && !overlaps(s, d), where + ': clear of the digits');
+      assert.ok(s.left >= d.right && s.top + s.height / 2 > d.top + d.height / 2, where + ': at their lower right');
+      assert.ok(/dt-ink-seal/.test(getComputedStyle(seal).filter), where + ': a worn seal');
+      stage.pulse({ type: 'end', clock: 'main' });
+      assert.equal(anim(seal), 'dt-ink-seal-press', where);
+      if (root.dataset.kind === 'single') assert.ok(/^dt-ink-dry/.test(anim(ink(root, '.dt-ink-dry'))), where + ': 枯笔');
+      stage.destroy();
+    });
+  });
+
+  // Spec §2.1 over: the seal paste at the 超时 seal's edge bleeds very slowly (a 2.4 s cycle, small).
+  DT.test('theme ink: in overtime the 超时 seal\'s paste bleeds slowly at its edge', () => {
+    const { stage, root } = mountInk(singleAt(OPENING, 187));
+    rest(root);
+    const bleed = getComputedStyle(ink(root, '.dt-deco-over'), '::before');
+    assert.equal(bleed.content, '"超时"');
+    assert.equal(bleed.animationName, 'dt-ink-ooze');
+    assert.equal(bleed.animationDuration, '2.4s');
+    assert.equal(bleed.animationIterationCount, 'infinite');
+    const calm = mountInk(singleAt(OPENING, 60));
+    assert.ok(['none', 'normal'].indexOf(getComputedStyle(ink(calm.root, '.dt-deco-over'), '::before').content) >= 0);
+    calm.stage.destroy();
+    // Pressed as it appears.
+    const m = mountInk(singleAt(OPENING, 187));
+    rest(m.root);
+    m.stage.moment('over', { side: 'pro', clock: 'main' });
+    assert.equal(anim(ink(m.root, '.dt-deco-over'), '::after'), 'dt-ink-seal-press');
+    m.stage.destroy();
+  });
+
+  DT.test('theme ink: 暂停 seeps out in pale ink, and a resumed clock flicks the stroke\'s dry front', () => {
+    let s = E.toggle(session(OPENING), T0);
+    const { stage, root } = mountInk(E.view(s, T0 + 30000));
+    rest(root);
+    s = E.toggle(s, T0 + 30000);   // paused at 30 s
+    stage.update(E.view(s, T0 + 31000));
+    assert.ok(root.classList.contains('is-m-pause'));
+    assert.equal(anim(ink(root, '.dt-clock[data-clock="main"] .dt-state')), 'dt-ink-seep');
+    s = E.toggle(s, T0 + 32000);
+    stage.update(E.view(s, T0 + 32000));
+    assert.ok(root.classList.contains('is-m-start'));
+    const tip = ink(root, '.dt-ink-tip');
+    assert.equal(anim(tip), 'dt-ink-tip');
+    // At the stroke's end: the dry front starts where the solid body stops.
+    rest(root);
+    const t = tip.getBoundingClientRect();
+    assert.near(t.left, tipX(ink(root, '.dt-field'), 'left') - 0.07 * root.getBoundingClientRect().width, 2);
+    stage.destroy();
+  });
+
+  // Spec §2.1 lock: the side out of time or yielding fades to pale grey ink and a small 止 seal is pressed.
+  DT.test('theme ink: a side that locks fades to pale grey ink and is sealed 止', () => {
+    let s = E.floor(session('自由辩论'), 'pro', T0);
+    const { stage, root } = mountInk(E.view(s, T0 + 30000));
+    rest(root);
+    s = E.yieldTime(s, T0 + 30000);
+    stage.update(E.view(s, T0 + 30000));
+    assert.ok(root.classList.contains('is-m-lock'));
+    assert.equal(root.dataset.mSide, 'pro');
+    const pro = ink(root, '.dt-half[data-side="pro"]'), con = ink(root, '.dt-half[data-side="con"]');
+    assert.equal(anim(pro.querySelector('.dt-ink-seal-stop')), 'dt-ink-seal-press');
+    assert.equal(getComputedStyle(con.querySelector('.dt-ink-seal-stop')).display, 'none', 'only the locked side');
+    const fading = getComputedStyle(pro).transitionProperty.split(',').map(x => x.trim());
+    assert.ok(fading.indexOf('--ink-stroke') >= 0, 'the stroke greys over time');
+    stage.destroy();
+    // At rest, locked.
+    const done = mountInk(E.view(s, T0 + 30000));
+    rest(done.root);
+    const half = side => ink(done.root, '.dt-half[data-side="' + side + '"]');
+    const seal = half('pro').querySelector('.dt-ink-seal-stop');
+    assert.ok(getComputedStyle(seal).display !== 'none' && getComputedStyle(seal).opacity === '1');
+    assert.ok(!overlaps(seal.getBoundingClientRect(), half('pro').querySelector('.dt-state').getBoundingClientRect()), 'beside 已放弃');
+    // The stroke stays, as long as the time it gave up, in pale grey ink.
+    const field = half('pro').querySelector('.dt-half-field'), fcs = getComputedStyle(field);
+    assert.ok(Number(fcs.opacity) > 0.3 && Number(fcs.opacity) < 1, 'paled: ' + fcs.opacity);
+    const grey = srgb(resolve(field, '--ink-stroke')).match(/\d+/g).map(Number);
+    assert.ok(Math.max.apply(null, grey) - Math.min.apply(null, grey) <= 12, 'grey: ' + grey);
+    const box = half('pro').getBoundingClientRect();
+    const gap = 0.024 * done.root.getBoundingClientRect().width;
+    const c = E.view(s, T0 + 30000).clocks.find(x => x.id === 'pro');
+    const left = (c.remaining + c.yielded) / c.total;   // all but the 30 s spoken
+    assert.near(left, 1 - 30000 / c.total, 1e-9);
+    assert.near(tipX(field, 'left') - box.left, left * (box.width - gap), 3, 'as long as what it gave up');
+    done.stage.destroy();
+  });
+
+  // Spec §2.1 title: the 圆相 is drawn with stroke-dashoffset on the title card (≈1.4 s); in a break it pales away
+  // as the break runs down.
+  DT.test('theme ink: the title card draws its 圆相; a break\'s pales as the break runs down', () => {
+    const { stage, root } = mountInk(titleView(), 1920, 1080);
+    assert.equal(root.dataset.mode, 'title');
+    assert.ok(root.classList.contains('is-m-title'));
+    const enso = ink(root, '.dt-card > .dt-ink-enso');
+    assert.ok(getComputedStyle(enso).display !== 'none');
+    const reveal = enso.querySelector('.dt-ink-enso-reveal');
+    assert.equal(anim(reveal), 'dt-ink-enso-draw');
+    assert.equal(getComputedStyle(reveal).animationDuration, '1.4s');
+    // Centred on the card, under its words.
+    const e = enso.getBoundingClientRect(), c = ink(root, '.dt-card').getBoundingClientRect();
+    assert.near(e.left + e.width / 2, c.left + c.width / 2, 2);
+    assert.near(e.top + e.height / 2, c.top + c.height / 2, 2);
+    assert.equal(getComputedStyle(enso).zIndex, '-1');
+    assert.equal(getComputedStyle(ink(root, '.dt-clock[data-clock="main"] > .dt-ink-enso')).display, 'none');
+    stage.destroy();
+    const opacity = secs => {
+      const m = mountInk(breakAt(secs), 1920, 1080);
+      rest(m.root);
+      const el = ink(m.root, '.dt-clock[data-clock="main"] > .dt-ink-enso');
+      assert.ok(getComputedStyle(el).display !== 'none', 'break ' + secs);
+      assert.equal(getComputedStyle(ink(m.root, '.dt-card > .dt-ink-enso')).display, 'none', 'one 圆相 in a break');
+      const o = Number(getComputedStyle(el).opacity);
+      m.stage.destroy();
+      return o;
+    };
+    const early = opacity(5), late = opacity(150);
+    assert.ok(early > 0 && late < early * 0.6, early + ' then ' + late);
+  });
+
+  // A still stage (a thumbnail, reduced motion) gets no moments: the theme's pieces stand at their end state.
+  DT.test('theme ink: a thumbnail and reduced motion show the end state, with nothing moving', () => {
+    const realMatch = window.matchMedia;
+    const check = (mount, label) => {
+      [singleAt(OPENING, 181), titleView(), dualAt(30)].forEach(view => {
+        const { stage, root } = mount(view);
+        const where = label + ' ' + root.dataset.mode + ' ' + root.dataset.kind;
+        stage.pulse({ type: 'warn', clock: 'main' });
+        stage.moment('lock', { side: 'pro' });
+        assert.ok(!Array.from(root.classList).some(c => c.indexOf('is-m-') === 0), where + ': ' + root.className);
+        assert.equal(anim(root), 'none', where);
+        inked(root).concat([ink(root, '.dt-title'), ink(root, '.dt-field')]).forEach(el => {
+          assert.equal(anim(el), 'none', where + ' ' + nameOf(el));
+        });
+        const reveal = ink(root, '.dt-card .dt-ink-enso-reveal');
+        assert.equal(parseFloat(getComputedStyle(reveal).strokeDashoffset), 0, where + ': the 圆相 drawn');
+        if (root.dataset.phase === 'over') assert.equal(getComputedStyle(ink(root, '.dt-ink-seal-time')).opacity, '1', where);
+        stage.destroy();
+      });
+    };
+    check(view => {
+      const box = document.getElementById('sandbox');
+      box.innerHTML = '<div class="dt-stage-host" style="width:480px;height:270px"></div>';
+      const stage = R.mount(box.firstChild, { thumbnail: true });
+      stage.update(view);
+      return { stage, root: box.querySelector('.dt-stage') };
+    }, 'thumbnail');
+    window.matchMedia = q => ({ matches: /reduce/.test(q), media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+    try { check(view => mountInk(view), 'reduced'); } finally { window.matchMedia = realMatch; }
+  });
+
+  DT.test('theme ink: moments in quick succession replay, they do not pile up elements', () => {
+    const { stage, root } = mountInk(dualAt(30));
+    const before = root.querySelectorAll('*').length;
+    for (let i = 0; i < 30; i++) {
+      ['enter', 'start', 'pause', 'warn', 'count', 'end', 'over', 'switch', 'lock', 'title']
+        .forEach(m => stage.moment(m, { side: i % 2 ? 'pro' : 'con', clock: 'main' }));
+    }
+    assert.equal(root.querySelectorAll('*').length, before);
+    stage.destroy();
+  });
+
+  DT.test('theme ink: leaving the theme takes every piece of it off the stage', () => {
+    const { stage, root } = mountInk(singleAt(OPENING, 60));
+    assert.ok(inked(root).length >= 8);
+    assert.ok(root.style.getPropertyValue('--ink-front-l'));
+    const s = E.goto(E.createSession(F(), MATCH, T0, { theme: 'hall' }), idx(OPENING), T0);
+    stage.update(E.view(s, T0));
+    assert.equal(root.dataset.theme, 'hall');
+    assert.equal(inked(root).length, 0);
+    ['--ink-front-l', '--ink-front-r', '--ink-hairs-l', '--ink-hairs-r'].forEach(v => assert.equal(root.style.getPropertyValue(v), '', v));
+    stage.destroy();
   });
 })();
