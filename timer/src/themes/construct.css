@@ -309,3 +309,227 @@
   vertical-align: 0;
   border-radius: 0 100% 0 0;
 }
+
+/* ---- Motion moments (spec §2.5) ---- */
+
+/* The renderer will re-play .is-m-<name> on the stage for each moment, and remove it after --moment-ms (default 1200ms).
+   Animations defined here will run during that window. */
+
+[data-theme="construct"] {
+  --moment-ms: 1200;
+}
+
+/* Enter: grid lines appear sequentially, sector opens (existing), band slides in, stage number stroke draws out.
+   Grid: 8 horizontal + 12 vertical lines, staggered by ~20ms each = ~400ms total.
+   Sector: existing animation dt-construct-open (560ms).
+   Band: slides in from offscreen (480ms).
+   Stage number: stroke draws out (520ms). */
+
+[data-theme="construct"].is-m-enter .dt-deco-over {
+  animation: dt-construct-grid-fade 400ms ease-out;
+}
+
+@keyframes dt-construct-grid-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Band slides in from the seat-away direction */
+[data-theme="construct"].is-m-enter .dt-deco::before {
+  animation: dt-construct-band-enter 480ms cubic-bezier(.16,.84,.24,1);
+}
+
+@keyframes dt-construct-band-enter {
+  from {
+    translate: -80cqw 0;
+    opacity: 0;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+
+/* From right seat: band comes from the other direction */
+[data-theme="construct"][data-pro-seat="right"][data-side="pro"].is-m-enter .dt-deco::before,
+[data-theme="construct"][data-pro-seat="left"][data-side="con"].is-m-enter .dt-deco::before {
+  animation: dt-construct-band-enter-right 480ms cubic-bezier(.16,.84,.24,1);
+}
+
+@keyframes dt-construct-band-enter-right {
+  from {
+    translate: 80cqw 0;
+    opacity: 0;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+
+/* Stage number: stroke draws out */
+[data-theme="construct"].is-m-enter .dt-seg[data-state="current"]::before {
+  animation: dt-construct-number-draw 520ms ease-out;
+}
+
+@keyframes dt-construct-number-draw {
+  from {
+    opacity: 0;
+    -webkit-text-stroke-width: 0;
+  }
+  to {
+    opacity: 1;
+    -webkit-text-stroke-width: .3cqh;
+  }
+}
+
+/* Pause: sector ticks darken. Start: ticks restore. */
+[data-theme="construct"].is-m-pause .dt-field::before,
+[data-theme="construct"].is-m-pause .dt-half-field::before {
+  animation: dt-construct-ticks-dim 300ms ease forwards;
+}
+
+[data-theme="construct"].is-m-start .dt-field::before,
+[data-theme="construct"].is-m-start .dt-half-field::before {
+  animation: dt-construct-ticks-restore 300ms ease forwards;
+}
+
+@keyframes dt-construct-ticks-dim {
+  to { --tick: rgb(241 234 219 / .2); }
+}
+
+@keyframes dt-construct-ticks-restore {
+  from { --tick: rgb(241 234 219 / .2); }
+  to { --tick: rgb(241 234 219 / .5); }
+}
+
+/* Warn: yellow ticks and band flash */
+[data-theme="construct"].is-m-warn .dt-field::before,
+[data-theme="construct"].is-m-warn .dt-half-field::before {
+  animation: dt-construct-ticks-flash 350ms ease-in-out;
+}
+
+[data-theme="construct"].is-m-warn .dt-deco::before {
+  animation: dt-construct-band-flash 350ms ease-in-out;
+}
+
+@keyframes dt-construct-ticks-flash {
+  0%, 100% { --tick: rgb(241 234 219 / .5); }
+  50% { --tick: var(--accent); }
+}
+
+@keyframes dt-construct-band-flash {
+  0%, 100% { opacity: 1; }
+  50% { background: var(--accent); }
+}
+
+/* Count: outermost tick clicks one notch (3deg rotation).
+   This needs to be on a specific element. We'll use a pseudo on the field's ::before for the rotating tick. */
+
+/* End: center hub ring pulses once */
+[data-theme="construct"].is-m-end .dt-field::after,
+[data-theme="construct"].is-m-end .dt-half-field::after {
+  content: "";
+  position: absolute;
+  left: var(--dial-x);
+  top: var(--dial-y);
+  width: calc(var(--hub-r) * 2);
+  height: calc(var(--hub-r) * 2);
+  margin-left: calc(var(--hub-r) * -1);
+  margin-top: calc(var(--hub-r) * -1);
+  border: .5cqh solid var(--ink);
+  border-radius: 50%;
+  animation: dt-construct-hub-pulse 500ms ease-out;
+  pointer-events: none;
+}
+
+@keyframes dt-construct-hub-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+/* Over: yellow band breathes slowly (2.4s cycle) */
+[data-theme="construct"][data-phase="over"] .dt-deco::before {
+  animation: dt-construct-band-breathe 2400ms ease-in-out infinite;
+}
+
+@keyframes dt-construct-band-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Switch: sectors counter-rotate. The existing --construct-sweep transition handles size change.
+   Add a rotation hint during the moment. */
+[data-theme="construct"].is-m-switch .dt-field,
+[data-theme="construct"].is-m-switch .dt-half-field {
+  animation: dt-construct-sector-rotate 520ms ease-in-out;
+}
+
+@keyframes dt-construct-sector-rotate {
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(-3deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* Lock: exhausted sector becomes hollow (stroke only).
+   Apply to the locked half in dual mode. */
+[data-theme="construct"] .dt-half[data-locked] .dt-half-field {
+  animation: dt-construct-sector-hollow 600ms ease-out forwards;
+}
+
+@keyframes dt-construct-sector-hollow {
+  to {
+    background: 
+      radial-gradient(circle calc(var(--hub-r) + .5cqh) at var(--dial-x) var(--dial-y), var(--hub-ring)),
+      radial-gradient(circle var(--hub-r) at var(--dial-x) var(--dial-y), transparent calc(100% - 2px), var(--side-color) calc(100% - 2px), var(--side-color) 100%, transparent 100%),
+      conic-gradient(from var(--dial-from) at var(--dial-x) var(--dial-y), transparent 0 calc(var(--construct-sweep) - 1deg), var(--side-color) calc(var(--construct-sweep) - 1deg) calc(var(--construct-sweep) + 1deg), transparent calc(var(--construct-sweep) + 1deg));
+    opacity: 0.5;
+  }
+}
+
+/* Title: large circle and grid counter-rotate very slowly (60s) */
+[data-theme="construct"][data-mode="title"].is-m-title .dt-deco {
+  animation: dt-construct-title-rotate 60s linear infinite;
+}
+
+[data-theme="construct"][data-mode="title"].is-m-title .dt-deco-over {
+  animation: dt-construct-title-counter 60s linear infinite;
+}
+
+@keyframes dt-construct-title-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dt-construct-title-counter {
+  to { transform: rotate(-360deg); }
+}
+
+/* Reduced motion: skip all animations, go directly to end state */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="construct"].is-m-enter .dt-deco-over,
+  [data-theme="construct"].is-m-enter .dt-deco::before,
+  [data-theme="construct"].is-m-enter .dt-seg[data-state="current"]::before,
+  [data-theme="construct"].is-m-pause .dt-field::before,
+  [data-theme="construct"].is-m-pause .dt-half-field::before,
+  [data-theme="construct"].is-m-start .dt-field::before,
+  [data-theme="construct"].is-m-start .dt-half-field::before,
+  [data-theme="construct"].is-m-warn .dt-field::before,
+  [data-theme="construct"].is-m-warn .dt-half-field::before,
+  [data-theme="construct"].is-m-warn .dt-deco::before,
+  [data-theme="construct"].is-m-end .dt-field::after,
+  [data-theme="construct"].is-m-end .dt-half-field::after,
+  [data-theme="construct"][data-phase="over"] .dt-deco::before,
+  [data-theme="construct"].is-m-switch .dt-field,
+  [data-theme="construct"].is-m-switch .dt-half-field,
+  [data-theme="construct"] .dt-half[data-locked] .dt-half-field,
+  [data-theme="construct"][data-mode="title"].is-m-title .dt-deco,
+  [data-theme="construct"][data-mode="title"].is-m-title .dt-deco-over {
+    animation: none !important;
+  }
+}

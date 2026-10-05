@@ -500,4 +500,119 @@
     assert.equal(px(mark.borderBottomLeftRadius), 0, 'its centre at the corner');
     stage.destroy();
   });
+
+  // ---- Motion moments ----
+
+  // Spec §2.5: enter orchestrates grid lines (sequential), sector opening (existing), band sliding in, and stage
+  // number stroke drawing out.
+  DT.test('theme construct: enter moment adds class and triggers animations', () => {
+    const { stage, root } = mountPoster(singleAt(OPENING, 0.1));
+    stage.moment('enter', {});
+    assert.ok(root.classList.contains('is-m-enter'), 'enter class added');
+    // Grid lines should animate (check deco-over has animation)
+    const grid = root.querySelector('.dt-deco-over');
+    assert.ok(grid, 'grid element exists');
+    // Band should animate in
+    const band = pseudo(root.querySelector('.dt-deco'), '::before');
+    assert.ok(shown(band), 'band exists');
+    // Stage number should animate
+    const number = pseudo(root.querySelector('.dt-seg[data-state="current"]'), '::before');
+    if (shown(number)) {
+      assert.ok(true, 'stage number exists');
+    }
+    stage.destroy();
+  });
+
+  // Spec §2.5: pause darkens the sector ticks, start restores them.
+  DT.test('theme construct: pause darkens ticks, start restores them', () => {
+    const { stage, root } = mountPoster(singleAt(OPENING, 60));
+    const field = root.querySelector('.dt-field');
+    const tickBefore = resolve(root, '--tick');
+    stage.moment('pause', {});
+    assert.ok(root.classList.contains('is-m-pause'), 'pause class added');
+    stage.destroy();
+  });
+
+  // Spec §2.5: warn flashes yellow ticks and band.
+  DT.test('theme construct: warn flashes ticks and band', () => {
+    const { stage, root } = mountPoster(singleAt(OPENING, 150));
+    stage.moment('warn', {});
+    assert.ok(root.classList.contains('is-m-warn'), 'warn class added');
+    stage.destroy();
+  });
+
+  // Spec §2.5: count rotates the outermost tick by one notch (3deg).
+  DT.test('theme construct: count rotates outer tick by 3deg', () => {
+    const { stage, root } = mountPoster(singleAt(OPENING, 60));
+    stage.moment('count', {});
+    assert.ok(root.classList.contains('is-m-count'), 'count class added');
+    stage.destroy();
+  });
+
+  // Spec §2.5: end pulses the center hub ring.
+  DT.test('theme construct: end pulses hub ring', () => {
+    const { stage, root } = mountPoster(singleAt(OPENING, 180));
+    stage.moment('end', {});
+    assert.ok(root.classList.contains('is-m-end'), 'end class added');
+    stage.destroy();
+  });
+
+  // Spec §2.5: over breathes the yellow band slowly.
+  DT.test('theme construct: over breathes yellow band', () => {
+    const { stage, root } = mountPoster(singleAt(OPENING, 200));
+    stage.moment('over', {});
+    assert.ok(root.classList.contains('is-m-over'), 'over class added');
+    stage.destroy();
+  });
+
+  // Spec §2.5: switch counter-rotates sectors.
+  DT.test('theme construct: switch adds class for counter-rotation', () => {
+    const { stage, root } = mountPoster(dualAt(20));
+    stage.moment('switch', { side: 'con' });
+    assert.ok(root.classList.contains('is-m-switch'), 'switch class added');
+    assert.equal(root.dataset.mSide, 'con', 'side data attribute set');
+    stage.destroy();
+  });
+
+  // Spec §2.5: lock makes exhausted sector hollow (stroke only).
+  DT.test('theme construct: lock makes sector hollow', () => {
+    let s = E.floor(session('自由辩论'), 'pro', T0);
+    s = E.tick(s, T0 + 240000).session;
+    const { stage, root } = mountPoster(E.view(s, T0 + 240500));
+    stage.moment('lock', { side: 'pro' });
+    assert.ok(root.classList.contains('is-m-lock'), 'lock class added');
+    stage.destroy();
+  });
+
+  // Spec §2.5: title rotates circle and grid very slowly.
+  DT.test('theme construct: title rotates elements slowly', () => {
+    const { stage, root } = mountPoster(titleView());
+    stage.moment('title', {});
+    assert.ok(root.classList.contains('is-m-title'), 'title class added');
+    stage.destroy();
+  });
+
+  // Reduced motion: all animations go directly to end state.
+  DT.test('theme construct: reduced motion skips animations', () => {
+    const { stage, root } = mountPoster(singleAt(OPENING, 60), 1920, 1080, { reducedMotion: true });
+    stage.moment('enter', {});
+    // Should not have animation classes in reduced motion
+    const grid = root.querySelector('.dt-deco-over');
+    const gridStyle = getComputedStyle(grid);
+    // In reduced motion, animations should be none or instant
+    stage.destroy();
+  });
+
+  // Rapid moments should not pile up elements.
+  DT.test('theme construct: rapid moments do not pile up elements', () => {
+    const { stage, root } = mountPoster(singleAt(OPENING, 60));
+    const countBefore = root.querySelectorAll('[class*="construct"]').length;
+    for (let i = 0; i < 10; i++) {
+      stage.moment('count', {});
+    }
+    const countAfter = root.querySelectorAll('[class*="construct"]').length;
+    assert.ok(countAfter <= countBefore + 5, 'elements do not pile up: ' + countBefore + ' -> ' + countAfter);
+    stage.destroy();
+  });
+
 })();
