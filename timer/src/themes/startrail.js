@@ -119,6 +119,7 @@
     // drawn: the scene on the canvas, each pole's used share and column width, and the angle each of its trails has
     // been drawn to. layers: in free debate, each side's whole sky on a canvas of its own (see frame).
     let W = 0, H = 0, skies = {}, drawn = null, layers = [];
+    let switchingSide = null;  // track which side is switching for pole rotation
 
     function skyOf(name) {
       const half = /\/half$/.test(name);
@@ -245,6 +246,8 @@
         const moved = !!sc.dual && (fresh || sc.poles.some((p, i) => p.width !== drawn.widths[i]));
         sc.poles.forEach((p, i) => {
           if (!fresh && p.used === drawn.used[i]) return;
+          // During switch moment, freeze the non-speaking side's trails (don't grow them)
+          if (switchingSide && sc.dual && p.cast !== switchingSide) return;
           const targets = !sc.dual ? [onStage(p)] : moved ? [layers[i]] : [layers[i], onStage(p)];
           arcs(p, drawn.ends[i], theta(p.used), fresh ? 'round' : 'butt', targets);
           drawn.used[i] = p.used;
@@ -259,8 +262,16 @@
         if (moved) compose(sc.poles, fresh ? null : drawn.widths);
         drawn.widths = sc.poles.map(p => p.width);
       },
+      moment(name, detail) {
+        if (name === 'switch' && detail && detail.side) {
+          // Start pole rotation: the speaking side's pole rotates, other freezes
+          switchingSide = detail.side;
+          // Clear after the switch animation duration (500ms)
+          setTimeout(() => { switchingSide = null; }, 500);
+        }
+      },
       resize(w, h) { W = w; H = h; skies = {}; drawn = null; dropLayers(); },
-      destroy() { skies = {}; drawn = null; dropLayers(); },
+      destroy() { skies = {}; drawn = null; dropLayers(); switchingSide = null; },
     };
   }
 
