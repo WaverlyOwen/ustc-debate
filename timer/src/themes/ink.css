@@ -82,15 +82,29 @@
   .dt-stage[data-theme="ink"] .dt-half-field { --stroke-at: max(var(--stroke-stub, 0px), round(nearest, var(--stroke-len), .2cqw)); }
 }
 
+/* A speck of ink through the stage's own brush, too faint to see, painted for a few frames as the stage goes up
+   (ink.js), so the browser has built the brush filter before the first entrance needs it. */
+.dt-stage[data-theme="ink"] .dt-ink-warm {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4cqh;
+  height: 4cqh;
+  background: var(--ink);
+  opacity: .01;
+  pointer-events: none;
+  filter: url(#dt-ink-brush-xl);
+}
+
 /* The brush for the stage's size (see ink.js). */
 @container (max-width: 1600px) {
-  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-l); }
+  .dt-stage[data-theme="ink"] :is(.dt-field, .dt-half-field, .dt-ink-warm) { filter: url(#dt-ink-brush-l); }
 }
 @container (max-width: 1100px) {
-  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-m); }
+  .dt-stage[data-theme="ink"] :is(.dt-field, .dt-half-field, .dt-ink-warm) { filter: url(#dt-ink-brush-m); }
 }
 @container (max-width: 520px) {
-  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-s); }
+  .dt-stage[data-theme="ink"] :is(.dt-field, .dt-half-field, .dt-ink-warm) { filter: url(#dt-ink-brush-s); }
 }
 
 /* The digits' two layers change colour where the stroke's solid body ends, not at the tip of its dry hairs: across
@@ -333,6 +347,7 @@
 
 .dt-stage[data-theme="ink"] .dt-head::before,
 .dt-stage[data-theme="ink"] .dt-deco-over::after,
+.dt-stage[data-theme="ink"] .dt-deco-over::before,
 .dt-stage[data-theme="ink"] .dt-ink-seal {
   --seal-pressed: color-mix(in oklab, var(--seal), #4a0a02 calc(var(--ink-press) * 40%));
 }
@@ -442,6 +457,17 @@
   25% { opacity: 1; }
   60% { opacity: 1; transform: scale(1) rotate(0deg); --ink-press: 1; animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
   to { opacity: 1; transform: scale(1) rotate(0deg); --ink-press: 0; }
+}
+
+/* Held through a new stage's first frames (ink.js, HOLD_FRAMES): every entrance stays at its start, and the stroke,
+   the wet blot and the digits, which start from nothing, are painted at 1%, too faint to see, so the browser has
+   put them through their filters before anything moves (it skips what is wholly transparent). */
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold],
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *,
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *::before,
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *::after { animation-play-state: paused !important; }
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] :is(.dt-field, .dt-half-field, .dt-clock, .dt-ink-press) {
+  opacity: .01 !important;
 }
 
 /* ---- switch: 提笔—落笔. The yielding side's lift is its transition (above); the taking side lands its brush again
@@ -604,9 +630,11 @@
 .dt-stage[data-theme="ink"].is-m-end .dt-ink-seal-time { animation: dt-ink-seal-press 420ms linear 380ms both; }
 
 /* ---- over: the 超时 seal is pressed after the 时 (its own moment comes with the end); then its paste bleeds very
-   slowly into the paper at its edge, a 2.4 s breath. ---- */
+   slowly into the paper at its edge, a 2.4 s breath. At rest (reduced motion) the bleed is not there: only the
+   breath shows it, so a still seal is the crisp one alone, not a smudge. ---- */
 .dt-stage[data-theme="ink"].is-m-over .dt-deco-over::after { animation: dt-ink-seal-press 420ms linear 640ms both; }
 .dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::before {
+  opacity: 0;
   filter: url(#dt-ink-seal) blur(.35cqh);
   /* Once the seal is down: overtime begins with the end's 时 and this seal's press. */
   animation: dt-ink-ooze 2400ms cubic-bezier(.45, 0, .55, 1) 1060ms infinite backwards;

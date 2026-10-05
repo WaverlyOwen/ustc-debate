@@ -525,17 +525,35 @@
     // One moment of the motion vocabulary: its class replayed on the stage for --moment-ms, its side in
     // data-m-side, and the theme's decoration and painter told. Nothing on a still stage (thumbnail, frozen demo,
     // reduced motion), where the theme's elements stay at their end state.
+    var firstEnter = true;  // track whether this is the stage's first enter (which needs the double rAF delay for ink)
     function moment(name, detail) {
       if (destroyed || thumbnail || frozenPage() || reducedMotion()) return;
       const d = { side: (detail && detail.side) || null, clock: (detail && detail.clock) || null,
         key: (detail && detail.key) || null };
       const cls = 'is-m-' + name;
       attr(stage, 'data-m-side', d.side || 'none');
-      replay(stage, cls);
-      cancel(momentTimers[name] || null);
-      momentTimers[name] = later(() => { delete momentTimers[name]; stage.classList.remove(cls); }, momentMs());
-      if (deco && typeof deco.moment === 'function') decoCall(() => deco.moment(name, d));
-      if (paint && paint.painter && typeof paint.painter.moment === 'function') guard(() => paint.painter.moment(name, d));
+      // For ink theme's first enter, delay adding the class until after the new stage's first frame has painted
+      // (double rAF), so the brush animation starts after the heavy filter-rasterization frame rather than spending
+      // its first 120ms inside it. Other themes and replayed enters don't need this delay.
+      if (name === 'enter' && firstEnter && theme === 'ink') {
+        firstEnter = false;
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            if (destroyed) return;
+            replay(stage, cls);
+            cancel(momentTimers[name] || null);
+            momentTimers[name] = later(() => { delete momentTimers[name]; stage.classList.remove(cls); }, momentMs());
+          });
+        });
+        if (deco && typeof deco.moment === 'function') decoCall(() => deco.moment(name, d));
+        if (paint && paint.painter && typeof paint.painter.moment === 'function') guard(() => paint.painter.moment(name, d));
+      } else {
+        replay(stage, cls);
+        cancel(momentTimers[name] || null);
+        momentTimers[name] = later(() => { delete momentTimers[name]; stage.classList.remove(cls); }, momentMs());
+        if (deco && typeof deco.moment === 'function') decoCall(() => deco.moment(name, d));
+        if (paint && paint.painter && typeof paint.painter.moment === 'function') guard(() => paint.painter.moment(name, d));
+      }
     }
 
     // The side a bell's clock speaks for: a dual clock is its side; the main clock is the stage's.

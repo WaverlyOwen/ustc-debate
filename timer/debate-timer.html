@@ -3046,15 +3046,29 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   .dt-stage[data-theme="ink"] .dt-half-field { --stroke-at: max(var(--stroke-stub, 0px), round(nearest, var(--stroke-len), .2cqw)); }
 }
 
+/* A speck of ink through the stage's own brush, too faint to see, painted for a few frames as the stage goes up
+   (ink.js), so the browser has built the brush filter before the first entrance needs it. */
+.dt-stage[data-theme="ink"] .dt-ink-warm {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4cqh;
+  height: 4cqh;
+  background: var(--ink);
+  opacity: .01;
+  pointer-events: none;
+  filter: url(#dt-ink-brush-xl);
+}
+
 /* The brush for the stage's size (see ink.js). */
 @container (max-width: 1600px) {
-  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-l); }
+  .dt-stage[data-theme="ink"] :is(.dt-field, .dt-half-field, .dt-ink-warm) { filter: url(#dt-ink-brush-l); }
 }
 @container (max-width: 1100px) {
-  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-m); }
+  .dt-stage[data-theme="ink"] :is(.dt-field, .dt-half-field, .dt-ink-warm) { filter: url(#dt-ink-brush-m); }
 }
 @container (max-width: 520px) {
-  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-s); }
+  .dt-stage[data-theme="ink"] :is(.dt-field, .dt-half-field, .dt-ink-warm) { filter: url(#dt-ink-brush-s); }
 }
 
 /* The digits' two layers change colour where the stroke's solid body ends, not at the tip of its dry hairs: across
@@ -3297,6 +3311,7 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 
 .dt-stage[data-theme="ink"] .dt-head::before,
 .dt-stage[data-theme="ink"] .dt-deco-over::after,
+.dt-stage[data-theme="ink"] .dt-deco-over::before,
 .dt-stage[data-theme="ink"] .dt-ink-seal {
   --seal-pressed: color-mix(in oklab, var(--seal), #4a0a02 calc(var(--ink-press) * 40%));
 }
@@ -3406,6 +3421,17 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   25% { opacity: 1; }
   60% { opacity: 1; transform: scale(1) rotate(0deg); --ink-press: 1; animation-timing-function: cubic-bezier(.2, .7, .3, 1); }
   to { opacity: 1; transform: scale(1) rotate(0deg); --ink-press: 0; }
+}
+
+/* Held through a new stage's first frames (ink.js, HOLD_FRAMES): every entrance stays at its start, and the stroke,
+   the wet blot and the digits, which start from nothing, are painted at 1%, too faint to see, so the browser has
+   put them through their filters before anything moves (it skips what is wholly transparent). */
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold],
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *,
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *::before,
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *::after { animation-play-state: paused !important; }
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] :is(.dt-field, .dt-half-field, .dt-clock, .dt-ink-press) {
+  opacity: .01 !important;
 }
 
 /* ---- switch: 提笔—落笔. The yielding side's lift is its transition (above); the taking side lands its brush again
@@ -3568,9 +3594,11 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-stage[data-theme="ink"].is-m-end .dt-ink-seal-time { animation: dt-ink-seal-press 420ms linear 380ms both; }
 
 /* ---- over: the 超时 seal is pressed after the 时 (its own moment comes with the end); then its paste bleeds very
-   slowly into the paper at its edge, a 2.4 s breath. ---- */
+   slowly into the paper at its edge, a 2.4 s breath. At rest (reduced motion) the bleed is not there: only the
+   breath shows it, so a still seal is the crisp one alone, not a smudge. ---- */
 .dt-stage[data-theme="ink"].is-m-over .dt-deco-over::after { animation: dt-ink-seal-press 420ms linear 640ms both; }
 .dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::before {
+  opacity: 0;
   filter: url(#dt-ink-seal) blur(.35cqh);
   /* Once the seal is down: overtime begins with the end's 时 and this seal's press. */
   animation: dt-ink-ooze 2400ms cubic-bezier(.45, 0, .55, 1) 1060ms infinite backwards;
@@ -6658,17 +6686,35 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     // One moment of the motion vocabulary: its class replayed on the stage for --moment-ms, its side in
     // data-m-side, and the theme's decoration and painter told. Nothing on a still stage (thumbnail, frozen demo,
     // reduced motion), where the theme's elements stay at their end state.
+    var firstEnter = true;  // track whether this is the stage's first enter (which needs the double rAF delay for ink)
     function moment(name, detail) {
       if (destroyed || thumbnail || frozenPage() || reducedMotion()) return;
       const d = { side: (detail && detail.side) || null, clock: (detail && detail.clock) || null,
         key: (detail && detail.key) || null };
       const cls = 'is-m-' + name;
       attr(stage, 'data-m-side', d.side || 'none');
-      replay(stage, cls);
-      cancel(momentTimers[name] || null);
-      momentTimers[name] = later(() => { delete momentTimers[name]; stage.classList.remove(cls); }, momentMs());
-      if (deco && typeof deco.moment === 'function') decoCall(() => deco.moment(name, d));
-      if (paint && paint.painter && typeof paint.painter.moment === 'function') guard(() => paint.painter.moment(name, d));
+      // For ink theme's first enter, delay adding the class until after the new stage's first frame has painted
+      // (double rAF), so the brush animation starts after the heavy filter-rasterization frame rather than spending
+      // its first 120ms inside it. Other themes and replayed enters don't need this delay.
+      if (name === 'enter' && firstEnter && theme === 'ink') {
+        firstEnter = false;
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            if (destroyed) return;
+            replay(stage, cls);
+            cancel(momentTimers[name] || null);
+            momentTimers[name] = later(() => { delete momentTimers[name]; stage.classList.remove(cls); }, momentMs());
+          });
+        });
+        if (deco && typeof deco.moment === 'function') decoCall(() => deco.moment(name, d));
+        if (paint && paint.painter && typeof paint.painter.moment === 'function') guard(() => paint.painter.moment(name, d));
+      } else {
+        replay(stage, cls);
+        cancel(momentTimers[name] || null);
+        momentTimers[name] = later(() => { delete momentTimers[name]; stage.classList.remove(cls); }, momentMs());
+        if (deco && typeof deco.moment === 'function') decoCall(() => deco.moment(name, d));
+        if (paint && paint.painter && typeof paint.painter.moment === 'function') guard(() => paint.painter.moment(name, d));
+      }
     }
 
     // The side a bell's clock speaks for: a dual clock is its side; the main clock is the stage's.
@@ -6970,12 +7016,42 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 
   let stages = 0;   // numbers each stage's masks: two stages on one page (the console and its preview) share no id
 
+  // A new stage's first frames can take a few hundred ms to reach the screen: its stroke goes through the brush
+  // filter, its digits are set, for the first time. The browser runs a frame or two ahead of what it shows, and the
+  // CSS animations' clocks run on through the wait, so the room would first see the stroke already half pushed out.
+  // The entrance is held at its start (data-ink-hold, ink.css) for this many frames, while the stroke and the digits
+  // are painted too faint to see; by then that first paint is on the screen, and the brush comes down from the top.
+  // Most of that wait is the browser building the brush filter the first time any stroke goes through it, so a stage
+  // that moves also paints a speck through its brush as it goes up (.dt-ink-warm, for WARM_FRAMES), and its first
+  // entrance (after the title card, say) has only the rest of the wait to hold through.
+  const HOLD_FRAMES = 4, WARM_FRAMES = 8;
+
   // The pieces the stylesheet moves: under the stroke, the bleed round it; over it, the wet blot where the brush came
   // down, the falling drop and its bloom, the dry front and the last dry hairs; a 时 seal by the digits,
   // a 止 seal in each half, a 圆相 on the title card and one behind a break's digits. None is driven from here: each
-  // moment's class on the stage (render.js) plays them, and without one they rest at their end state.
-  function decorate(stage) {
-    const doc = stage.ownerDocument, n = ++stages, added = [];
+  // moment's class on the stage (render.js) plays them, and without one they rest at their end state. The one thing
+  // done here is holding an entrance through its first frames (HOLD_FRAMES).
+  function decorate(stage, flags) {
+    const doc = stage.ownerDocument, win = doc.defaultView || window, n = ++stages, added = [];
+    const still = !!(flags && (flags.thumbnail || flags.reducedMotion || flags.frozen));
+    // fn after n animation frames; the returned function cancels it.
+    const afterFrames = (count, fn) => {
+      let id = null, left = count;
+      const tick = () => { id = null; if (--left > 0) id = win.requestAnimationFrame(tick); else fn(); };
+      id = win.requestAnimationFrame(tick);
+      return () => { if (id !== null) win.cancelAnimationFrame(id); id = null; };
+    };
+    let held = null;   // cancels the pending end of a hold
+    const release = () => {
+      if (held) held();
+      held = null;
+      stage.removeAttribute('data-ink-hold');
+    };
+    function hold() {
+      release();
+      stage.setAttribute('data-ink-hold', '');
+      held = afterFrames(HOLD_FRAMES, release);
+    }
     const put = (parent, html) => {
       if (!parent) return;
       const box = doc.createElement('div');
@@ -6993,8 +7069,17 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     put(q('.dt-card'), enso('dt-ink-enso-' + n + '-title'));
     stage.querySelectorAll('.dt-half').forEach(half => put(half, seal('stop', '止')));
     Object.keys(IMAGES).forEach(name => stage.style.setProperty(name, IMAGES[name]));
+    let warmed = null;   // cancels the speck's removal
+    if (!still) {
+      put(q('.dt-deco'), piece('warm'));
+      const speck = added[added.length - 1];
+      warmed = afterFrames(WARM_FRAMES, () => { warmed = null; speck.remove(); });
+    }
     return {
+      moment(name) { if (name === 'enter') hold(); },
       destroy() {
+        release();
+        if (warmed) warmed();
         added.forEach(el => el.remove());
         Object.keys(IMAGES).forEach(name => stage.style.removeProperty(name));
       },

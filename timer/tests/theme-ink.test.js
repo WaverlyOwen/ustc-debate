@@ -391,24 +391,142 @@
 
   // Spec §2.1 enter: 起笔 at the seat, 行笔 with a 飞白 front, 收笔 bleeding into the paper; then the title seeps
   // from pale ink to dense and the small seal is pressed. Not the hall's sweep and rise.
-  DT.test('theme ink: a new stage lands the brush from the seat, then seeps the title in and presses the seal', () => {
-    const { stage, root } = mountInk(singleAt(OPENING, 60));   // its first view enters
-    assert.ok(root.classList.contains('is-m-enter'));
-    assert.equal(anim(root), 'dt-ink-land', 'the brush\'s reach, which the stroke and the digits follow');
-    assert.equal(anim(ink(root, '.dt-ink-press')), 'dt-ink-press');
-    assert.equal(anim(ink(root, '.dt-ink-bleed')), 'dt-ink-bleed');
-    assert.equal(anim(ink(root, '.dt-title')), 'dt-ink-seep');
-    assert.equal(anim(ink(root, '.dt-head'), '::before'), 'dt-ink-seal-press');
-    const field = ink(root, '.dt-field'), cs = getComputedStyle(field);
-    assert.equal(cs.animationName, 'dt-ink-head', 'the stroke\'s head comes down (not the hall\'s clip-path sweep)');
-    assert.ok(/url\(/.test(cs.maskImage || cs.webkitMaskImage), 'the stroke is shown through its 飞白 front');
-    ['.dt-clock[data-clock="main"]', '.dt-speaker'].forEach(s => assert.ok(!/dt-rise/.test(anim(ink(root, s))), s));
-    // The brush moves fast, then slow (spec: cubic-bezier(.16,.84,.24,1), ≈520 ms after a ≈120 ms press).
-    const st = getComputedStyle(root);
-    assert.equal(st.animationTimingFunction, 'cubic-bezier(0.16, 0.84, 0.24, 1)');
-    assert.equal(st.animationDuration, '0.52s');
-    assert.equal(st.animationDelay, '0.12s');
-    stage.destroy();
+  DT.test('theme ink: a new stage lands the brush from the seat, then seeps the title in and presses the seal', async () => {
+    const frames = fakeFrames();
+    try {
+      const { stage, root } = mountInk(singleAt(OPENING, 60));   // its first view enters
+      frames.step(2);   // double rAF for enter
+      assert.ok(root.classList.contains('is-m-enter'));
+      assert.equal(anim(root), 'dt-ink-land', 'the brush\'s reach, which the stroke and the digits follow');
+      assert.equal(anim(ink(root, '.dt-ink-press')), 'dt-ink-press');
+      assert.equal(anim(ink(root, '.dt-ink-bleed')), 'dt-ink-bleed');
+      assert.equal(anim(ink(root, '.dt-title')), 'dt-ink-seep');
+      assert.equal(anim(ink(root, '.dt-head'), '::before'), 'dt-ink-seal-press');
+      const field = ink(root, '.dt-field'), cs = getComputedStyle(field);
+      assert.equal(cs.animationName, 'dt-ink-head', 'the stroke\'s head comes down (not the hall\'s clip-path sweep)');
+      assert.ok(/url\(/.test(cs.maskImage || cs.webkitMaskImage), 'the stroke is shown through its 飞白 front');
+      ['.dt-clock[data-clock="main"]', '.dt-speaker'].forEach(s => assert.ok(!/dt-rise/.test(anim(ink(root, s))), s));
+      // The brush moves fast, then slow (spec: cubic-bezier(.16,.84,.24,1), ≈520 ms after a ≈120 ms press).
+      const st = getComputedStyle(root);
+      assert.equal(st.animationTimingFunction, 'cubic-bezier(0.16, 0.84, 0.24, 1)');
+      assert.equal(st.animationDuration, '0.52s');
+      assert.equal(st.animationDelay, '0.12s');
+      stage.destroy();
+    } finally {
+      frames.restore();
+    }
+  });
+
+  // The page's animation frames, stepped by the test (a headless test page gets none of its own): requestAnimationFrame
+  // queues, step(n) runs n frames' worth of what is queued.
+  function fakeFrames() {
+    const real = { raf: window.requestAnimationFrame, caf: window.cancelAnimationFrame };
+    let queue = new Map(), id = 0;
+    window.requestAnimationFrame = fn => { queue.set(++id, fn); return id; };
+    window.cancelAnimationFrame = k => { queue.delete(k); };
+    return {
+      step(n) {
+        for (let i = 0; i < n; i++) { const due = queue; queue = new Map(); due.forEach(fn => fn(performance.now())); }
+      },
+      pending: () => queue.size,
+      restore() { window.requestAnimationFrame = real.raf; window.cancelAnimationFrame = real.caf; },
+    };
+  }
+
+  // A new stage's first frames can take a few hundred ms to reach the screen (its stroke put through the brush filter
+  // for the first time). The entrance holds at its start through them, so the room sees the brush come down rather
+  // than a stroke already half pushed out; meanwhile the stroke and the digits are painted, too faint to see, so
+  // that cost is paid before anything moves.
+  DT.test('theme ink: a new stage holds the brush at its start until its first frames are painted', async () => {
+    const frames = fakeFrames();
+    try {
+      const { stage, root } = mountInk(singleAt(OPENING, 60));   // its first view enters
+      frames.step(2);   // double rAF to add is-m-enter
+      const field = ink(root, '.dt-field'), clock = ink(root, '.dt-clock[data-clock="main"]');
+      assert.ok(root.hasAttribute('data-ink-hold'), 'held as it enters');
+      [[root], [field], [clock], [ink(root, '.dt-ink-press')], [ink(root, '.dt-head'), '::before']].forEach(([el, which]) => {
+        assert.equal(getComputedStyle(el, which || null).animationPlayState, 'paused', nameOf(el) + (which || ''));
+      });
+      [field, clock].forEach(el => {
+        const o = parseFloat(getComputedStyle(el).opacity);
+        assert.ok(o > 0 && o <= 0.02, nameOf(el) + ' painted, yet not to be seen: ' + o);
+      });
+      const land = root.getAnimations().find(a => a.animationName === 'dt-ink-land');
+      assert.equal(land.playState, 'paused');
+      await new Promise(r => setTimeout(r, 150));
+      frames.step(1);   // now at 3 frames total (2 + 1)
+      assert.ok(root.hasAttribute('data-ink-hold'), 'still held three frames in');
+      assert.equal(land.currentTime, 0, 'the brush has not moved');
+      frames.step(1);   // now at 4 frames, hold releases
+      assert.ok(!root.hasAttribute('data-ink-hold'), 'let go after its first frames');
+      assert.equal(getComputedStyle(field).animationPlayState, 'running');
+      assert.equal(getComputedStyle(field).animationName, 'dt-ink-head', 'the brush comes down from its start');
+      assert.equal(land.playState === 'paused', false);
+      assert.ok(parseFloat(getComputedStyle(clock).opacity) < 1, 'the digits then appear as before');
+      // An entrance replayed while held is held afresh, by one frame request at a time.
+      frames.step(8);
+      assert.equal(frames.pending(), 0, 'nothing left waiting');
+      stage.moment('enter', { side: 'pro', clock: 'main' });
+      frames.step(2);
+      stage.moment('enter', { side: 'pro', clock: 'main' });
+      assert.equal(frames.pending(), 1);
+      frames.step(3);
+      assert.ok(root.hasAttribute('data-ink-hold'));
+      frames.step(1);
+      assert.ok(!root.hasAttribute('data-ink-hold'));
+      stage.destroy();
+      // Only a new stage is held: a change of floor plays at once.
+      const dual = mountInk(dualAt(30));
+      frames.step(8);
+      dual.stage.moment('switch', { side: 'con', clock: 'con' });
+      assert.ok(!dual.root.hasAttribute('data-ink-hold'));
+      assert.equal(frames.pending(), 0);
+      // A stage taken down while held leaves nothing waiting on it.
+      dual.stage.moment('enter', { side: 'con', clock: 'con' });
+      assert.ok(dual.root.hasAttribute('data-ink-hold'));
+      dual.stage.destroy();
+      assert.equal(frames.pending(), 0);
+      assert.ok(!dual.root.hasAttribute('data-ink-hold'));
+    } finally { frames.restore(); }
+  });
+
+  // Most of that first wait is the brush filter being built, so a stage that moves paints a speck through its own
+  // brush as it goes up (on the title card, long before the first stage), then takes it away. A still stage does not.
+  DT.test('theme ink: a stage that moves paints a speck through its brush as it goes up, then takes it away', () => {
+    const frames = fakeFrames();
+    try {
+      [[1920, 1080, 'xl'], [1366, 768, 'l']].forEach(([w, h, size]) => {
+        const { stage, root } = mountInk(titleView(), w, h);
+        const speck = ink(root, '.dt-deco > .dt-ink-warm');
+        assert.ok(speck, 'the speck');
+        assert.ok(speck.closest('[aria-hidden="true"]'));
+        const cs = getComputedStyle(speck);
+        assert.ok(new RegExp('#dt-ink-brush-' + size + '\\b').test(cs.filter), 'the brush the stroke uses: ' + cs.filter);
+        assert.ok(/#dt-ink-brush-/.test(getComputedStyle(ink(root, '.dt-field')).filter) &&
+          getComputedStyle(ink(root, '.dt-field')).filter === cs.filter, 'the field\'s own: ' + getComputedStyle(ink(root, '.dt-field')).filter);
+        const o = parseFloat(cs.opacity), r = speck.getBoundingClientRect();
+        assert.ok(o > 0 && o <= 0.02, 'painted, yet not to be seen: ' + o);
+        assert.ok(r.width > 0 && r.width < 0.05 * w, 'a speck: ' + r.width);
+        frames.step(7);
+        assert.ok(speck.isConnected, 'there for its first frames');
+        frames.step(1);
+        assert.ok(!speck.isConnected, 'then gone');
+        stage.destroy();
+        assert.equal(frames.pending(), 0);
+      });
+      // Taken down before it is gone: nothing left behind or waiting.
+      const early = mountInk(singleAt(OPENING, 60));
+      frames.step(2);   // flush the enter moment's double rAF
+      early.stage.destroy();
+      assert.equal(frames.pending(), 0);
+      assert.equal(document.querySelectorAll('#sandbox .dt-ink-warm').length, 0);
+    } finally { frames.restore(); }
+    const box = document.getElementById('sandbox');
+    box.innerHTML = '<div class="dt-stage-host" style="width:480px;height:270px"></div>';
+    const thumb = R.mount(box.firstChild, { thumbnail: true });
+    thumb.update(titleView());
+    assert.equal(box.querySelectorAll('.dt-ink-warm').length, 0, 'a thumbnail has no speck');
+    thumb.destroy();
   });
 
   // While the brush lands, the digits are ink on the paper until the stroke's body is under them: they turn paper
@@ -530,10 +648,12 @@
     const { stage, root } = mountInk(singleAt(OPENING, 187));
     rest(root);
     const bleed = getComputedStyle(ink(root, '.dt-deco-over'), '::before');
+    const seal = getComputedStyle(ink(root, '.dt-deco-over'), '::after');
     assert.equal(bleed.content, '"超时"');
     assert.equal(bleed.animationName, 'dt-ink-ooze');
     assert.equal(bleed.animationDuration, '2.4s');
     assert.equal(bleed.animationIterationCount, 'infinite');
+    assert.equal(bleed.color, seal.color, 'the blurred ghost uses the seal paste colour');
     const calm = mountInk(singleAt(OPENING, 60));
     assert.ok(['none', 'normal'].indexOf(getComputedStyle(ink(calm.root, '.dt-deco-over'), '::before').content) >= 0);
     calm.stage.destroy();
@@ -543,6 +663,44 @@
     m.stage.moment('over', { side: 'pro', clock: 'main' });
     assert.equal(anim(ink(m.root, '.dt-deco-over'), '::after'), 'dt-ink-seal-press');
     m.stage.destroy();
+  });
+
+  // stage.css's reduced-motion rules, as a stylesheet the test can switch on: the media query itself cannot be.
+  function stillSheet() {
+    const rules = [];
+    Array.from(document.styleSheets).forEach(sheet => {
+      let list = [];
+      try { list = Array.from(sheet.cssRules); } catch (e) { /* another origin's sheet */ }
+      list.filter(r => r.media && /prefers-reduced-motion/.test(r.conditionText || r.media.mediaText))
+        .forEach(r => Array.from(r.cssRules).forEach(x => { if (/\.dt-stage/.test(x.selectorText || '')) rules.push(x.cssText); }));
+    });
+    assert.ok(rules.length > 0, 'stage.css has its reduced-motion rules');
+    const el = document.createElement('style');
+    el.textContent = rules.join('\n');
+    return el;
+  }
+
+  // The bleed is the seal's own paste: cinnabar as the seal is, never the ink or the text colour round it. Only its
+  // breath shows it: still (reduced motion, where stage.css takes every animation off) the seal is the crisp one alone.
+  DT.test('theme ink: the 超时 seal\'s bleed is its own cinnabar, and on a still stage it is not there', () => {
+    const { stage, root } = mountInk(singleAt(OPENING, 187));
+    rest(root);
+    const over = ink(root, '.dt-deco-over');
+    const seal = pseudo(over, '::after'), bleed = pseudo(over, '::before');
+    assert.equal(bleed.color, seal.color, 'the paste\'s colour');
+    assert.equal(bleed.borderTopColor, seal.borderTopColor, 'its border too');
+    assert.ok(bleed.color !== srgb(resolve(root, '--ink')) && bleed.color !== resolve(root, '--ink'), 'not the ink: ' + bleed.color);
+    assert.ok(bleed.color !== getComputedStyle(over).color, 'not the text colour it sits in: ' + bleed.color);
+    const still = stillSheet();
+    document.head.appendChild(still);
+    try {
+      assert.equal(pseudo(over, '::before').animationName, 'none');
+      assert.equal(pseudo(over, '::before').opacity, '0', 'no smudge round a still seal');
+      assert.equal(pseudo(over, '::after').opacity, '1', 'the seal itself stands');
+    } finally { still.remove(); }
+    // The breath starts from nothing, so a resting opacity of 0 changes nothing while it runs.
+    assert.equal(pseudo(over, '::before').animationName, 'dt-ink-ooze');
+    stage.destroy();
   });
 
   DT.test('theme ink: 暂停 seeps out in pale ink, and a resumed clock flicks the stroke\'s dry front', () => {
@@ -643,6 +801,7 @@
         stage.pulse({ type: 'warn', clock: 'main' });
         stage.moment('lock', { side: 'pro' });
         assert.ok(!Array.from(root.classList).some(c => c.indexOf('is-m-') === 0), where + ': ' + root.className);
+        assert.ok(!root.hasAttribute('data-ink-hold'), where + ': nothing held');
         assert.equal(anim(root), 'none', where);
         inked(root).concat([ink(root, '.dt-title'), ink(root, '.dt-field')]).forEach(el => {
           assert.equal(anim(el), 'none', where + ' ' + nameOf(el));
@@ -679,10 +838,12 @@
     const { stage, root } = mountInk(singleAt(OPENING, 60));
     assert.ok(inked(root).length >= 8);
     assert.ok(root.style.getPropertyValue('--ink-front-l'));
+    assert.ok(root.hasAttribute('data-ink-hold'), 'its entrance held');
     const s = E.goto(E.createSession(F(), MATCH, T0, { theme: 'hall' }), idx(OPENING), T0);
     stage.update(E.view(s, T0));
     assert.equal(root.dataset.theme, 'hall');
     assert.equal(inked(root).length, 0);
+    assert.ok(!root.hasAttribute('data-ink-hold'), 'the hold let go');
     ['--ink-front-l', '--ink-front-r', '--ink-hairs-l', '--ink-hairs-r'].forEach(v => assert.equal(root.style.getPropertyValue(v), '', v));
     stage.destroy();
   });
