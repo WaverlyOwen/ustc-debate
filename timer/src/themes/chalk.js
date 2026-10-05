@@ -54,7 +54,7 @@
       '</filter>';
   }
 
-  // ---- Motion (spec §2.3): decorate adds chalk dust particles and count dots ----
+  // ---- Motion (spec §2.3): decorate adds chalk dust particles, count dots, checkmark/circle SVGs ----
 
   let stageCount = 0;
 
@@ -71,23 +71,102 @@
 
     const q = sel => stage.querySelector(sel);
 
-    // Chalk dust particles container for enter, warn moments
-    const dustContainer = '<div class="dt-chalk-dust" id="dt-chalk-dust-' + n + '" aria-hidden="true"></div>';
-    put(q('.dt-deco'), dustContainer);
+    // Chalk dust particles (4-6 small circles for enter/warn moments)
+    const dustHtml = '<div class="dt-chalk-dust" id="dt-chalk-dust-' + n + '" aria-hidden="true">' +
+      '<span class="dt-dust-particle" style="left:35%;top:20%"></span>' +
+      '<span class="dt-dust-particle" style="left:48%;top:15%"></span>' +
+      '<span class="dt-dust-particle" style="left:60%;top:25%"></span>' +
+      '<span class="dt-dust-particle" style="left:42%;top:35%"></span>' +
+      '<span class="dt-dust-particle" style="left:55%;top:30%"></span>' +
+      '</div>';
+    put(q('.dt-deco'), dustHtml);
 
     // Count dot that appears below digits
     const countDot = '<span class="dt-chalk-count-dot" id="dt-chalk-count-' + n + '" aria-hidden="true"></span>';
     put(q('.dt-deco-over'), countDot);
 
+    // SVG checkmark for warn moment (drawn via stroke-dashoffset)
+    const checkPath = 'M16 52 C24 58 31 68 39 81 C51 58 66 35 86 16';
+    const checkLen = 110; // approximate path length
+    const checkSvg = '<svg class="dt-chalk-check-svg" id="dt-chalk-check-' + n + '" xmlns="http://www.w3.org/2000/svg" ' +
+      'viewBox="0 0 100 100" aria-hidden="true" style="position:absolute;width:11cqh;height:11cqh;' +
+      'top:calc(var(--hatch-bottom,88cqh) - 12.5cqh);left:50%;margin-left:-5.5cqh;pointer-events:none;opacity:0">' +
+      '<path d="' + checkPath + '" fill="none" stroke="#F0D477" stroke-width="17" stroke-linecap="round" ' +
+      'stroke-linejoin="round" stroke-dasharray="' + checkLen + '" stroke-dashoffset="' + checkLen + '"/></svg>';
+    put(q('.dt-deco-over'), checkSvg);
+
+    // SVG circle for end moment (drawn via stroke-dashoffset, slightly irregular)
+    const circlePath = 'M820 58 C640 12 250 22 116 96 C-6 162 30 302 244 348 C470 396 812 380 924 298 C1004 236 956 112 776 64 C700 44 606 38 560 42';
+    const circleLen = 2400; // approximate path length
+    const circleSvg = '<svg class="dt-chalk-circle-svg" id="dt-chalk-circle-' + n + '" xmlns="http://www.w3.org/2000/svg" ' +
+      'viewBox="0 0 1000 400" preserveAspectRatio="none" aria-hidden="true" style="position:absolute;width:128cqh;' +
+      'height:50cqh;left:50%;top:var(--clock-y,50%);translate:-50% -50%;pointer-events:none;opacity:0">' +
+      '<path d="' + circlePath + '" fill="none" stroke="#F0D477" stroke-width="9" stroke-linecap="round" ' +
+      'stroke-dasharray="' + circleLen + '" stroke-dashoffset="' + circleLen + '"/></svg>';
+    put(q('.dt-deco-over'), circleSvg);
+
+    // Hatching groups: split into 10 animatable divs, each clipping a horizontal band
+    const field = q('.dt-field');
+    const halfFields = stage.querySelectorAll('.dt-half-field');
+    const groupCount = 10;
+    if (field && !still) {
+      for (let i = 0; i < groupCount; i++) {
+        const band = doc.createElement('div');
+        band.className = 'dt-chalk-hatch-group';
+        band.style.cssText = 'position:absolute;inset:0 -2cqw;background:inherit;-webkit-mask:inherit;mask:inherit;' +
+          'clip-path:inset(' + (i * 10) + '% 0 ' + (100 - (i + 1) * 10) + '% 0);' +
+          'animation:dt-chalk-group-' + i + ' 600ms cubic-bezier(0.2,0.8,0.3,1) backwards';
+        added.push(field.appendChild(band));
+      }
+    }
+    halfFields.forEach(hf => {
+      if (hf && !still) {
+        for (let i = 0; i < groupCount; i++) {
+          const band = doc.createElement('div');
+          band.className = 'dt-chalk-hatch-group';
+          band.style.cssText = 'position:absolute;inset:auto 0 0;height:inherit;background:inherit;' +
+            '-webkit-mask:inherit;mask:inherit;clip-path:inset(' + (i * 10) + '% 0 ' + (100 - (i + 1) * 10) + '% 0);' +
+            'animation:dt-chalk-group-' + i + ' 600ms cubic-bezier(0.2,0.8,0.3,1) backwards';
+          added.push(hf.appendChild(band));
+        }
+      }
+    });
+
+    // Split title text into character spans for sequential reveal
+    const title = q('.dt-title');
+    if (title && title.textContent && !still) {
+      const text = title.textContent;
+      title.textContent = '';
+      for (let i = 0; i < text.length; i++) {
+        const span = doc.createElement('span');
+        span.textContent = text[i];
+        span.className = 'dt-chalk-char';
+        span.style.cssText = 'display:inline-block;animation:dt-chalk-char-write 300ms ease-out ' + (i * 50) + 'ms backwards';
+        added.push(title.appendChild(span));
+      }
+    }
+
+    // Split motion text on title card for character-by-character writing
+    const motions = stage.querySelectorAll('.dt-motion');
+    motions.forEach(motion => {
+      if (motion && motion.textContent && !still) {
+        const text = motion.textContent;
+        motion.textContent = '';
+        for (let i = 0; i < text.length; i++) {
+          const span = doc.createElement('span');
+          span.textContent = text[i];
+          span.className = 'dt-chalk-char';
+          span.style.cssText = 'display:inline-block;animation:dt-chalk-char-write 300ms ease-out ' + (i * 50) + 'ms backwards';
+          added.push(motion.appendChild(span));
+        }
+      }
+    });
+
     return {
       moment(name, detail) {
-        // Moment animations are primarily CSS-driven via .is-m-<name> classes
-        // JS can add special handling if needed (e.g., spawning dust particles)
         if (still) return;
-
-        // For warn moment, could add dust particle animation trigger here
-        // For count moment, could pulse the count dot
-        // For now, CSS handles everything via the moment classes
+        // Moment animations are primarily CSS-driven via .is-m-<name> classes
+        // Additional JS behaviors could be added here if needed
       },
       destroy() {
         added.forEach(el => el.remove());

@@ -1,0 +1,586 @@
+{
+  "theme": "chalk",
+  "reduced": true,
+  "moments": {
+    "lock": {
+      "window_ms": 1200,
+      "moment_ms": 1200,
+      "moved_ms": 0,
+      "frame_ms": {
+        "p50": 16.7,
+        "p95": 16.9,
+        "max": 16.9,
+        "count": 74
+      },
+      "slow": 4,
+      "size": "1920x1080",
+      "sheet": "lock.png",
+      "slowed": true,
+      "over_budget": false,
+      "frames": [
+        {
+          "t_ms": 0.4,
+          "css_ms": null
+        },
+        {
+          "t_ms": 133.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 266.8,
+          "css_ms": null
+        },
+        {
+          "t_ms": 400.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 533.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 666.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 800.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 933.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1066.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1200.1,
+          "css_ms": null
+        }
+      ]
+    },
+    "enter": {
+      "window_ms": 1200,
+      "moment_ms": 1200,
+      "moved_ms": 0,
+      "frame_ms": {
+        "p50": 16.7,
+        "p95": 16.8,
+        "max": 116.6,
+        "count": 65
+      },
+      "slow": 4,
+      "size": "1920x1080",
+      "sheet": "enter.png",
+      "slowed": true,
+      "over_budget": false,
+      "frames": [
+        {
+          "t_ms": 0.4,
+          "css_ms": null
+        },
+        {
+          "t_ms": 133.6,
+          "css_ms": null
+        },
+        {
+          "t_ms": 266.8,
+          "css_ms": null
+        },
+        {
+          "t_ms": 400.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 533.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 666.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 800.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 933.6,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1067.3,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1200.2,
+          "css_ms": null
+        }
+      ]
+    },
+    "warn": {
+      "window_ms": 1200,
+      "moment_ms": 1200,
+      "moved_ms": 0,
+      "frame_ms": {
+        "p50": 16.7,
+        "p95": 16.8,
+        "max": 16.8,
+        "count": 74
+      },
+      "slow": 4,
+      "size": "1920x1080",
+      "sheet": "warn.png",
+      "slowed": true,
+      "over_budget": false,
+      "frames": [
+        {
+          "t_ms": 0.1,
+          "css_ms": null
+        },
+        {
+          "t_ms": 133.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 266.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 400.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 533.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 666.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 800.3,
+          "css_ms": null
+        },
+        {
+          "t_ms": 933.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1066.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1200.1,
+          "css_ms": null
+        }
+      ]
+    },
+    "count": {
+      "window_ms": 1200,
+      "moment_ms": 1200,
+      "moved_ms": 0,
+      "frame_ms": {
+        "p50": 16.7,
+        "p95": 16.8,
+        "max": 16.8,
+        "count": 74
+      },
+      "slow": 4,
+      "size": "1920x1080",
+      "sheet": "count.png",
+      "slowed": true,
+      "over_budget": false,
+      "frames": [
+        {
+          "t_ms": 0.1,
+          "css_ms": null
+        },
+        {
+          "t_ms": 133.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 266.8,
+          "css_ms": null
+        },
+        {
+          "t_ms": 400.1,
+          "css_ms": null
+        },
+        {
+          "t_ms": 533.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 667.0,
+          "css_ms": null
+        },
+        {
+          "t_ms": 800.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 933.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1066.8,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1200.2,
+          "css_ms": null
+        }
+      ]
+    },
+    "end": {
+      "window_ms": 1200,
+      "moment_ms": 1200,
+      "moved_ms": 0,
+      "frame_ms": {
+        "p50": 16.7,
+        "p95": 16.8,
+        "max": 16.8,
+        "count": 74
+      },
+      "slow": 4,
+      "size": "1920x1080",
+      "sheet": "end.png",
+      "slowed": true,
+      "over_budget": false,
+      "frames": [
+        {
+          "t_ms": 0.1,
+          "css_ms": null
+        },
+        {
+          "t_ms": 133.6,
+          "css_ms": null
+        },
+        {
+          "t_ms": 266.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 400.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 533.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 666.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 800.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 933.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1066.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1200.2,
+          "css_ms": null
+        }
+      ]
+    },
+    "over": {
+      "window_ms": 4000,
+      "moment_ms": 1200,
+      "moved_ms": 0,
+      "frame_ms": {
+        "p50": 16.7,
+        "p95": 16.9,
+        "max": 17.4,
+        "count": 242
+      },
+      "slow": 4,
+      "size": "1920x1080",
+      "sheet": "over.png",
+      "slowed": true,
+      "over_budget": false,
+      "frames": [
+        {
+          "t_ms": 0.1,
+          "css_ms": null
+        },
+        {
+          "t_ms": 444.6,
+          "css_ms": null
+        },
+        {
+          "t_ms": 889.1,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1333.6,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1778,
+          "css_ms": null
+        },
+        {
+          "t_ms": 2222.4,
+          "css_ms": null
+        },
+        {
+          "t_ms": 2666.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 3111.3,
+          "css_ms": null
+        },
+        {
+          "t_ms": 3555.7,
+          "css_ms": null
+        },
+        {
+          "t_ms": 4000.2,
+          "css_ms": null
+        }
+      ]
+    },
+    "start": {
+      "window_ms": 1200,
+      "moment_ms": 1200,
+      "moved_ms": 0,
+      "frame_ms": {
+        "p50": 16.7,
+        "p95": 16.7,
+        "max": 16.8,
+        "count": 74
+      },
+      "slow": 4,
+      "size": "1920x1080",
+      "sheet": "start.png",
+      "slowed": true,
+      "over_budget": false,
+      "frames": [
+        {
+          "t_ms": 0.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 133.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 266.8,
+          "css_ms": null
+        },
+        {
+          "t_ms": 400.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 533.6,
+          "css_ms": null
+        },
+        {
+          "t_ms": 666.8,
+          "css_ms": null
+        },
+        {
+          "t_ms": 800.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 933.6,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1066.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1200.2,
+          "css_ms": null
+        }
+      ]
+    },
+    "pause": {
+      "window_ms": 1200,
+      "moment_ms": 1200,
+      "moved_ms": 0,
+      "frame_ms": {
+        "p50": 16.7,
+        "p95": 16.8,
+        "max": 16.8,
+        "count": 74
+      },
+      "slow": 4,
+      "size": "1920x1080",
+      "sheet": "pause.png",
+      "slowed": true,
+      "over_budget": false,
+      "frames": [
+        {
+          "t_ms": 0.2,
+          "css_ms": null
+        },
+        {
+          "t_ms": 133.6,
+          "css_ms": null
+        },
+        {
+          "t_ms": 267.0,
+          "css_ms": null
+        },
+        {
+          "t_ms": 400.1,
+          "css_ms": null
+        },
+        {
+          "t_ms": 533.6,
+          "css_ms": null
+        },
+        {
+          "t_ms": 666.8,
+          "css_ms": null
+        },
+        {
+          "t_ms": 800.3,
+          "css_ms": null
+        },
+        {
+          "t_ms": 933.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1066.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1200.2,
+          "css_ms": null
+        }
+      ]
+    },
+    "switch": {
+      "window_ms": 1200,
+      "moment_ms": 1200,
+      "moved_ms": 0,
+      "frame_ms": {
+        "p50": 16.7,
+        "p95": 16.8,
+        "max": 17.2,
+        "count": 75
+      },
+      "slow": 4,
+      "size": "1920x1080",
+      "sheet": "switch.png",
+      "slowed": true,
+      "over_budget": false,
+      "frames": [
+        {
+          "t_ms": 0.3,
+          "css_ms": null
+        },
+        {
+          "t_ms": 133.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 266.8,
+          "css_ms": null
+        },
+        {
+          "t_ms": 400.1,
+          "css_ms": null
+        },
+        {
+          "t_ms": 533.4,
+          "css_ms": null
+        },
+        {
+          "t_ms": 666.8,
+          "css_ms": null
+        },
+        {
+          "t_ms": 800.1,
+          "css_ms": null
+        },
+        {
+          "t_ms": 933.5,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1066.8,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1200.1,
+          "css_ms": null
+        }
+      ]
+    },
+    "title": {
+      "window_ms": 4000,
+      "moment_ms": 1200,
+      "moved_ms": 0,
+      "frame_ms": {
+        "p50": 16.7,
+        "p95": 16.8,
+        "max": 16.9,
+        "count": 242
+      },
+      "slow": 4,
+      "size": "1920x1080",
+      "sheet": "title.png",
+      "slowed": true,
+      "over_budget": false,
+      "frames": [
+        {
+          "t_ms": 0.4,
+          "css_ms": null
+        },
+        {
+          "t_ms": 444.6,
+          "css_ms": null
+        },
+        {
+          "t_ms": 889.1,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1333.6,
+          "css_ms": null
+        },
+        {
+          "t_ms": 1778.1,
+          "css_ms": null
+        },
+        {
+          "t_ms": 2222.4,
+          "css_ms": null
+        },
+        {
+          "t_ms": 2666.9,
+          "css_ms": null
+        },
+        {
+          "t_ms": 3111.3,
+          "css_ms": null
+        },
+        {
+          "t_ms": 3555.7,
+          "css_ms": null
+        },
+        {
+          "t_ms": 4000.1,
+          "css_ms": null
+        }
+      ]
+    }
+  }
+}
