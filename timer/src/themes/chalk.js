@@ -54,9 +54,51 @@
       '</filter>';
   }
 
+  // ---- Motion (spec §2.3): decorate adds chalk dust particles and count dots ----
+
+  let stageCount = 0;
+
+  function decorate(stage, flags) {
+    const doc = stage.ownerDocument, win = doc.defaultView || window, n = ++stageCount, added = [];
+    const still = !!(flags && (flags.thumbnail || flags.reducedMotion || flags.frozen));
+
+    const put = (parent, html) => {
+      if (!parent) return;
+      const box = doc.createElement('div');
+      box.innerHTML = html;
+      added.push(parent.appendChild(box.firstChild));
+    };
+
+    const q = sel => stage.querySelector(sel);
+
+    // Chalk dust particles container for enter, warn moments
+    const dustContainer = '<div class="dt-chalk-dust" id="dt-chalk-dust-' + n + '" aria-hidden="true"></div>';
+    put(q('.dt-deco'), dustContainer);
+
+    // Count dot that appears below digits
+    const countDot = '<span class="dt-chalk-count-dot" id="dt-chalk-count-' + n + '" aria-hidden="true"></span>';
+    put(q('.dt-deco-over'), countDot);
+
+    return {
+      moment(name, detail) {
+        // Moment animations are primarily CSS-driven via .is-m-<name> classes
+        // JS can add special handling if needed (e.g., spawning dust particles)
+        if (still) return;
+
+        // For warn moment, could add dust particle animation trigger here
+        // For count moment, could pulse the count dot
+        // For now, CSS handles everything via the moment classes
+      },
+      destroy() {
+        added.forEach(el => el.remove());
+      },
+    };
+  }
+
   DT.themes.register('chalk', {
     defs: '<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>' +
       Object.keys(SIZES).map(name => stroke(name, SIZES[name]) + grain(name, SIZES[name]) + write(name, SIZES[name])).join('') +
       '</defs></svg>',
+    decorate,
   });
 })(window.DT = window.DT || {});
