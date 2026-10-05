@@ -2878,8 +2878,8 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 }
 
 /* Start/pause: subtle plate pulse via transform scale. */
-.dt-stage[data-theme="chroma"].is-m-start .dt-clock::before,
-.dt-stage[data-theme="chroma"].is-m-pause .dt-clock::before {
+.dt-stage[data-theme="chroma"].is-m-start .dt-clock[data-clock="main"]::before,
+.dt-stage[data-theme="chroma"].is-m-pause .dt-clock[data-clock="main"]::before {
   animation: dt-chroma-plate-pulse 300ms var(--ease-out);
 }
 @keyframes dt-chroma-plate-pulse {
@@ -4185,6 +4185,7 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   left: clamp(1.3cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 1.3cqh));
 }
 .dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"] :is(.dt-ink-fall, .dt-ink-bloom) { display: block; }
+.dt-stage[data-theme="ink"].is-m-warn :is(.dt-ink-fall, .dt-ink-bloom) { display: block; }
 .dt-stage[data-theme="ink"] .dt-ink-fall {
   width: 1.7cqh;
   height: 2.3cqh;

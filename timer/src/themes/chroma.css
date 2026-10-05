@@ -130,8 +130,8 @@
 }
 
 /* Start/pause: subtle plate pulse via transform scale. */
-.dt-stage[data-theme="chroma"].is-m-start .dt-clock::before,
-.dt-stage[data-theme="chroma"].is-m-pause .dt-clock::before {
+.dt-stage[data-theme="chroma"].is-m-start .dt-clock[data-clock="main"]::before,
+.dt-stage[data-theme="chroma"].is-m-pause .dt-clock[data-clock="main"]::before {
   animation: dt-chroma-plate-pulse 300ms var(--ease-out);
 }
 @keyframes dt-chroma-plate-pulse {
