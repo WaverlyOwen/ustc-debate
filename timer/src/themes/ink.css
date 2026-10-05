@@ -461,11 +461,12 @@
 
 /* Held through a new stage's first frames (ink.js, HOLD_FRAMES): every entrance stays at its start, and the stroke,
    the wet blot and the digits, which start from nothing, are painted at 1%, too faint to see, so the browser has
-   put them through their filters before anything moves (it skips what is wholly transparent). */
+   put them through their filters before anything moves (it skips what is wholly transparent). The enso and its
+   children are excluded: the title moment's enso animation should not be paused by the enter hold. */
 .dt-stage[data-theme="ink"].is-m-enter[data-ink-hold],
-.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *,
-.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *::before,
-.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *::after { animation-play-state: paused !important; }
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *:not(.dt-ink-enso):not(.dt-ink-enso *),
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *:not(.dt-ink-enso):not(.dt-ink-enso *)::before,
+.dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] *:not(.dt-ink-enso):not(.dt-ink-enso *)::after { animation-play-state: paused !important; }
 .dt-stage[data-theme="ink"].is-m-enter[data-ink-hold] :is(.dt-field, .dt-half-field, .dt-clock, .dt-ink-press) {
   opacity: .01 !important;
 }
@@ -681,7 +682,7 @@
   opacity: calc(.22 * (1 - .85 * var(--used)));
 }
 .dt-stage[data-theme="ink"] .dt-ink-enso-reveal { stroke-dasharray: 1 1; stroke-dashoffset: 0; }
-.dt-stage[data-theme="ink"].is-m-title .dt-ink-enso-reveal { animation: dt-ink-enso-draw 1400ms cubic-bezier(.5, .05, .35, 1) both; }
+.dt-stage[data-theme="ink"][data-mode="title"].is-m-title .dt-ink-enso-reveal { animation: dt-ink-enso-draw 1400ms cubic-bezier(.5, .05, .35, 1) both; }
 @keyframes dt-ink-enso-draw { from { stroke-dashoffset: 1; } }
 
 /* On a smaller projector (1366×768) the small seal wears lightly, so its two characters stay legible. */
