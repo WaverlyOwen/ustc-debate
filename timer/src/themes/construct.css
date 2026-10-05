@@ -326,12 +326,30 @@
    Stage number: stroke draws out (520ms). */
 
 [data-theme="construct"].is-m-enter .dt-deco-over {
-  animation: dt-construct-grid-fade 400ms ease-out;
+  animation: dt-construct-grid-stagger 400ms ease-out;
 }
 
-@keyframes dt-construct-grid-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@keyframes dt-construct-grid-stagger {
+  /* 12 vertical + 8 horizontal = 20 lines total, staggered ~20ms each = 400ms.
+     Vertical lines appear 0-60%, horizontal lines 60-100% */
+  0% {
+    -webkit-mask-image: repeating-linear-gradient(to right, transparent 0, transparent 100%),
+                        repeating-linear-gradient(to bottom, transparent 0, transparent 100%);
+    mask-image: repeating-linear-gradient(to right, transparent 0, transparent 100%),
+                repeating-linear-gradient(to bottom, transparent 0, transparent 100%);
+  }
+  60% {
+    -webkit-mask-image: repeating-linear-gradient(to right, #000 0 1px, transparent 1px calc(100cqw / 12)),
+                        repeating-linear-gradient(to bottom, transparent 0, transparent 100%);
+    mask-image: repeating-linear-gradient(to right, #000 0 1px, transparent 1px calc(100cqw / 12)),
+                repeating-linear-gradient(to bottom, transparent 0, transparent 100%);
+  }
+  100% {
+    -webkit-mask-image: repeating-linear-gradient(to right, #000 0 1px, transparent 1px calc(100cqw / 12)),
+                        repeating-linear-gradient(to bottom, #000 0 1px, transparent 1px calc(100cqh / 8));
+    mask-image: repeating-linear-gradient(to right, #000 0 1px, transparent 1px calc(100cqw / 12)),
+                repeating-linear-gradient(to bottom, #000 0 1px, transparent 1px calc(100cqh / 8));
+  }
 }
 
 /* Band slides in from the seat-away direction */
@@ -403,7 +421,7 @@
   to { --tick: rgb(241 234 219 / .5); }
 }
 
-/* Warn: yellow ticks and band flash */
+/* Warn: yellow tick flash and band flash (confined to ~350ms total) */
 [data-theme="construct"].is-m-warn .dt-field::before,
 [data-theme="construct"].is-m-warn .dt-half-field::before {
   animation: dt-construct-ticks-flash 350ms ease-in-out;
@@ -419,12 +437,22 @@
 }
 
 @keyframes dt-construct-band-flash {
-  0%, 100% { opacity: 1; }
+  0% { background: var(--band); }
   50% { background: var(--accent); }
+  100% { background: var(--band); }
 }
 
 /* Count: outermost tick clicks one notch (3deg rotation).
-   This needs to be on a specific element. We'll use a pseudo on the field's ::before for the rotating tick. */
+   Rotate the entire tick ring by one tick increment (3deg) per count. */
+[data-theme="construct"].is-m-count .dt-field::before,
+[data-theme="construct"].is-m-count .dt-half-field::before {
+  animation: dt-construct-ticks-click 200ms cubic-bezier(.4,.1,.6,1);
+}
+
+@keyframes dt-construct-ticks-click {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(3deg); }
+}
 
 /* End: center hub ring pulses once */
 [data-theme="construct"].is-m-end .dt-field::after,
@@ -464,14 +492,24 @@
   50% { opacity: 0.6; }
 }
 
-/* Switch: sectors counter-rotate. The existing --construct-sweep transition handles size change.
-   Add a rotation hint during the moment. */
+/* Switch: sectors counter-rotate (one clockwise, one counter-clockwise).
+   The existing --construct-sweep transition handles size change. */
 [data-theme="construct"].is-m-switch .dt-field,
-[data-theme="construct"].is-m-switch .dt-half-field {
-  animation: dt-construct-sector-rotate 520ms ease-in-out;
+[data-theme="construct"].is-m-switch .dt-half:first-child .dt-half-field {
+  animation: dt-construct-sector-rotate-cw 520ms ease-in-out;
 }
 
-@keyframes dt-construct-sector-rotate {
+[data-theme="construct"].is-m-switch .dt-half:last-child .dt-half-field {
+  animation: dt-construct-sector-rotate-ccw 520ms ease-in-out;
+}
+
+@keyframes dt-construct-sector-rotate-cw {
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(3deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes dt-construct-sector-rotate-ccw {
   0% { transform: rotate(0deg); }
   50% { transform: rotate(-3deg); }
   100% { transform: rotate(0deg); }
@@ -522,11 +560,14 @@
   [data-theme="construct"].is-m-warn .dt-field::before,
   [data-theme="construct"].is-m-warn .dt-half-field::before,
   [data-theme="construct"].is-m-warn .dt-deco::before,
+  [data-theme="construct"].is-m-count .dt-field::before,
+  [data-theme="construct"].is-m-count .dt-half-field::before,
   [data-theme="construct"].is-m-end .dt-field::after,
   [data-theme="construct"].is-m-end .dt-half-field::after,
   [data-theme="construct"][data-phase="over"] .dt-deco::before,
   [data-theme="construct"].is-m-switch .dt-field,
-  [data-theme="construct"].is-m-switch .dt-half-field,
+  [data-theme="construct"].is-m-switch .dt-half:first-child .dt-half-field,
+  [data-theme="construct"].is-m-switch .dt-half:last-child .dt-half-field,
   [data-theme="construct"] .dt-half[data-locked] .dt-half-field,
   [data-theme="construct"][data-mode="title"].is-m-title .dt-deco,
   [data-theme="construct"][data-mode="title"].is-m-title .dt-deco-over {
