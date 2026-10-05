@@ -341,3 +341,177 @@
 
 /* The bells ring in the speaking side's ink. */
 .dt-stage[data-theme="riso"] .dt-ring { border-color: var(--own-ink); }
+
+/* ---- motion (spec §2.4) ---- */
+
+/* enter: first color slides in like paper through drum, second overlays, misregistration settles with bounce */
+@keyframes riso-enter {
+  from { transform: translateX(var(--seat-dir, 1) * -100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes riso-misreg-settle {
+  from { --misreg: 1.4cqh; }
+  to { --misreg: 0.4cqh; }
+}
+
+[data-theme="riso"].is-m-enter .dt-field {
+  animation: riso-enter 380ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+[data-theme="riso"].is-m-enter .dt-clock {
+  animation: riso-misreg-settle 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-theme="riso"][data-pro-seat="left"][data-side="pro"] .dt-field,
+[data-theme="riso"][data-pro-seat="right"][data-side="con"] .dt-field {
+  --seat-dir: -1;
+}
+
+[data-theme="riso"][data-pro-seat="right"][data-side="pro"] .dt-field,
+[data-theme="riso"][data-pro-seat="left"][data-side="con"] .dt-field {
+  --seat-dir: 1;
+}
+
+/* pause: misregistration increases when machine stops */
+[data-theme="riso"].is-m-pause {
+  --misreg: 0.7cqh;
+  transition: --misreg 280ms ease-out;
+}
+
+/* start: return to normal registration */
+[data-theme="riso"].is-m-start {
+  --misreg: 0.4cqh;
+  transition: --misreg 280ms ease-out;
+}
+
+/* warn: registration marks flash, misregistration wobbles */
+@keyframes riso-reg-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes riso-misreg-wobble {
+  0%, 100% { --misreg: 0.4cqh; }
+  30% { --misreg: 0.8cqh; }
+  60% { --misreg: 0.2cqh; }
+}
+
+[data-theme="riso"].is-m-warn {
+  animation: riso-reg-flash 350ms ease-in-out, riso-misreg-wobble 350ms ease-in-out;
+}
+
+/* count: halftone dot size steps down */
+[data-theme="riso"].is-m-count .dt-field {
+  transition: --dot-seat 180ms ease-in;
+}
+
+/* end: 时间到 stamp appears with multiply blend (already in CSS, just needs to show) */
+[data-theme="riso"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::before,
+[data-theme="riso"][data-mode="stage"][data-kind="single"] .dt-deco-over::before {
+  content: "时间到";
+  position: absolute;
+  left: calc(50% + 18cqh);
+  top: calc(var(--clock-y) + 8cqh);
+  padding: 0.8cqh 0 0.9cqh 2.1cqh;
+  background: var(--other-ink);
+  color: var(--ground);
+  font-family: var(--font-title);
+  font-size: 4.2cqh;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: .5em;
+  rotate: -6deg;
+  mix-blend-mode: multiply;
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-theme="riso"].is-m-end[data-mode="stage"][data-kind="single"] .dt-deco-over::before {
+  opacity: 1;
+  animation: riso-stamp 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes riso-stamp {
+  from { 
+    opacity: 0;
+    transform: translateY(-0.5cqh) rotate(-4deg);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0) rotate(-4deg);
+  }
+}
+
+[data-theme="riso"][data-mode="stage"][data-kind="single"]:not([data-phase="over"]):not(.is-m-end) .dt-deco-over::before {
+  opacity: 0;
+}
+
+/* over: paper grain slow flicker (already exists on backdrop) */
+@keyframes riso-paper-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.94; }
+}
+
+[data-theme="riso"][data-phase="over"] .dt-backdrop {
+  animation: riso-paper-flicker 3s ease-in-out infinite;
+}
+
+/* switch: paper swap - current slides down, new slides up */
+@keyframes riso-paper-out {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+@keyframes riso-paper-in {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+[data-theme="riso"].is-m-switch .dt-halves {
+  animation: riso-paper-swap 540ms ease-in-out;
+}
+
+@keyframes riso-paper-swap {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(8%); }
+  100% { transform: translateY(0); }
+}
+
+/* lock: locked side ink fades */
+[data-theme="riso"].is-m-lock .dt-half:not([data-active]) {
+  transition: --side-color 600ms ease-out, filter 600ms ease-out;
+}
+
+[data-theme="riso"] .dt-half {
+  transition: --side-color 600ms ease-out;
+}
+
+/* title: two-color sequential print (using deco elements that already exist) */
+[data-theme="riso"].is-m-title .dt-deco {
+  animation: riso-color-print 400ms ease-out;
+}
+
+[data-theme="riso"].is-m-title .dt-deco-over {
+  animation: riso-color-print 400ms 200ms ease-out both;
+}
+
+@keyframes riso-color-print {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* reduced motion: disable all animations */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="riso"].is-m-enter .dt-field,
+  [data-theme="riso"].is-entering .dt-field,
+  [data-theme="riso"].is-m-enter .dt-clock,
+  [data-theme="riso"].is-m-warn,
+  [data-theme="riso"].is-m-end .dt-deco-over::before,
+  [data-theme="riso"][data-phase="over"] .dt-backdrop,
+  [data-theme="riso"].is-m-switch .dt-halves,
+  [data-theme="riso"].is-m-title .dt-deco,
+  [data-theme="riso"].is-m-title .dt-deco-over {
+    animation: none;
+  }
+}

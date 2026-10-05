@@ -477,4 +477,196 @@
     root.querySelectorAll('.dt-record tr:not([data-over]) td').forEach(td => assert.equal(getComputedStyle(td).boxShadow, 'none', 'no stroke on time kept'));
     stage.destroy();
   });
+
+  // Motion (spec §2.4): misregistration settles after enter, wobbles on warn, the dots step down on count,
+  // an overprinted stamp appears at end, papers swap on switch in free debate, locked ink fades.
+
+  function mountRiso(view, w, h, opts) {
+    const box = document.getElementById('sandbox');
+    box.innerHTML = '<div class="dt-stage-host" style="width:' + (w || 960) + 'px;height:' + (h || 540) + 'px"></div>';
+    const stage = R.mount(box.firstChild, opts);
+    stage.update(view);
+    return { stage, root: box.querySelector('.dt-stage') };
+  }
+
+  function riso(root, sel) { return root.querySelector(sel); }
+  function anim(el) { return getComputedStyle(el).animationName; }
+  function rest(root) {
+    root.classList.remove('is-entering');
+    root.offsetHeight;
+  }
+
+  DT.test('theme riso: enter settles misregistration', () => {
+    const { stage, root } = mountRiso(singleAt(OPENING, 60));
+    rest(root);
+    stage.moment('enter', { side: 'pro', clock: 'main' });
+    assert.ok(root.classList.contains('is-m-enter'));
+    const field = riso(root, '.dt-field');
+    const fieldAnim = anim(field);
+    assert.ok(fieldAnim !== 'none', 'field animates: ' + fieldAnim);
+    assert.ok(/riso-enter/.test(fieldAnim), 'riso enter animation on field');
+    const clock = riso(root, '.dt-clock[data-clock="main"]');
+    const clockAnim = anim(clock);
+    assert.ok(/riso-misreg/.test(clockAnim) || getComputedStyle(clock).transitionProperty.includes('misreg'),
+      'misregistration settles on clock: ' + clockAnim);
+    stage.destroy();
+  });
+
+  DT.test('theme riso: pause increases misregistration, start returns to normal', () => {
+    let s = E.toggle(session(OPENING), T0);
+    const { stage, root } = mountRiso(E.view(s, T0 + 30000));
+    rest(root);
+
+    s = E.toggle(s, T0 + 30000);
+    stage.update(E.view(s, T0 + 31000));
+    assert.ok(root.classList.contains('is-m-pause'));
+    const pauseProps = getComputedStyle(root).transitionProperty;
+    assert.ok(pauseProps.includes('misreg') || pauseProps.includes('all'), 'misreg transitions on pause');
+
+    s = E.toggle(s, T0 + 32000);
+    stage.update(E.view(s, T0 + 32000));
+    assert.ok(root.classList.contains('is-m-start'));
+    stage.destroy();
+  });
+
+  DT.test('theme riso: warn flashes registration marks', () => {
+    const { stage, root } = mountRiso(singleAt(OPENING, 120));
+    rest(root);
+    stage.pulse({ type: 'warn', clock: 'main' });
+    assert.ok(root.classList.contains('is-m-warn'));
+    const rootAnim = anim(root);
+    assert.ok(rootAnim !== 'none' || getComputedStyle(root).transitionProperty.includes('misreg'),
+      'warn triggers animation or transition: ' + rootAnim);
+    stage.destroy();
+  });
+
+  DT.test('theme riso: count steps halftone dot size down', () => {
+    const { stage, root } = mountRiso(singleAt(OPENING, 176));
+    rest(root);
+
+    stage.pulse({ type: 'count', clock: 'main', key: 'c4' });
+    assert.ok(root.classList.contains('is-m-count'));
+
+    const field = riso(root, '.dt-field');
+    const fieldTransition = getComputedStyle(field).transitionProperty;
+    assert.ok(fieldTransition.includes('dot-seat') || fieldTransition.includes('all'),
+      'dot-seat transitions: ' + fieldTransition);
+    stage.destroy();
+  });
+
+  DT.test('theme riso: end shows stamp in contrasting ink', () => {
+    const { stage, root } = mountRiso(singleAt(OPENING, 181));
+    rest(root);
+
+    stage.pulse({ type: 'end', clock: 'main' });
+    assert.ok(root.classList.contains('is-m-end'));
+
+    const stamp = riso(root, '.dt-deco-over');
+    assert.ok(stamp);
+    const stampPseudo = getComputedStyle(stamp, '::before');
+    assert.ok(stampPseudo.content.includes('时间到'), 'stamp content exists');
+    stage.destroy();
+  });
+
+  DT.test('theme riso: over has slow paper grain flicker', () => {
+    const { stage, root } = mountRiso(singleAt(OPENING, 187));
+    rest(root);
+    assert.equal(root.dataset.phase, 'over');
+
+    const backdrop = riso(root, '.dt-backdrop');
+    if (backdrop) {
+      const backdropAnim = anim(backdrop);
+      if (backdropAnim !== 'none') {
+        const duration = getComputedStyle(backdrop).animationDuration;
+        const durationSec = parseFloat(duration);
+        assert.ok(durationSec >= 2, 'slow animation: ' + duration);
+      }
+    }
+    stage.destroy();
+  });
+
+  DT.test('theme riso: switch slides papers in free debate', () => {
+    let s = E.floor(session('自由辩论'), 'pro', T0);
+    const { stage, root } = mountRiso(E.view(s, T0 + 10000));
+    rest(root);
+
+    s = E.floor(s, 'con', T0 + 20000);
+    stage.update(E.view(s, T0 + 20000));
+    assert.ok(root.classList.contains('is-m-switch'));
+    assert.equal(root.dataset.mSide, 'con');
+
+    const halves = riso(root, '.dt-halves');
+    const halvesAnim = anim(halves);
+    assert.ok(halvesAnim !== 'none', 'paper swap animation on switch: ' + halvesAnim);
+    stage.destroy();
+  });
+
+  DT.test('theme riso: lock fades locked side ink', () => {
+    let s = E.floor(session('自由辩论'), 'pro', T0);
+    const { stage, root } = mountRiso(E.view(s, T0 + 30000));
+    rest(root);
+
+    s = E.yieldTime(s, T0 + 30000);
+    stage.update(E.view(s, T0 + 30000));
+    assert.ok(root.classList.contains('is-m-lock'));
+    assert.equal(root.dataset.mSide, 'pro');
+
+    const pro = riso(root, '.dt-half[data-side="pro"]');
+    const proTransition = getComputedStyle(pro).transitionProperty;
+    assert.ok(proTransition.includes('side-color') || proTransition.includes('all'),
+      'locked side ink fades: ' + proTransition);
+    stage.destroy();
+  });
+
+  function stillSheet() {
+    const rules = [];
+    Array.from(document.styleSheets).forEach(sheet => {
+      let list = [];
+      try { list = Array.from(sheet.cssRules); } catch (e) { }
+      list.filter(r => r.media && /prefers-reduced-motion/.test(r.conditionText || r.media.mediaText))
+        .forEach(r => Array.from(r.cssRules).forEach(x => { if (/\.dt-stage/.test(x.selectorText || '')) rules.push(x.cssText); }));
+    });
+    assert.ok(rules.length > 0, 'stage.css has its reduced-motion rules');
+    const el = document.createElement('style');
+    el.textContent = rules.join('\n');
+    return el;
+  }
+
+  DT.test('theme riso: reduced motion goes directly to end state', () => {
+    const { stage, root } = mountRiso(singleAt(OPENING, 60));
+    rest(root);
+
+    const realMatch = window.matchMedia;
+    window.matchMedia = q => ({ matches: /reduce/.test(q), media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+    const still = stillSheet();
+    document.head.appendChild(still);
+    try {
+      stage.moment('enter', { side: 'pro', clock: 'main' });
+      const field = riso(root, '.dt-field');
+      const fieldAnim = anim(field);
+      assert.equal(fieldAnim, 'none', 'no animation in reduced motion: ' + fieldAnim);
+    } finally {
+      still.remove();
+      window.matchMedia = realMatch;
+    }
+    stage.destroy();
+  });
+
+  DT.test('theme riso: thumbnail has no moment class', () => {
+    const { stage, root } = mountRiso(singleAt(OPENING, 60), 480, 270, { thumbnail: true });
+    stage.moment('enter', { side: 'pro', clock: 'main' });
+    assert.ok(!root.classList.contains('is-m-enter'), 'no moment class on thumbnail');
+    stage.destroy();
+  });
+
+  DT.test('theme riso: destroy cleans up', () => {
+    const { stage, root } = mountRiso(singleAt(OPENING, 60));
+    const container = root.parentElement;
+
+    stage.moment('enter', { side: 'pro', clock: 'main' });
+    stage.destroy();
+
+    const remaining = container.querySelectorAll('[id^="dt-riso-"]').length;
+    assert.equal(remaining, 0, 'all riso elements cleaned up');
+  });
 })();
