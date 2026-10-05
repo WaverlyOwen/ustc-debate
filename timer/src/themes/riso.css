@@ -38,8 +38,6 @@
   --paper-grain: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='p' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .3  0 0 0 0 .34  0 0 0 0 .36  2 0 0 0 -1.3' result='dark'/><feTurbulence type='fractalNoise' baseFrequency='.05 .4' numOctaves='2' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1.2 0 0 0 -.66' result='fibre'/><feMerge><feMergeNode in='fibre'/><feMergeNode in='dark'/></feMerge></filter><rect width='100%25' height='100%25' filter='url(%23p)'/></svg>");
   --reg-mark: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><g fill='none' stroke-width='1.1'><g stroke='%23F15060' transform='translate(-.5 -.3)'><circle r='6'/><path d='M-11 0H11M0-11V11'/></g><g stroke='%230078BF' style='mix-blend-mode:multiply' transform='translate(.5 .3)'><circle r='6'/><path d='M-11 0H11M0-11V11'/></g></g></svg>");
   --backdrop:
-    var(--reg-mark) 2.2cqw 2.4cqh / 2.6cqh 2.6cqh no-repeat,
-    var(--reg-mark) calc(100% - 2.2cqw) 2.4cqh / 2.6cqh 2.6cqh no-repeat,
     var(--paper-grain) 0 0 / 300px 300px,
     radial-gradient(130% 100% at 50% 40%, transparent 60%, rgb(0 35 67 / .05));
   --band-top: 30cqh;        /* the printed image: between the head and the bottom bar */
@@ -75,8 +73,7 @@
   .dt-stage[data-theme="riso"] {
     --dot-pitch: 4.2cqh;
     --screen-grain: none;
-    --backdrop: var(--reg-mark) 2.2cqw 2.4cqh / 2.6cqh 2.6cqh no-repeat,
-      var(--reg-mark) calc(100% - 2.2cqw) 2.4cqh / 2.6cqh 2.6cqh no-repeat;
+    --backdrop: none;
   }
 }
 
@@ -162,6 +159,23 @@
 /* ---- type: set like a poster, heavy and tight, through both drums ---- */
 
 .dt-stage[data-theme="riso"] .dt-title {
+
+/* Registration marks isolated to ::before so they can flash independently */
+.dt-stage[data-theme="riso"] .dt-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: 
+    var(--reg-mark) 2.2cqw 2.4cqh / 2.6cqh 2.6cqh no-repeat,
+    var(--reg-mark) calc(100% - 2.2cqw) 2.4cqh / 2.6cqh 2.6cqh no-repeat;
+  pointer-events: none;
+}
+
+@container (max-width: 520px) {
+  .dt-stage[data-theme="riso"] .dt-backdrop::before {
+    display: none;
+  }
+}
   font-size: 6.4cqh;
   font-weight: 900;
   line-height: 1.12;
@@ -363,6 +377,15 @@
   animation: riso-misreg-settle 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* enter: two-color sequential print on title mode */
+[data-theme="riso"].is-m-enter[data-mode="title"] .dt-deco {
+  animation: riso-enter 380ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+[data-theme="riso"].is-m-enter[data-mode="title"] .dt-deco-over {
+  animation: riso-enter 380ms 380ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
 [data-theme="riso"][data-pro-seat="left"][data-side="pro"] .dt-field,
 [data-theme="riso"][data-pro-seat="right"][data-side="con"] .dt-field {
   --seat-dir: -1;
@@ -397,8 +420,12 @@
   60% { --misreg: 0.2cqh; }
 }
 
+[data-theme="riso"].is-m-warn .dt-backdrop::before {
+  animation: riso-reg-flash 350ms ease-in-out;
+}
+
 [data-theme="riso"].is-m-warn {
-  animation: riso-reg-flash 350ms ease-in-out, riso-misreg-wobble 350ms ease-in-out;
+  animation: riso-misreg-wobble 350ms ease-in-out;
 }
 
 /* count: halftone dot size steps down */
@@ -468,15 +495,15 @@
   to { transform: translateY(0); }
 }
 
-[data-theme="riso"].is-m-switch .dt-halves {
-  animation: riso-paper-swap 540ms ease-in-out;
+/* switch: paper swap - active half slides down (out), incoming slides up (in) */
+[data-theme="riso"].is-m-switch .dt-half[data-active] {
+  animation: riso-paper-out 220ms ease-out;
 }
 
-@keyframes riso-paper-swap {
-  0% { transform: translateY(0); }
-  40% { transform: translateY(8%); }
-  100% { transform: translateY(0); }
+[data-theme="riso"].is-m-switch .dt-half:not([data-active]) {
+  animation: riso-paper-in 320ms ease-out;
 }
+
 
 /* lock: locked side ink fades */
 [data-theme="riso"].is-m-lock .dt-half:not([data-active]) {
@@ -506,10 +533,14 @@
   [data-theme="riso"].is-m-enter .dt-field,
   [data-theme="riso"].is-entering .dt-field,
   [data-theme="riso"].is-m-enter .dt-clock,
+  [data-theme="riso"].is-m-enter[data-mode="title"] .dt-deco,
+  [data-theme="riso"].is-m-enter[data-mode="title"] .dt-deco-over,
+  [data-theme="riso"].is-m-warn .dt-backdrop::before,
   [data-theme="riso"].is-m-warn,
   [data-theme="riso"].is-m-end .dt-deco-over::before,
   [data-theme="riso"][data-phase="over"] .dt-backdrop,
-  [data-theme="riso"].is-m-switch .dt-halves,
+  [data-theme="riso"].is-m-switch .dt-half[data-active],
+  [data-theme="riso"].is-m-switch .dt-half:not([data-active]),
   [data-theme="riso"].is-m-title .dt-deco,
   [data-theme="riso"].is-m-title .dt-deco-over {
     animation: none;

@@ -595,9 +595,11 @@
     assert.ok(root.classList.contains('is-m-switch'));
     assert.equal(root.dataset.mSide, 'con');
 
-    const halves = riso(root, '.dt-halves');
-    const halvesAnim = anim(halves);
-    assert.ok(halvesAnim !== 'none', 'paper swap animation on switch: ' + halvesAnim);
+    const proHalf = riso(root, '.dt-half[data-side="pro"]');
+    const conHalf = riso(root, '.dt-half[data-side="con"]');
+    const activeAnim = anim(root.dataset.mSide === 'con' ? conHalf : proHalf);
+    const inactiveAnim = anim(root.dataset.mSide === 'con' ? proHalf : conHalf);
+    assert.ok(activeAnim !== 'none' || inactiveAnim !== 'none', 'paper swap animation on switch: active=' + activeAnim + ', inactive=' + inactiveAnim);
     stage.destroy();
   });
 
