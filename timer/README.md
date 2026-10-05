@@ -119,16 +119,16 @@ python timer/build.py
 
 网格和下拉框按用途排：先是暗场投影的，再是亮场的，抠像用的绿幕最后。
 
-| 主题 | 立意 | 适合 |
-|---|---|---|
-| 堂 `hall`（默认） | 全屏色场，整个房间染上发言方的颜色 | 暗场 |
-| 星轨 `startrail` | 长曝光的夜空，发言越久星轨越长 | 暗场 |
-| 黑板 `chalk` | 教室黑板上的粉笔排线，时间用掉就被板擦擦去 | 暗场 |
-| 构成 `construct` | 构成主义几何海报，巨大的扇形表盘从本方席位一侧转回 | 暗场 |
-| 昼 `daylight` | 浅色底，色场收成数字后的一条横带 | 亮场 |
-| 墨 `ink` | 宣纸上的一道水墨笔触，朱砂对花青，时间用掉笔触就向本方席位收回 | 亮场 |
-| 孔版 `riso` | 两色孔版印刷海报，红蓝网点随时间变稀 | 亮场 |
-| 绿幕 `chroma` | 纯绿底，数字放在本方色底板上 | 直播抠像 |
+| 主题 | 立意 | 适合 | 动作语言 |
+|---|---|---|---|
+| 堂 `hall`（默认） | 全屏色场，整个房间染上发言方的颜色 | 暗场 | 横扫入场，前沿有细亮边；波纹回应铃点与换手 |
+| 星轨 `startrail` | 长曝光的夜空，发言越久星轨越长 | 暗场 | 快门打开天空亮起，星轨快速生长；流星、亮星闪烁；换手时天极转动与色温交叉 |
+| 黑板 `chalk` | 教室黑板上的粉笔排线，时间用掉就被板擦擦去 | 暗场 | 粉笔排线逐组画出，粉笔灰落下；勾 ✓、画圈、重描竖线；标题逐字写出 |
+| 构成 `construct` | 构成主义几何海报，巨大的扇形表盘从本方席位一侧转回 | 暗场 | 网格线依次出现，扇形展开，色带滑入；刻度咔咔转动；收尽时圆心闭合 |
+| 昼 `daylight` | 浅色底，色场收成数字后的一条横带 | 亮场 | 色带从席位侧伸出；深金波纹保证亮底对比 |
+| 墨 `ink` | 宣纸上的一道水墨笔触，朱砂对花青，时间用掉笔触就向本方席位收回 | 亮场 | 起笔—行笔（飞白）—收笔（洇开）；墨滴落下扩散；枯笔收尽；印章按下；圆相画出；换手时提笔—落笔 |
+| 孔版 `riso` | 两色孔版印刷海报，红蓝网点随时间变稀 | 亮场 | 两色依次过版，套印偏移收敛回弹；换纸滑出滑入；「时间到」斜印；套准标闪动 |
+| 绿幕 `chroma` | 纯绿底，数字放在本方色底板上 | 直播抠像 | 底板伸缩，边缘闪亮；无背景动画（抠像需稳定背景） |
 
 ## 加主题
 
@@ -160,14 +160,49 @@ CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（
 **JS（可选）**：`timer/src/themes/mytheme.js`，经典脚本，调用：
 
 ```js
-DT.themes.register('mytheme', { defs, painter });
+DT.themes.register('mytheme', { defs, painter, decorate });
 ```
 
 - `defs`：一段 SVG 标记（`<svg width="0" height="0" style="position:absolute"><defs>…</defs></svg>`），第一次用到这个主题时插入页面一次，CSS 里就能写 `filter: url(#dt-mytheme-edge)`。滤镜、图案、渐变的 id 一律以 `dt-<主题id>-` 开头，避免和别的主题冲突
 - `painter`：`(canvas, ctx) => ({ frame(view, now), resize(w, h), destroy() })`。渲染器把 canvas 放在背景之上、色场之下。不要自己开 `requestAnimationFrame`：渲染器限制在 30fps 以内，页面不可见时不调用 `frame`，系统要求减少动态效果、演示态 `frozen=1` 和缩略图里只画一帧静态画面
+- `decorate`：`(stageEl, {thumbnail, reducedMotion, frozen}) => ({ update?(view), moment?(name, detail), destroy?() })`。挂载时调用一次，用来插入主题自己的 DOM（印章、圆相 SVG、粉笔灰粒子……），并在时刻发生时用 JS 驱动（例如 SVG 的 `beginElement()`、`stroke-dashoffset`）。缩略图、`frozen`、reduced-motion 下 `moment` 不会被调用，元素直接处于终态
 - 随机数只用 `DT.themes.rng(seed)`（返回 `() => [0,1)`，用主题 id 当种子），这样截图能复现，投影窗口和操作台预览的画面一致。不要用 `Math.random()`。画面按舞台的比例画，不按像素：大小不同的舞台（投影与预览）是同一幅画
 - 画师出错（构造、`resize` 或 `frame` 抛出异常）时，渲染器停掉它、移除画布，在控制台警告一次，主题只剩 CSS 照常显示，计时和其余画面不受影响
 - 有 `mytheme.js` 就必须有 `mytheme.css`，否则构建失败
+
+**动作时刻**：渲染器从操作和铃点推出下列时刻，在 `.dt-stage` 上重放类 `is-m-<时刻名>`，并调用主题的 `decorate` 钩子（如有）。主题用这些时刻编排自己的动作语言：
+
+| 时刻 | 触发 | 说明 |
+|---|---|---|
+| `enter` | 换环节、开场卡进入第一个环节 | 唯一编排好的大动作 |
+| `start` / `pause` | 开始、暂停、继续 | 小回应 |
+| `warn` | 越过提示铃点 | 一次 |
+| `count` | 逐秒倒数每一秒 | 很小 |
+| `end` | 单方到 0、间隔到 0、双方一方耗尽 | 一次 |
+| `over` | 单方进入超时后的持续状态 | 缓慢，可循环（≤ 0.5Hz） |
+| `switch` | 双方环节发言权换手 | 中等 |
+| `lock` | 双方一方用完或放弃 | 一次 |
+| `title` | 开场卡 / 结束卡 / 间隔环节的静场 | 可有极缓的环境动作 |
+
+每个时刻类在 `--moment-ms`（主题可设，默认 1200ms）后自动移除。方位信息（`side`、`clock`）写在 `data-m-side`。主题 CSS 用 `[data-theme="x"].is-m-warn …` 选择器编排；主题 JS 在 `decorate` 返回的 `moment(name, detail)` 里驱动。
+
+**动作的硬约束**：
+
+- 时长 150–1200ms（`over` 与 `title` 的环境动作除外）；曲线写明（不准用浏览器默认 `ease`）
+- 只动 `transform`、`opacity`、`clip-path`、`mask-position`、`stroke-dashoffset` 与 CSS 变量；不准持续动画 SVG 滤镜或 `filter: blur()`（一次性的、≤ 600ms 的滤镜过渡可以）
+- 动画期间数字始终清楚可读：任何遮罩、粒子都在数字之下，或不覆盖数字区域
+- reduced-motion：全部直接到终态，`over` 不呼吸，环境动作停止
+- 1920×1080 无头 Edge 下，每个时刻动画期间的帧耗时 p95 ≤ 20ms
+
+**动作取样与测试**：
+
+```
+python timer/tests/motion.py --theme mytheme                     # 全部时刻，默认 1920x1080
+python timer/tests/motion.py --theme mytheme --moments enter,warn,end --size 1366x768
+python timer/tests/motion.py --theme mytheme --reduced           # 测试 reduced-motion
+```
+
+输出连拍图、`summary.json`（帧耗时统计）到 `timer/tests/motion-output/<主题>-<尺寸>/`。用它调动作数值、验证帧耗时预算、检查 reduced-motion。
 
 **可读性硬约束**：投影在讲堂里，最后一排也要看清。数字对它可能落在的每种底色，对比度不低于 3:1；标题、发言人和顶栏文字不低于 4.5:1；正反方一眼可分；当前发言方、剩余时间、提示铃点、超时四种信息都要看得出来；1366×768 与 1920×1080 下都不溢出。`tests/themes.test.js` 会对每个主题、正反两方、两种席位自动检查对比度（用的就是 `--digits-on-field`、`--digits-off-field`、`--text-field`、`--text-deep`），也检查超时和自由辩（未开始、进行中，发言方和等待方）里数字实际的颜色（对 `--field-ground` 与 `--side-deep`），不过就是测试失败。纹理有没有压住字，自动检查看不出来，要看截图。
 
