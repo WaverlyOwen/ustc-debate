@@ -157,12 +157,42 @@
 
   let stages = 0;   // numbers each stage's masks: two stages on one page (the console and its preview) share no id
 
+  // A new stage's first frames can take a few hundred ms to reach the screen: its stroke goes through the brush
+  // filter, its digits are set, for the first time. The browser runs a frame or two ahead of what it shows, and the
+  // CSS animations' clocks run on through the wait, so the room would first see the stroke already half pushed out.
+  // The entrance is held at its start (data-ink-hold, ink.css) for this many frames, while the stroke and the digits
+  // are painted too faint to see; by then that first paint is on the screen, and the brush comes down from the top.
+  // Most of that wait is the browser building the brush filter the first time any stroke goes through it, so a stage
+  // that moves also paints a speck through its brush as it goes up (.dt-ink-warm, for WARM_FRAMES), and its first
+  // entrance (after the title card, say) has only the rest of the wait to hold through.
+  const HOLD_FRAMES = 4, WARM_FRAMES = 8;
+
   // The pieces the stylesheet moves: under the stroke, the bleed round it; over it, the wet blot where the brush came
   // down, the falling drop and its bloom, the dry front and the last dry hairs; a 时 seal by the digits,
   // a 止 seal in each half, a 圆相 on the title card and one behind a break's digits. None is driven from here: each
-  // moment's class on the stage (render.js) plays them, and without one they rest at their end state.
-  function decorate(stage) {
-    const doc = stage.ownerDocument, n = ++stages, added = [];
+  // moment's class on the stage (render.js) plays them, and without one they rest at their end state. The one thing
+  // done here is holding an entrance through its first frames (HOLD_FRAMES).
+  function decorate(stage, flags) {
+    const doc = stage.ownerDocument, win = doc.defaultView || window, n = ++stages, added = [];
+    const still = !!(flags && (flags.thumbnail || flags.reducedMotion || flags.frozen));
+    // fn after n animation frames; the returned function cancels it.
+    const afterFrames = (count, fn) => {
+      let id = null, left = count;
+      const tick = () => { id = null; if (--left > 0) id = win.requestAnimationFrame(tick); else fn(); };
+      id = win.requestAnimationFrame(tick);
+      return () => { if (id !== null) win.cancelAnimationFrame(id); id = null; };
+    };
+    let held = null;   // cancels the pending end of a hold
+    const release = () => {
+      if (held) held();
+      held = null;
+      stage.removeAttribute('data-ink-hold');
+    };
+    function hold() {
+      release();
+      stage.setAttribute('data-ink-hold', '');
+      held = afterFrames(HOLD_FRAMES, release);
+    }
     const put = (parent, html) => {
       if (!parent) return;
       const box = doc.createElement('div');
@@ -180,8 +210,17 @@
     put(q('.dt-card'), enso('dt-ink-enso-' + n + '-title'));
     stage.querySelectorAll('.dt-half').forEach(half => put(half, seal('stop', '止')));
     Object.keys(IMAGES).forEach(name => stage.style.setProperty(name, IMAGES[name]));
+    let warmed = null;   // cancels the speck's removal
+    if (!still) {
+      put(q('.dt-deco'), piece('warm'));
+      const speck = added[added.length - 1];
+      warmed = afterFrames(WARM_FRAMES, () => { warmed = null; speck.remove(); });
+    }
     return {
+      moment(name) { if (name === 'enter') hold(); },
       destroy() {
+        release();
+        if (warmed) warmed();
         added.forEach(el => el.remove());
         Object.keys(IMAGES).forEach(name => stage.style.removeProperty(name));
       },
