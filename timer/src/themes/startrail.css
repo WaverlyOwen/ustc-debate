@@ -188,3 +188,159 @@
   box-shadow: 0 0 .35em .05em var(--pro);
 }
 .dt-stage[data-theme="startrail"] .dt-motion[data-side="con"]::before { box-shadow: 0 0 .35em .05em var(--con); }
+
+/* ---- Motion moments (spec §2.2) ---- */
+
+/* enter: shutter opening — sky brightens, trails grow from points to current length */
+[data-theme="startrail"].is-m-enter .dt-canvas {
+  animation: dt-startrail-enter-sky 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+[data-theme="startrail"].is-m-enter .dt-backdrop {
+  animation: dt-startrail-enter-backdrop 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes dt-startrail-enter-sky {
+  from { opacity: 0.1; }
+  to { opacity: 1; }
+}
+@keyframes dt-startrail-enter-backdrop {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
+}
+
+/* pause: half-shutter — dim the sky one stop */
+[data-theme="startrail"].is-m-pause .dt-canvas {
+  animation: dt-startrail-dim 400ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+[data-theme="startrail"].is-m-pause .dt-backdrop {
+  animation: dt-startrail-dim-backdrop 400ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+@keyframes dt-startrail-dim {
+  to { opacity: 0.65; }
+}
+@keyframes dt-startrail-dim-backdrop {
+  to { opacity: 0.7; }
+}
+
+/* start: resume exposure — brighten back */
+[data-theme="startrail"].is-m-start .dt-canvas {
+  animation: dt-startrail-brighten 350ms cubic-bezier(0.2, 0, 0.3, 1) forwards;
+}
+[data-theme="startrail"].is-m-start .dt-backdrop {
+  animation: dt-startrail-brighten-backdrop 350ms cubic-bezier(0.2, 0, 0.3, 1) forwards;
+}
+@keyframes dt-startrail-brighten {
+  to { opacity: 1; }
+}
+@keyframes dt-startrail-brighten-backdrop {
+  to { opacity: 1; }
+}
+
+/* warn: improved meteor with fading tail from speaking side's sky toward digits */
+[data-theme="startrail"].is-m-warn .dt-ring {
+  width: 34cqh;
+  height: .5cqh;
+  margin: -.25cqh 0 0 -34cqh;
+  border: 0;
+  border-radius: .25cqh;
+  background: linear-gradient(to right, transparent, rgb(190 214 255 / .5) 70%, #fff);
+  transform-origin: 100% 50%;
+  animation: dt-startrail-meteor 900ms cubic-bezier(.35, 0, .65, 1) forwards;
+}
+
+/* count: twinkle star near digits flashes once */
+.dt-startrail-twinkle {
+  position: absolute;
+  top: calc(var(--clock-y) + 6cqh);
+  left: 50%;
+  width: 1.2cqh;
+  height: 1.2cqh;
+  margin: -.6cqh 0 0 -.6cqh;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff, var(--accent) 40%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+[data-theme="startrail"].is-m-count .dt-startrail-twinkle {
+  animation: dt-startrail-twinkle 500ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes dt-startrail-twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.8); }
+  50% { opacity: 0.9; transform: scale(1.3); }
+}
+
+/* end: shutter closing — trails freeze, brightness drops, observatory light out */
+[data-theme="startrail"].is-m-end .dt-canvas {
+  animation: dt-startrail-end-dim 800ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+[data-theme="startrail"].is-m-end .dt-backdrop {
+  animation: dt-startrail-end-backdrop 800ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+[data-theme="startrail"].is-m-end .dt-deco::after {
+  animation: dt-startrail-observatory-out 800ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+@keyframes dt-startrail-end-dim {
+  to { opacity: 0.6; }
+}
+@keyframes dt-startrail-end-backdrop {
+  to { opacity: 0.65; }
+}
+@keyframes dt-startrail-observatory-out {
+  to { opacity: 0.4; }
+}
+
+/* over: breathing colour temperature glow */
+[data-theme="startrail"][data-phase="over"].is-m-over .dt-field,
+[data-theme="startrail"][data-phase="over"].is-m-over .dt-half-field {
+  animation: dt-startrail-breathe 2000ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes dt-startrail-breathe {
+  0%, 100% { opacity: var(--field-opacity, 0.7); }
+  50% { opacity: calc(var(--field-opacity, 0.7) * 1.15); }
+}
+
+/* switch: colour temperature cross-fade in dual mode */
+[data-theme="startrail"][data-kind="dual"].is-m-switch .dt-half-field {
+  animation: dt-startrail-switch-glow 520ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes dt-startrail-switch-glow {
+  0% { opacity: var(--prev-opacity, 0.8); }
+  100% { opacity: var(--next-opacity, 0.8); }
+}
+
+/* lock: trails grey out when side exhausted */
+[data-theme="startrail"][data-kind="dual"] .dt-half[data-locked].is-m-lock .dt-half-field {
+  animation: dt-startrail-grey-out 700ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+@keyframes dt-startrail-grey-out {
+  to { opacity: 0; filter: grayscale(1); }
+}
+
+/* title: slow ambient rotation of the sky */
+[data-theme="startrail"][data-mode="title"].is-m-title .dt-canvas {
+  animation: dt-startrail-title-rotate 120000ms linear infinite;
+}
+@keyframes dt-startrail-title-rotate {
+  to { transform: rotate(0.5deg); }
+}
+
+/* reduced-motion: skip all animations, show final state */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="startrail"].is-m-enter .dt-canvas,
+  [data-theme="startrail"].is-m-enter .dt-backdrop,
+  [data-theme="startrail"].is-m-pause .dt-canvas,
+  [data-theme="startrail"].is-m-pause .dt-backdrop,
+  [data-theme="startrail"].is-m-start .dt-canvas,
+  [data-theme="startrail"].is-m-start .dt-backdrop,
+  [data-theme="startrail"].is-m-warn .dt-ring,
+  [data-theme="startrail"].is-m-count .dt-startrail-twinkle,
+  [data-theme="startrail"].is-m-end .dt-canvas,
+  [data-theme="startrail"].is-m-end .dt-backdrop,
+  [data-theme="startrail"].is-m-end .dt-deco::after,
+  [data-theme="startrail"].is-m-over .dt-field,
+  [data-theme="startrail"].is-m-over .dt-half-field,
+  [data-theme="startrail"].is-m-switch .dt-half-field,
+  [data-theme="startrail"].is-m-lock .dt-half-field,
+  [data-theme="startrail"].is-m-title .dt-canvas {
+    animation: none;
+  }
+}

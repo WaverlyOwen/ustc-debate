@@ -264,5 +264,40 @@
     };
   }
 
-  DT.themes.register('startrail', { painter });
+  // ---- Motion (spec §2.2): decorate adds elements for count twinkle star and manages moment animations ----
+
+  let stageCount = 0;
+
+  function decorate(stage, flags) {
+    const doc = stage.ownerDocument, n = ++stageCount, added = [];
+    const still = !!(flags && (flags.thumbnail || flags.reducedMotion || flags.frozen));
+    
+    const put = (parent, html) => {
+      if (!parent) return;
+      const box = doc.createElement('div');
+      box.innerHTML = html;
+      added.push(parent.appendChild(box.firstChild));
+    };
+    
+    const q = sel => stage.querySelector(sel);
+    
+    // Twinkle star for count moment: near the digits, a small star that can flash
+    const star = (id) => '<span class="dt-startrail-twinkle" id="dt-startrail-twinkle-' + id +
+      '" aria-hidden="true"></span>';
+    
+    put(q('.dt-deco-over'), star(n));
+    
+    return {
+      moment(name, detail) {
+        // All moment animations are CSS-driven via .is-m-<name> classes that render.js adds
+        // JS decorate only needs to handle any special setup, but for startrail everything is CSS
+      },
+      destroy() {
+        added.forEach(el => el.remove());
+      },
+    };
+  }
+
+  DT.themes.register('startrail', { painter, decorate });
+
 })(window.DT = window.DT || {});
