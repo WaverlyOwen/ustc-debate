@@ -70,3 +70,24 @@
   filter: saturate(.45) brightness(.78);
 }
 .dt-stage[data-theme="daylight"] .dt-half + .dt-half { box-shadow: inset 1px 0 0 color-mix(in oklab, var(--ink) 14%, transparent); }
+
+/* ---- motion (motion spec §2.6): band extends from the seat side instead of full-screen sweep, dark gold
+   rings for contrast on the light ground ---- */
+
+/* Override baseline sweep: the band enters from its seat side across just the band height, not full screen. */
+.dt-stage[data-theme="daylight"].is-entering .dt-field {
+  animation: dt-daylight-band-l 560ms var(--ease-out);
+}
+.dt-stage[data-theme="daylight"].is-entering[data-pro-seat="right"][data-side="pro"] .dt-field,
+.dt-stage[data-theme="daylight"].is-entering[data-pro-seat="left"][data-side="con"] .dt-field {
+  animation-name: dt-daylight-band-r;
+}
+@keyframes dt-daylight-band-l { from { clip-path: inset(0 100% 0 0); } }
+@keyframes dt-daylight-band-r { from { clip-path: inset(0 0 0 100%); } }
+
+/* Dark gold rings for contrast on the light ground (the baseline accent would be too faint). */
+.dt-stage[data-theme="daylight"] .dt-ring {
+  border-color: var(--accent);
+  /* Gold on the light band reads at about 1.9:1, so the ring gets a thin light halo for contrast. */
+  box-shadow: 0 0 0 1px var(--on-side);
+}

@@ -2857,6 +2857,36 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   border-radius: .2cqh;
 }
 
+/* ---- motion (motion spec §2.6): stable background for keying, plates respond to moments, edge flash
+   instead of rings ---- */
+
+/* No background animation: the baseline sweep is on .dt-field, which is display: none here. The baseline
+   .is-entering animation already doesn't affect chroma since it has no field. */
+
+/* Hide baseline rings: chroma answers moments with its plates only. */
+.dt-stage[data-theme="chroma"] .dt-ring { display: none; }
+
+/* Warn moment: a brief bright flash along the plate's edge instead of a ring. The plate's ::before is
+   the side colour bar; its ::after is the dark track. Add a ::before box-shadow flash. */
+.dt-stage[data-theme="chroma"].is-m-warn .dt-clock[data-clock="main"]::before {
+  box-shadow: 0 0 0 .3cqh var(--accent);
+  animation: dt-chroma-edge-flash 400ms var(--ease-out);
+}
+@keyframes dt-chroma-edge-flash {
+  from { box-shadow: 0 0 0 .6cqh var(--accent); }
+  to { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Start/pause: subtle plate pulse via transform scale. */
+.dt-stage[data-theme="chroma"].is-m-start .dt-clock::before,
+.dt-stage[data-theme="chroma"].is-m-pause .dt-clock::before {
+  animation: dt-chroma-plate-pulse 300ms var(--ease-out);
+}
+@keyframes dt-chroma-plate-pulse {
+  from { transform: scale(1.02); }
+  to { transform: scale(1); }
+}
+
 /* === themes/construct.css === */
 /* @theme id=construct name=构成 desc=构成主义几何海报，巨大的扇形表盘从本方席位一侧转回，适合暗场投影 tone=dark order=4 */
 /* 构成: a constructivist poster. The time left is a sector of a giant dial whose centre lies just outside the speaking
@@ -3508,6 +3538,27 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   filter: saturate(.45) brightness(.78);
 }
 .dt-stage[data-theme="daylight"] .dt-half + .dt-half { box-shadow: inset 1px 0 0 color-mix(in oklab, var(--ink) 14%, transparent); }
+
+/* ---- motion (motion spec §2.6): band extends from the seat side instead of full-screen sweep, dark gold
+   rings for contrast on the light ground ---- */
+
+/* Override baseline sweep: the band enters from its seat side across just the band height, not full screen. */
+.dt-stage[data-theme="daylight"].is-entering .dt-field {
+  animation: dt-daylight-band-l 560ms var(--ease-out);
+}
+.dt-stage[data-theme="daylight"].is-entering[data-pro-seat="right"][data-side="pro"] .dt-field,
+.dt-stage[data-theme="daylight"].is-entering[data-pro-seat="left"][data-side="con"] .dt-field {
+  animation-name: dt-daylight-band-r;
+}
+@keyframes dt-daylight-band-l { from { clip-path: inset(0 100% 0 0); } }
+@keyframes dt-daylight-band-r { from { clip-path: inset(0 0 0 100%); } }
+
+/* Dark gold rings for contrast on the light ground (the baseline accent would be too faint). */
+.dt-stage[data-theme="daylight"] .dt-ring {
+  border-color: var(--accent);
+  /* Gold on the light band reads at about 1.9:1, so the ring gets a thin light halo for contrast. */
+  box-shadow: 0 0 0 1px var(--on-side);
+}
 
 /* === themes/hall.css === */
 /* @theme id=hall name=堂 desc=全屏色场，适合暗场投影 tone=dark order=1 */

@@ -108,3 +108,33 @@
   top: calc(52% + min(15cqh, 8.5cqw) + 3.2cqh);
   border-radius: .2cqh;
 }
+
+/* ---- motion (motion spec §2.6): stable background for keying, plates respond to moments, edge flash
+   instead of rings ---- */
+
+/* No background animation: the baseline sweep is on .dt-field, which is display: none here. The baseline
+   .is-entering animation already doesn't affect chroma since it has no field. */
+
+/* Hide baseline rings: chroma answers moments with its plates only. */
+.dt-stage[data-theme="chroma"] .dt-ring { display: none; }
+
+/* Warn moment: a brief bright flash along the plate's edge instead of a ring. The plate's ::before is
+   the side colour bar; its ::after is the dark track. Add a ::before box-shadow flash. */
+.dt-stage[data-theme="chroma"].is-m-warn .dt-clock[data-clock="main"]::before {
+  box-shadow: 0 0 0 .3cqh var(--accent);
+  animation: dt-chroma-edge-flash 400ms var(--ease-out);
+}
+@keyframes dt-chroma-edge-flash {
+  from { box-shadow: 0 0 0 .6cqh var(--accent); }
+  to { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Start/pause: subtle plate pulse via transform scale. */
+.dt-stage[data-theme="chroma"].is-m-start .dt-clock::before,
+.dt-stage[data-theme="chroma"].is-m-pause .dt-clock::before {
+  animation: dt-chroma-plate-pulse 300ms var(--ease-out);
+}
+@keyframes dt-chroma-plate-pulse {
+  from { transform: scale(1.02); }
+  to { transform: scale(1); }
+}
