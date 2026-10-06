@@ -141,7 +141,9 @@
 
 /* ---- the meteor: crossing the warn point sends one shooting star over the digits (the warn bell's ring) ---- */
 
-.dt-stage[data-theme="startrail"][data-phase="warn"] .dt-ring {
+/* Chosen by the bell that rang (render.js marks each ring), not by the phase: after a free-debate switch the phase is
+   the new speaker's, whatever rang. */
+.dt-stage[data-theme="startrail"] .dt-ring[data-type="warn"] {
   width: 34cqh;
   height: .5cqh;
   margin: -.25cqh 0 0 -34cqh;   /* the head sits at the ring's point, the tail trails behind */

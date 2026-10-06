@@ -155,7 +155,7 @@ python timer/build.py
 
 可选：`--on-accent`（实心强调色上文字的颜色，比如待确认的「再点一次重置」；默认是面板色，强调色和面板色太接近的主题要另指一个，`themes.test.js` 要求 4.5:1）、`--backdrop`（任意 `background` 值，画在色场之下）、`.stage-deco` 装饰层、`--text-field` / `--text-deep`（文字所在的两种底，默认是本方色和本方深色；色场够不到标题和顶栏的主题要指向真正的底色）、`--speaker-ink`（发言人一行的颜色）、`--half-ground`（双方环节每一半的底色，有画布的主题可设为 `transparent`）、`--field-ground`（数字落在色场上时真正的底色，默认是本方色；色场不是平涂本方色的主题要如实写，比如「墨」等待方的淡墨笔触、「星轨」双方环节的星云光晕）。组件的 CSS 里不写死颜色，颜色只从这些变量来。
 
-CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（单方、间隔）和每一半上的 `--remain`（双方）。`--tension` 以 0.02 为一步，值不变就不重写，主题不用自己再量化。纹理可以用 `background-image: url("data:image/svg+xml,…")`。
+CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（单方、间隔）和每一半上的 `--remain`（双方），以及舞台和每一半上的 `--secs`、`--secs-total`（剩余与总长的整秒数）。`--used`、`--remain` 以 1/2000 为一步，`--tension` 随显示的整秒变化，值不变就不重写，主题不用自己再量化。纹理可以用 `background-image: url("data:image/svg+xml,…")`。
 
 **JS（可选）**：`timer/src/themes/mytheme.js`，经典脚本，调用：
 

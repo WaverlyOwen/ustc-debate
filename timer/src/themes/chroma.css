@@ -85,6 +85,11 @@
   background: color-mix(in oklab, var(--side-color) 55%, var(--plate));
 }
 .dt-stage[data-theme="chroma"] .dt-half[data-locked] .dt-clock::before { clip-path: none; background: var(--plate); }
+/* The plate is the clock's box, so the overtime sign stays in the row (stage.css hangs it outside), where the plate
+   covers it rather than leaving it on the key green; the bell's ring would lie across the plate, so there is none. */
+.dt-stage[data-theme="chroma"] .dt-sign { position: static; }
+.dt-stage[data-theme="chroma"] .dt-sign:empty { display: none; }
+.dt-stage[data-theme="chroma"] .dt-ring { display: none; }
 .dt-stage[data-theme="chroma"] .dt-team {
   right: auto;
   max-width: calc(100% - 10cqw);

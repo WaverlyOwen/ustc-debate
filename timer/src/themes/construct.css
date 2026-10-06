@@ -272,7 +272,12 @@
   --construct-r: 74cqh;
   --construct-sweep: calc(var(--remain, 1) * 180deg);
   box-shadow: none;
-  transition: filter 300ms ease, --construct-r 520ms var(--ease-spring);
+  /* stage.css's transitions as well as the dial's: filter and --dim here, and --remain too once the side is out. */
+  transition: filter 520ms var(--ease-out), --dim 520ms var(--ease-out), --construct-r 520ms var(--ease-spring);
+}
+.dt-stage[data-theme="construct"]:not(.is-entering) .dt-half[data-locked] {
+  transition: filter 520ms var(--ease-out), --dim 520ms var(--ease-out), --remain 520ms var(--ease-out),
+    --construct-r 520ms var(--ease-spring);
 }
 @supports (width: round(nearest, 1px, 1px)) {
   .dt-stage[data-theme="construct"] .dt-half { --construct-sweep: round(nearest, calc(var(--remain, 1) * 180deg), .5deg); }

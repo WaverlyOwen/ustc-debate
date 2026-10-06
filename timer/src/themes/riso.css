@@ -153,8 +153,11 @@
 .dt-stage[data-theme="riso"] .dt-clock[data-phase="warn"] .dt-colon,
 .dt-stage[data-theme="riso"] .dt-clock[data-phase="count"] .dt-colon { color: var(--own-ink); text-shadow: none; }
 /* A clock that is not running prints its colon solid and in register: stage.css's faded colon with both drums' edges
-   would sink into dots of its own size and value, and an idle clock would read '4 00'. The 暂停 line says it waits. */
-.dt-stage[data-theme="riso"] .dt-clock:not([data-running="true"]) .dt-colon { opacity: 1; text-shadow: none; }
+   would sink into dots of its own size and value, and an idle clock would read '4 00'. The 暂停 line says it waits.
+   The colon rests at --colon-rest (stage.css), so it settles to solid as the clock stops and rises from solid as it
+   starts. */
+.dt-stage[data-theme="riso"] { --colon-rest: 1; }
+.dt-stage[data-theme="riso"] .dt-clock:not([data-running="true"]) .dt-colon { text-shadow: none; }
 
 .dt-stage[data-theme="riso"] .dt-backdrop,
 .dt-stage[data-theme="riso"] .dt-clock { will-change: transform; }

@@ -249,6 +249,7 @@
 .dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits-on { clip-path: inset(-50% -50% -50% calc(100% - var(--cut) - 1px)); }
 .dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% var(--cut) -50% -50%); }
 .dt-stage[data-theme="ink"] .dt-half .dt-clock .dt-state { top: calc(50% + 21cqh); }
+.dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-clock .dt-state { top: 50%; }   /* 时间到 where the digits were */
 .dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-clock { color: var(--ink); }
 .dt-stage[data-theme="ink"] .dt-team { color: var(--ink); }
 

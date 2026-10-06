@@ -475,16 +475,20 @@
   });
 
   // Spec §2.2: crossing the warn point sends one meteor over the digits (the renderer's warn ring, restyled); the
-  // renderer sends no ring under reduced motion. The end bell's rings stay rings.
+  // renderer sends no ring under reduced motion. The end bell's rings stay rings. The meteor is chosen by the bell that
+  // rang, not by the phase: in free debate a side runs out while the new speaker's clock may read warn.
   DT.test('theme startrail: the warn bell sends a meteor over the digits; the end bell keeps its ring', () => {
     const warn = mountSky(singleAt(OPENING, 152));
     assert.equal(warn.root.dataset.phase, 'warn');
     warn.stage.pulse({ type: 'warn', clock: 'main' });
     const meteor = warn.root.querySelector('.dt-ring');
     assert.ok(meteor, 'the warn bell makes its ring');
+    assert.equal(meteor.dataset.type, 'warn');
     assert.equal(getComputedStyle(meteor).animationName, 'dt-startrail-meteor');
     const cs = getComputedStyle(meteor);
     assert.ok(px(cs.width) > 4 * px(cs.height), 'a streak: ' + cs.width + ' × ' + cs.height);
+    warn.stage.pulse({ type: 'end', clock: 'main' });
+    assert.equal(getComputedStyle(warn.root.querySelector('.dt-ring[data-type="end"]')).animationName, 'dt-ring', 'an end bell in the warn phase is a ring');
     warn.stage.destroy();
     const over = mountSky(singleAt(OPENING, 181));
     over.stage.pulse({ type: 'end', clock: 'main' });
