@@ -348,6 +348,9 @@
     const half = side => root.querySelector('.dt-half[data-side="' + side + '"]');
     try {
       h.pulse({ type: 'end', clock: 'pro' });
+      // The page's timeline can jump under the test runner: keep the rings until they are counted.
+      const keep = () => root.querySelectorAll('.dt-ring').forEach(r => r.getAnimations({ subtree: true }).forEach(a => a.pause()));
+      keep();
       s = E.tick(s, T0 + 240100).session;
       h.update(E.view(s, T0 + 240100));
       await wait(400);
@@ -364,6 +367,7 @@
       h.pulse({ type: 'end', clock: 'con' });   // the last side runs out too
       s = E.tick(s, T0 + 480200).session;
       h.update(E.view(s, T0 + 480200));
+      keep();
       const last = half('con').querySelector('.dt-ring[data-type="end"]');
       assert.near(num(last, '--ring-to'), reachIn(last, root, 0.58), 1e-3, 'no switch follows: its column stays');
       assert.equal(root.querySelector('.dt-halves').style.getPropertyValue('--right-col'), '58%', 'as it does');
