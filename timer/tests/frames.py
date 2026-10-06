@@ -147,6 +147,11 @@ def record(cdp, url, args, out_dir):
     cdp.evaluate("window.__dtFrames.step()")   # the entrance starts from its first frame
     if args.skip:
         advance(cdp, args.skip)
+        # Seat every animation at its age after the skip (one more frame lets the finished ones end and go), so a
+        # transition that began at the load is not still sitting at its start when the key is pressed.
+        cdp.evaluate("window.__dtFrames.step()")
+        advance(cdp, 16)
+        cdp.evaluate("window.__dtFrames.step()")
         cdp.evaluate("window.__dtFrames.mark()")   # what the key creates next counts from now, not from the load
     if args.key:
         d = dict(KEYS[args.key])
