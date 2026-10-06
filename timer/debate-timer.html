@@ -2416,7 +2416,9 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 
 /* === themes/chroma.css === */
 /* @theme id=chroma name=绿幕 desc=纯绿底，数字放在本方色底板上，供直播抠像 tone=dark order=8 */
-/* 绿幕: for keying. Flat #00B140 everywhere, no field and no background motion; content sits on plates. */
+/* 绿幕: for keying. Flat #00B140 everywhere, no field and no background motion; content sits on plates.
+   Every pixel over the key is either the key or solid: a plate is never faded. It is taken on by a matte, and gold
+   keeps --plate-rim inside a plate's edge, so it never meets the key. */
 [data-theme="chroma"] {
   --pro: #B8322A;
   --pro-deep: #2A2D33;      /* the plate: what the digits sit on where their side's plate is taken back */
@@ -2432,6 +2434,7 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   --backdrop: none;
   --plate: #2A2D33;
   --plate-radius: 2cqh;
+  --plate-rim: .4cqh;       /* how far inside a plate's edge its gold rules and flashes keep */
 }
 .dt-stage[data-theme="chroma"][data-side="none"] { --side-color: var(--plate); }
 /* The deep colours are the plate's, so the key green is laid on the stage and the halves by hand. */
@@ -2441,6 +2444,7 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-stage[data-theme="chroma"] .dt-field,
 .dt-stage[data-theme="chroma"] .dt-warnline,
 .dt-stage[data-theme="chroma"] .dt-half-field,
+.dt-stage[data-theme="chroma"] .dt-floorline,
 .dt-stage[data-theme="chroma"] .dt-bottom::before { display: none; }
 .dt-stage[data-theme="chroma"] .dt-half { box-shadow: none; }
 .dt-stage[data-theme="chroma"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: none; }
@@ -2460,7 +2464,24 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 /* The end card's record: the head's plate and the card's padding take about 12cqh more of the stage than stage.css
    allows for, so the rows are sized to what is left, and the last row stays on the plate, off the key green. */
 .dt-stage[data-theme="chroma"] { --record-budget: 55cqh; }
-.dt-stage[data-theme="chroma"] .dt-top { align-self: stretch; padding: .8cqh 2cqh; }
+.dt-stage[data-theme="chroma"] .dt-top {
+  align-self: stretch;
+  padding: .8cqh 2cqh;
+  transition: clip-path 360ms var(--ease-out);
+}
+/* In a free debate the team plates take the top bar's place. The bar is not cut away: it stays laid out where it was,
+   out of the flow, and closes to its middle as the halves are swept on from the seats; it opens again after. */
+.dt-stage[data-theme="chroma"][data-kind="dual"] .dt-top {
+  display: flex;
+  position: absolute;
+  top: 4.2cqh;
+  left: 5cqw;
+  right: 5cqw;
+  clip-path: polygon(50% 0, 50% 0, 50% 100%, 50% 100%);   /* a polygon: an inset of no width can still show a pixel */
+  transition-duration: 320ms;
+}
+/* 1px outside the bar: it cuts nothing at rest. */
+.dt-stage[data-theme="chroma"]:not([data-kind="dual"]) .dt-top { clip-path: polygon(-1px -1px, calc(100% + 1px) -1px, calc(100% + 1px) calc(100% + 1px), -1px calc(100% + 1px)); }
 .dt-stage[data-theme="chroma"] .dt-bottom { padding: 1.4cqh 2cqh; }
 
 .dt-stage[data-theme="chroma"] .dt-clock::before,
@@ -2492,21 +2513,135 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-stage[data-theme="chroma"][data-kind="single"][data-phase="calm"][data-pro-seat="left"][data-side="con"] .dt-warnline:not([hidden]) ~ .dt-clock[data-clock="main"]::before {
   --notch-x: calc((1 - var(--warn-at)) * 100%);
 }
+
+/* ---- free debate: each half's plate ----
+   The waiting side's plate is its colour let down toward the plate by the shared --dim, so it eases with the switch
+   (at --dim 1 it is the 55% mix it always was). The speaker's gold floor rule is drawn on both plate layers, inside
+   the plate's bottom edge and under the digits; it opens from the middle with the switch. A side that runs out or
+   yields keeps its plate: its colour drains with --remain (stage.css eases it into a lock) to the dark track. */
 .dt-stage[data-theme="chroma"] .dt-half .dt-clock::before {
   clip-path: inset(0 calc((1 - var(--remain, 1)) * 100%) 0 0 round var(--plate-radius));
+  background-color: color-mix(in oklab, var(--side-color) calc(100% - 45% * var(--dim)), var(--plate));
 }
 .dt-stage[data-theme="chroma"] .dt-half:last-child .dt-clock::before {
   clip-path: inset(0 0 0 calc((1 - var(--remain, 1)) * 100%) round var(--plate-radius));
 }
-.dt-stage[data-theme="chroma"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-clock::before {
-  background: color-mix(in oklab, var(--side-color) 55%, var(--plate));
+.dt-stage[data-theme="chroma"] .dt-half .dt-clock::before,
+.dt-stage[data-theme="chroma"] .dt-half .dt-clock::after {
+  background-repeat: no-repeat;
+  background-position: 50% calc(100% - 2 * var(--plate-rim));
+  background-size: 0% max(4px, .4cqh);
+  transition: background-size 520ms var(--ease-out);
 }
-.dt-stage[data-theme="chroma"] .dt-half[data-locked] .dt-clock::before { clip-path: none; background: var(--plate); }
-/* The plate is the clock's box, so the overtime sign stays in the row (stage.css hangs it outside), where the plate
-   covers it rather than leaving it on the key green; the bell's ring would lie across the plate, so there is none. */
-.dt-stage[data-theme="chroma"] .dt-sign { position: static; }
-.dt-stage[data-theme="chroma"] .dt-sign:empty { display: none; }
-.dt-stage[data-theme="chroma"] .dt-ring { display: none; }
+/* Not while the halves are idle, where no one has the floor. */
+.dt-stage[data-theme="chroma"] .dt-halves:not([data-idle]) .dt-half .dt-clock::before,
+.dt-stage[data-theme="chroma"] .dt-halves:not([data-idle]) .dt-half .dt-clock::after {
+  background-image: linear-gradient(var(--accent), var(--accent));
+}
+.dt-stage[data-theme="chroma"] .dt-half[data-active] .dt-clock::before,
+.dt-stage[data-theme="chroma"] .dt-half[data-active] .dt-clock::after { background-size: calc(100% - 8cqh) max(4px, .4cqh); }
+
+/* ---- the digits: one layer (both were --ink), so --used no longer repaints them every frame ---- */
+.dt-stage[data-theme="chroma"] .dt-digits-on { display: none; }
+.dt-stage[data-theme="chroma"][data-kind][data-pro-seat][data-side] .dt-clock .dt-digits:not(.dt-digits-on),
+.dt-stage[data-theme="chroma"] .dt-half .dt-digits:not(.dt-digits-on) { clip-path: none; }
+
+/* ---- overtime: the sign comes out of the plate on a piece of its own ----
+   stage.css hangs the sign left of the digits, so they keep their place. Here the sign carries a piece of plate
+   (::before) as tall as the clock's plate and laid over its rounded left edge, so the + is never on the key; sign and
+   piece are wiped out of the plate's left edge (a clip on the sign) rather than faded, and the + breathes by its colour
+   toward the plate, since its piece must stay solid. Only a single stage runs over (engine.js). */
+.dt-stage[data-theme="chroma"] .dt-sign {
+  opacity: 1;
+  transition: none;
+  clip-path: inset(-50% -100% -50% calc(-4cqh - 1px));
+}
+.dt-stage[data-theme="chroma"] .dt-sign::before,
+.dt-stage[data-theme="chroma"] .dt-sign::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -2cqh;
+  bottom: -2cqh;
+  translate: 0 -.07em;        /* undoes the digits' drop, so the piece lies on the plate's own pixel rows */
+  left: -4cqh;
+  right: calc(4cqh - var(--plate-radius) - .04em - .5cqh);
+  border-radius: var(--plate-radius) 0 0 var(--plate-radius);
+  background: var(--plate);
+}
+.dt-stage[data-theme="chroma"] .dt-sign:empty::before,
+.dt-stage[data-theme="chroma"] .dt-sign:empty::after { display: none; }
+.dt-stage[data-theme="chroma"] .dt-clock[data-phase="over"] .dt-sign {
+  animation: cr-tab-out 300ms var(--ease-out) backwards, cr-sign-breathe 2000ms ease-in-out 300ms infinite;
+}
+
+/* ---- 「暂停」 on a tab of plate ----
+   It hangs from the clock's plate as a dark tab, joined behind the plate's bottom edge, and rolls down from it (a
+   matte) rather than fading over the key. Emptied on resume, it keeps the word (::before) while it rolls back up. */
+.dt-stage[data-theme="chroma"] .dt-clock .dt-state {
+  z-index: -3;
+  top: calc(100% + 1cqh);
+  margin-top: 0;
+  padding: 1.6cqh 1.8cqh .8cqh;
+  border-radius: 0 0 var(--plate-radius) var(--plate-radius);
+  background: var(--plate);
+  color: var(--ink-dim);
+  opacity: 1;
+  clip-path: inset(0 0 100% 0);
+  transition: clip-path 200ms var(--ease-out);
+}
+.dt-stage[data-theme="chroma"] .dt-clock .dt-state:not(:empty) { clip-path: inset(0); }
+.dt-stage[data-theme="chroma"] .dt-clock .dt-state:empty::before { content: "暂停" / ""; }
+/* Locked (时间到 / 已放弃): the word sits on the plate, centred over the digits' place (stage.css), not on a tab. */
+.dt-stage[data-theme="chroma"] .dt-half[data-locked] .dt-state {
+  z-index: 0;
+  top: 50%;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  clip-path: none;
+  transition: none;
+}
+
+/* ---- the bell: the plate's rim flashes gold ----
+   The shared ring is drawn inside the clock that rang, over the plate and under the digits; here it is the plate's own
+   rim, --plate-rim inside its edge, lit at once and fading on the plate (solid on screen). A single stage's end bell
+   is one ring flashing twice, 320 ms apart with the double bell (its second ring is not drawn), so the sign's piece
+   can flash with it on the same animation; a free-debate side that runs out flashes once, on the plate it keeps. */
+.dt-stage[data-theme="chroma"] .dt-ring {
+  inset: calc(-2cqh + var(--plate-rim)) calc(-4cqh + var(--plate-rim));
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: .6cqh solid var(--accent);
+  border-radius: calc(var(--plate-radius) - var(--plate-rim));
+  animation-name: cr-flash;
+}
+.dt-stage[data-theme="chroma"] .dt-clock[data-clock="main"] > .dt-ring[data-type="end"] { animation: cr-flash-twice 1420ms linear forwards; }
+.dt-stage[data-theme="chroma"] .dt-clock[data-clock="main"] > .dt-ring[data-nth="2"] { display: none; }
+/* In overtime the sign's piece covers the plate's left edge, and carries that part of the rim itself. */
+.dt-stage[data-theme="chroma"] .dt-clock[data-phase="over"] > .dt-ring {
+  left: calc(-4cqh + var(--plate-radius));
+  border-left: 0;
+  border-radius: 0 calc(var(--plate-radius) - var(--plate-rim)) calc(var(--plate-radius) - var(--plate-rim)) 0;
+}
+.dt-stage[data-theme="chroma"] .dt-sign::after {
+  z-index: 0;
+  top: calc(-2cqh + var(--plate-rim));
+  bottom: calc(-2cqh + var(--plate-rim));
+  left: calc(-4cqh + var(--plate-rim));
+  border: .6cqh solid var(--accent);
+  border-right: 0;
+  border-radius: calc(var(--plate-radius) - var(--plate-rim)) 0 0 calc(var(--plate-radius) - var(--plate-rim));
+  background: none;
+  opacity: 0;
+}
+.dt-stage[data-theme="chroma"][data-bell="end"][data-bell-clock="main"] .dt-clock[data-phase="over"] .dt-sign::after {
+  animation: cr-flash-twice 1420ms linear forwards;
+}
+
 .dt-stage[data-theme="chroma"] .dt-team {
   right: auto;
   max-width: calc(100% - 10cqw);
@@ -2521,14 +2656,86 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-stage[data-theme="chroma"] .dt-record tr[data-kind="break"] td:first-child::before {
   background: color-mix(in oklab, var(--plate) 45%, var(--ink));
 }
-/* The floor of a half is key green here: the speaker's line goes just under the digits' plate instead
-   (the active digits are min(30cqh, 17cqw) tall, centred at 52%, on a plate reaching 2cqh past them). */
-.dt-stage[data-theme="chroma"] .dt-floorline {
-  left: 25%;
-  right: 25%;
-  bottom: auto;
-  top: calc(52% + min(15cqh, 8.5cqw) + 3.2cqh);
-  border-radius: .2cqh;
+/* The toast is a plate too, dropped from the top edge; its gold rule sits inside it, off the key. */
+.dt-stage[data-theme="chroma"] .dt-toast {
+  padding-bottom: 1.8cqh;
+  border-bottom: 0;
+  background:
+    linear-gradient(var(--accent), var(--accent)) 50% calc(100% - 2 * var(--plate-rim)) / calc(100% - 2.4cqh) max(3px, .3cqh) no-repeat,
+    var(--plate);
+}
+
+/* ---- entrance: each plate is taken on by a matte from the edge it hangs from ----
+   A matte is a box of the key green laid over a plate that retracts (scaleX, drawn by the compositor: nothing under it
+   is painted again), so every pixel is the key or the finished plate, and the plate's words, already on it, come with
+   it. The head from its left (from its middle on a break, where it is centred); the clock from the speaker's seat; a free-debate half
+   from its seat, team plate and clock together, as the field sweeps in the other themes; a card from its middle. The
+   old plates go in the first frame, to the key (stage.css has no leaving beat). Mattes exist only while the stage is
+   entering; each ends at scaleX(0) with no `to` frame, so a still and reduced motion never show one. The text still
+   rises (stage.css), by translate only where it carries a plate: a plate is never faded. */
+.dt-stage[data-theme="chroma"].is-entering .dt-clock { animation: cr-rise 420ms var(--ease-out) 140ms backwards; }
+.dt-stage[data-theme="chroma"].is-entering .dt-team { animation: cr-rise 420ms var(--ease-out) 70ms backwards; }
+
+.dt-stage[data-theme="chroma"].is-entering .dt-head::before,
+.dt-stage[data-theme="chroma"].is-entering .dt-head::after,
+.dt-stage[data-theme="chroma"].is-entering .dt-card::before,
+.dt-stage[data-theme="chroma"].is-entering .dt-card::after,
+.dt-stage[data-theme="chroma"].is-entering:not([data-kind="dual"]) .dt-clock .dt-digits::before,
+.dt-stage[data-theme="chroma"].is-entering:not([data-kind="dual"]) .dt-clock .dt-digits::after,
+.dt-stage[data-theme="chroma"].is-entering .dt-half::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  right: -1px;
+  background: var(--ground);
+  pointer-events: none;
+  transform: scaleX(0);
+  transform-origin: right center;
+  animation: cr-matte 420ms var(--ease-out) backwards;
+}
+/* From the middle: two mattes, each going to its own edge; they overlap by a pixel at rest so no seam shows. */
+.dt-stage[data-theme="chroma"].is-entering .dt-card::before,
+.dt-stage[data-theme="chroma"].is-entering[data-mode="stage"][data-kind="break"] .dt-head::before { right: calc(50% - 1px); transform-origin: left center; }
+.dt-stage[data-theme="chroma"].is-entering .dt-card::after,
+.dt-stage[data-theme="chroma"].is-entering[data-mode="stage"][data-kind="break"] .dt-head::after { left: calc(50% - 1px); }
+.dt-stage[data-theme="chroma"].is-entering:not([data-mode="stage"][data-kind="break"]) .dt-head::before { content: none; }
+.dt-stage[data-theme="chroma"].is-entering[data-mode="stage"][data-kind="break"] .dt-card::before,
+.dt-stage[data-theme="chroma"].is-entering[data-mode="stage"][data-kind="break"] .dt-card::after { animation-delay: 140ms; }
+/* The clock: the matte covers its plate, the 「暂停」 tab under it and, over, the sign's piece. Inside the digits
+   (one layer, unclipped), so it is over everything the clock draws; it undoes their .07em drop. */
+.dt-stage[data-theme="chroma"].is-entering:not([data-kind="dual"]) .dt-clock .dt-digits::before,
+.dt-stage[data-theme="chroma"].is-entering:not([data-kind="dual"]) .dt-clock .dt-digits::after {
+  top: calc(-2cqh - 1px);
+  bottom: -6.5cqh;
+  left: calc(-4cqh - 1px);
+  right: calc(-4cqh - 1px);
+  translate: 0 -.07em;
+  animation-delay: 140ms;
+}
+.dt-stage[data-theme="chroma"].is-entering .dt-clock[data-phase="over"] .dt-digits::after { left: calc(-4cqh - 1px - 1em); }
+.dt-stage[data-theme="chroma"].is-entering[data-kind="single"] .dt-clock .dt-digits::before { content: none; }
+.dt-stage[data-theme="chroma"].is-entering[data-pro-seat="right"][data-side="pro"] .dt-clock .dt-digits::after,
+.dt-stage[data-theme="chroma"].is-entering[data-pro-seat="left"][data-side="con"] .dt-clock .dt-digits::after { transform-origin: left center; }
+.dt-stage[data-theme="chroma"].is-entering[data-kind="break"] .dt-clock .dt-digits::before { right: calc(50% - 1px); transform-origin: left center; }
+.dt-stage[data-theme="chroma"].is-entering[data-kind="break"] .dt-clock .dt-digits::after { left: calc(50% - 1px); }
+/* A free-debate half: the whole half, from its outer edge, on the field's own 560 ms. */
+.dt-stage[data-theme="chroma"].is-entering .dt-half::after { inset: 0; animation-duration: 560ms; }
+.dt-stage[data-theme="chroma"].is-entering .dt-half:last-child::after { transform-origin: left center; }
+
+@keyframes cr-matte { from { transform: scaleX(1); } }
+@keyframes cr-rise { from { transform: translateY(1.1cqh); } }
+@keyframes cr-tab-out { from { clip-path: inset(-50% -100% -50% 100%); } }
+@keyframes cr-sign-breathe { 50% { color: color-mix(in oklab, var(--over-ink, var(--accent)) 55%, var(--plate)); } }
+@keyframes cr-flash { from { opacity: 1; } }
+/* Two flashes 320 ms apart (render.js RING_GAP_MS), each the ring's 1100 ms ease-out. */
+@keyframes cr-flash-twice {
+  0% { opacity: 1; animation-timing-function: ease-out; }
+  22.5% { opacity: .56; animation-timing-function: step-end; }
+  22.6% { opacity: 1; animation-timing-function: ease-out; }
+  100% { opacity: 0; }
 }
 
 /* === themes/construct.css === */
