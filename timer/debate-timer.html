@@ -2851,7 +2851,11 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 
 /* === themes/daylight.css === */
 /* @theme id=daylight name=昼 desc=浅色底，色场收成数字后的一条横带，适合亮场投影 tone=light order=5 */
-/* 昼: for lit rooms. The field is a 34cqh band behind the digits instead of the whole screen (spec §5.6). */
+/* 昼: for lit rooms. The field is a 34cqh band behind the digits instead of the whole screen (spec §5.6).
+   Its motion stays with the band and the light: the pale track lights up and goes out with a stage, the band a stage
+   leaves fades under the one that comes, a bell rings along the band's two edges, overtime runs gold back along the
+   emptied track from the seat, and the waiting side of a free debate dims by colour. No filters anywhere: this is the
+   theme for weak laptops. */
 [data-theme="daylight"] {
   --pro: #B3261E;
   --pro-deep: #EBC9C4;      /* the band's pale track: dark digits and titles read on it */
@@ -2872,24 +2876,114 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   --band: 34cqh;
   --text-field: var(--ground);   /* the band stays below the head, so all text above it sits on the ground */
   --text-deep: var(--ground);
+  /* Small gold marks: --accent reads at 2.4:1 on the pale tracks and 1.8:1 on 朱. Off the band (the warn colon's ink
+     layer, the bell's lines) gold is 赭, 5.0:1 on the tracks and 6.3:1 on the ground; on the band (the colon's
+     on-field layer) a pale gold, 4.7:1 on 朱 and 5.9:1 on 靛. The overtime track stays --accent, under ink digits. */
+  --daylight-ochre: #744B0D;
+  --daylight-gold: #F4D79A;
+  /* A free debate's waiting side, colour by colour as saturate(.45) brightness(.78) left it (the filter this replaces),
+     so the dimmed end state is the one the stills have always shown. */
+  --daylight-pro-wait: #5C2A27;
+  --daylight-con-wait: #283A51;
+  --daylight-cream-wait: #BFBEBC;
+  --daylight-ink-wait: #111213;
+  --daylight-ochre-wait: #4B3C27;
+  --daylight-gold-wait: #B3A893;
+  --daylight-colon-off: var(--daylight-ochre);   /* a waiting half swaps in the -wait pair */
+  --daylight-colon-on: var(--daylight-gold);
 }
 
 .dt-stage[data-theme="daylight"] { background: var(--ground); }
 .dt-stage[data-theme="daylight"] .dt-bottom::before { display: none; }
 
-/* The band and its deep track sit on the digits' centre line; the band is taken back the same way. */
+/* The band, its warn line and its pale track sit on the digits' centre line. The track keeps that place on every
+   screen and is lit only on a single stage, so it can light up and go out where it stands. */
 .dt-stage[data-theme="daylight"] .dt-field,
 .dt-stage[data-theme="daylight"] .dt-warnline,
-.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"] .dt-deco {
+.dt-stage[data-theme="daylight"] .dt-deco {
   top: var(--clock-y);
   bottom: auto;
   height: var(--band);
   translate: 0 -50%;
 }
-.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"] .dt-deco { background: var(--side-deep); }
-/* Overtime: the emptied track turns gold under ink digits (gold digits on the pale track would read at 2.4:1). */
-.dt-stage[data-theme="daylight"][data-kind="single"][data-phase="over"] .dt-deco { background: var(--accent); }
+
+/* ---- the track, and the band a new stage replaces ----
+   The track's colour eases: it lights up from the bare ground when a single stage comes (from a card, a break or a
+   dual stage), changes side between two single stages, and goes out when one leaves. While a stage enters, the band
+   it replaces stays where it was, under the new band, and fades: the registered --daylight-was-* follow the band on
+   screen and hold their old values for 1000 ms (step-end). render.js calls enter(), whose replay() flushes the styles,
+   before it writes the new stage (pinned by theme-hall.test.js), so the hold starts from the stage on screen. The base
+   transition leaves the --daylight-was-* out, so replay()'s flush stops a hold still running: a quick second key holds
+   the stage just left, not the one before it. */
+@property --daylight-was-band { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --daylight-was-l { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --daylight-was-r { syntax: "<number>"; inherits: true; initial-value: 1; }   /* 1: no band */
+
+.dt-stage[data-theme="daylight"] .dt-deco {
+  --daylight-was-band: var(--side-color);
+  --daylight-was-l: 0;
+  --daylight-was-r: 1;
+  transition: background-color 300ms ease;
+}
+.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"] .dt-deco {
+  background-color: var(--side-deep);
+  --daylight-was-r: var(--used);
+}
+/* The same clip as the band (stage.css .dt-field). */
+.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-deco,
+.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-deco {
+  --daylight-was-l: var(--used);
+  --daylight-was-r: 0;
+}
+.dt-stage[data-theme="daylight"].is-entering .dt-deco {
+  transition: background-color 300ms ease,
+    --daylight-was-band 1000ms step-end, --daylight-was-l 1000ms step-end, --daylight-was-r 1000ms step-end;
+}
+.dt-stage[data-theme="daylight"] .dt-deco::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  display: none;
+  opacity: 0;
+  background-color: var(--daylight-was-band);
+  clip-path: inset(0 calc(var(--daylight-was-r) * 100%) 0 calc(var(--daylight-was-l) * 100%));
+}
+/* Solid until the new band has swept over it, gone at 560 ms (as hall's outgoing field). */
+.dt-stage[data-theme="daylight"].is-entering:not([data-still]) .dt-deco::before {
+  display: block;
+  animation: dt-daylight-outgoing 560ms cubic-bezier(.55, 0, 1, .45) backwards;
+}
+/* Into a card, a break or a dual stage no band comes over it: it goes out with the track. */
+.dt-stage[data-theme="daylight"].is-entering:not([data-kind="single"]) .dt-deco::before {
+  animation-timing-function: var(--ease-out);
+}
+
+/* ---- overtime: gold runs back along the emptied track from the seat, with the end bell ----
+   The track turns gold at once, under a cover of its pale colour that draws back from the seat to the far end in
+   560 ms (the band's own sweep), so the gold seems to run out of the seat where the band ran out. The cover ends at
+   scale 0 (a from-only keyframe), so the overtime still is the gold track alone. Gold digits on the pale track would
+   read at 2.4:1, so the digits stay ink (--over-ink). Leaving overtime (↑, undo) the gold fades back in 300 ms. */
+.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco {
+  background-color: var(--accent);
+  transition: none;
+}
+.dt-stage[data-theme="daylight"].is-entering[data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco {
+  transition: --daylight-was-band 1000ms step-end, --daylight-was-l 1000ms step-end, --daylight-was-r 1000ms step-end;
+}
+.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: var(--side-deep);
+  scale: 0 1;
+  animation: dt-daylight-recede 560ms var(--ease-out);
+}
+/* The cover draws back to the far end, so the gold comes from the seat (stage.css .dt-field's two clips). */
+.dt-stage[data-theme="daylight"] .dt-deco::after { transform-origin: 100% 50%; }
+.dt-stage[data-theme="daylight"][data-pro-seat="right"][data-side="pro"] .dt-deco::after,
+.dt-stage[data-theme="daylight"][data-pro-seat="left"][data-side="con"] .dt-deco::after { transform-origin: 0 50%; }
 .dt-stage[data-theme="daylight"] .dt-clock { --over-ink: var(--digits-off-field); }
+
 /* Gold on the lit band is too faint (about 1.9:1 on 朱), so the band's line carries a light halo. */
 .dt-stage[data-theme="daylight"] .dt-warnline {
   -webkit-mask-image: none;
@@ -2897,8 +2991,71 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   box-shadow: 0 0 0 1px var(--on-side);
 }
 
-/* Dual: each half keeps the light ground, with its band draining from the top inside the track. */
-.dt-stage[data-theme="daylight"] .dt-half { --half-ground: var(--ground); }
+/* ---- bells ---- */
+
+/* A break has no band: its ring keeps stage.css's ellipse, in 赭 with the warn line's light halo. It stops at 1.25: the
+   ellipse is sized to the digits' line box, and past about 1.3 it would cross the break's name 3cqh above them (the
+   clock paints over the head). */
+.dt-stage[data-theme="daylight"] .dt-ring {
+  --ring-to: 1.25;
+  border-color: var(--daylight-ochre);
+  box-shadow: 0 0 0 1px var(--on-side), inset 0 0 0 1px var(--on-side);
+}
+/* Where there is a band (a single stage, a free-debate half) the band rings: two 赭 lines with the halo leave its top
+   and bottom edges and travel out onto the wall, fading. They start outside the glyphs and only move away from them;
+   in a half its overflow clips them to that side. The ring keeps render.js's box, centred on the clock and here sized
+   to the band; its own animation is off, and its lines' animationend reaches it (and removes it) all the same. */
+.dt-stage[data-theme="daylight"][data-mode="stage"]:is([data-kind="single"], [data-kind="dual"]) .dt-ring {
+  --ring-w: 100cqw;
+  --ring-h: var(--band);
+  --daylight-reach: 6cqh;
+  top: 50%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  opacity: 1;
+  animation: none;
+}
+.dt-stage[data-theme="daylight"][data-mode="stage"]:is([data-kind="single"], [data-kind="dual"]) .dt-ring[data-type="end"] {
+  --daylight-reach: 8cqh;
+}
+.dt-stage[data-theme="daylight"][data-mode="stage"]:is([data-kind="single"], [data-kind="dual"]) .dt-ring::before,
+.dt-stage[data-theme="daylight"][data-mode="stage"]:is([data-kind="single"], [data-kind="dual"]) .dt-ring::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: max(3px, .4cqh);
+  background: var(--daylight-ochre);
+  box-shadow: 0 0 0 1px var(--on-side);
+  opacity: 0;
+  animation: dt-daylight-ring 1100ms ease-out forwards;
+}
+.dt-stage[data-theme="daylight"] .dt-ring::before { --daylight-dir: -1; top: 0; translate: 0 -50%; }
+.dt-stage[data-theme="daylight"] .dt-ring::after { --daylight-dir: 1; bottom: 0; translate: 0 50%; }
+
+/* The warn colon: 冒号变金 in golds that read where it lies, 赭 off the band and pale gold on it. */
+.dt-stage[data-theme="daylight"] .dt-clock:is([data-phase="warn"], [data-phase="count"]) .dt-colon { color: var(--daylight-colon-off); }
+.dt-stage[data-theme="daylight"] .dt-clock:is([data-phase="warn"], [data-phase="count"]) .dt-digits-on .dt-colon {
+  color: var(--daylight-colon-on);
+}
+/* 「暂停」, 「时间到」 and 「已放弃」 sit on the light ground or the pale track, never on the band: ink, not the band's
+   cream (1.1:1 on the ground). In a free debate the paused word hangs below the track, not across its lower edge. */
+.dt-stage[data-theme="daylight"] .dt-clock .dt-state { color: var(--digits-off-field); }
+.dt-stage[data-theme="daylight"] .dt-half:not([data-locked]) .dt-state { top: calc(50% + var(--band) / 2); }
+
+/* ---- dual: each half keeps the light ground, with its band draining from the top inside the track ---- */
+
+.dt-stage[data-theme="daylight"] .dt-half {
+  --half-ground: var(--ground);
+  --field-top: calc(52cqh + var(--band) / 2 - var(--remain, 1) * var(--band));
+  /* The waiting side dims by colour on stage.css's --dim (0 to 1 in 520 ms, with the switch), the band frame by frame
+     and never the light ground or the pale track; --field-ground is that colour, for the contrast test. */
+  --daylight-wait: var(--daylight-pro-wait);
+  --field-ground: color-mix(in srgb, var(--side-color), var(--daylight-wait) calc(var(--dim) * 100%));
+}
+.dt-stage[data-theme="daylight"] .dt-half[data-side="con"] { --daylight-wait: var(--daylight-con-wait); }
+/* The pale tracks fade in when the halves appear (from a single stage, a break or a card). */
 .dt-stage[data-theme="daylight"] .dt-half::before {
   content: "";
   position: absolute;
@@ -2906,22 +3063,37 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   height: var(--band);
   translate: 0 -50%;
   background: var(--side-deep);
+  transition: opacity 300ms ease;
 }
-.dt-stage[data-theme="daylight"] .dt-half { --field-top: calc(52cqh + var(--band) / 2 - var(--remain, 1) * var(--band)); }
+@starting-style {
+  .dt-stage[data-theme="daylight"] .dt-half::before { opacity: 0; }
+}
 .dt-stage[data-theme="daylight"] .dt-half-field {
   bottom: calc(48% - var(--band) / 2);
   height: calc(var(--remain, 1) * var(--band));
+  background: var(--field-ground);
 }
 .dt-stage[data-theme="daylight"] .dt-team { color: var(--ink); }
-/* A side out of time shows its empty pale track, so its 「时间到」 is inked like the digits off the band. */
-.dt-stage[data-theme="daylight"] .dt-half[data-locked] .dt-clock { color: var(--digits-off-field); }
-/* Dim only the band and digits of the waiting side; a dimmed light ground or pale track would read as a grey slab. */
-.dt-stage[data-theme="daylight"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: none; }
-.dt-stage[data-theme="daylight"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-half-field,
-.dt-stage[data-theme="daylight"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-clock {
-  filter: saturate(.45) brightness(.78);
+/* The waiting side's digits and warn colon take the filter's colours as targets and ease to them with the band, the
+   spring and the digits' size; the colon, which inherits the digits' colour, eases on the same curve so it keeps up. */
+.dt-stage[data-theme="daylight"] .dt-half .dt-digits { transition: font-size 520ms var(--ease-out), color 520ms var(--ease-out); }
+.dt-stage[data-theme="daylight"] .dt-half .dt-colon { transition: color 520ms var(--ease-out); }
+.dt-stage[data-theme="daylight"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) {
+  filter: none;
+  --digits-on-field: var(--daylight-cream-wait);
+  --digits-off-field: var(--daylight-ink-wait);
+  --daylight-colon-off: var(--daylight-ochre-wait);
+  --daylight-colon-on: var(--daylight-gold-wait);
 }
 .dt-stage[data-theme="daylight"] .dt-half + .dt-half { box-shadow: inset 1px 0 0 color-mix(in oklab, var(--ink) 14%, transparent); }
+
+/* No `to` frame: the cover ends on its live scale (0), the outgoing band on its own opacity (0). */
+@keyframes dt-daylight-outgoing { from { opacity: 1; } }
+@keyframes dt-daylight-recede { from { scale: 1 1; } }
+@keyframes dt-daylight-ring {
+  from { transform: none; opacity: 1; }
+  to { transform: translateY(calc(var(--daylight-dir) * var(--daylight-reach))); opacity: 0; }
+}
 
 /* === themes/hall.css === */
 /* @theme id=hall name=堂 desc=全屏色场，适合暗场投影 tone=dark order=1 */

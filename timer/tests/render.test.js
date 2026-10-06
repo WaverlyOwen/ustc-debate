@@ -322,6 +322,7 @@
       h.pulse({ type: 'end', clock: 'main' });   // the frame loops pulse before they paint
       h.update(E.view(s, T0 + 180200));          // +0:00
       assert.equal(clock.querySelectorAll('.dt-ring').length, 1);
+      clock.querySelector('.dt-ring').getAnimations({ subtree: true }).forEach(a => a.pause());   // the page's timeline can jump: keep it
       await wait(280);
       assert.equal(clock.querySelectorAll('.dt-ring').length, 1, 'the second is not there yet');
       await wait(80);
