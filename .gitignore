@@ -14,3 +14,6 @@ prep/**/.work/
 *.xdv
 *.synctex.gz
 timer/tests/out/
+
+# Worktrees that Claude Code creates for isolated agents inside the project
+.claude/worktrees/
