@@ -73,6 +73,19 @@
     while ((m = re.exec(value))) out.push({ color: m[1], x: Number(m[2]), y: Number(m[3]) });
     return out;
   }
+  // A halftone's ramp, its second image (black to the threshold's grey over the image's first 40th, then white), as
+  // placed from its seat: the edge it is placed from, how far behind the seat it starts, how far from the seat it
+  // reaches the grey (where the dots die out), and the grey it passes the seat at (0 black, .5 the threshold).
+  // Positions read "-12px 0px", "right -12px top 0px" or "left 0px bottom -12px".
+  function ramp(cs, vertical) {
+    const size = cs.backgroundSize.split(',')[1].trim().split(/\s+/);
+    const pos = cs.backgroundPosition.split(',')[1].trim().split(/\s+/);
+    const len = px(size[vertical ? 1 : 0]) / 40;
+    const four = pos.length === 4;
+    const from = four ? pos[vertical ? 2 : 0] : (vertical ? 'top' : 'left');
+    const back = -px(four ? pos[vertical ? 3 : 1] : pos[vertical ? 1 : 0]);
+    return { from, back, reach: len - back, grey: 0.5 * back / len };
+  }
   const inkOf = side => (side === 'pro' ? RED : BLUE);
   const isInk = (css, rgb) => rgba(css).slice(0, 3).every((v, i) => Math.abs(v - rgb[i]) <= 1);
 
@@ -126,7 +139,7 @@
     assert.equal(cs.mixBlendMode, 'multiply', 'printed onto the paper');
     const screen = pseudo(field, '::before');
     assert.ok(/radialGradient/.test(screen.backgroundImage) && /pattern/.test(screen.backgroundImage), 'a screen of dots');
-    assert.ok(/linear-gradient/.test(screen.backgroundImage), 'a ramp that sizes the dots');
+    assert.ok(/linearGradient/.test(screen.backgroundImage), 'a ramp that sizes the dots');
     assert.ok(/contrast\(/.test(screen.filter), 'thresholded into hard dots: ' + screen.filter);
     assert.equal(screen.mixBlendMode, 'screen', 'the dots take the ink, the rest stays paper');
     const f = field.getBoundingClientRect(), box = root.getBoundingClientRect();
@@ -154,15 +167,15 @@
   });
 
   // Spec §2.4: the less time is left, the smaller and sparser the dots. The ramp runs from the speaking side's seat
-  // to where the dots die out, as far as the time left, and the dots at the seat shrink too.
+  // to where the dots die out, as far as the time left, and the dots at the seat shrink too: the ramp passes the seat
+  // at a grey a quarter of the way to white times the time used (touching dots when it is full).
   DT.test('theme riso: the dots thin toward the seat as the time runs out', () => {
     SEATINGS.forEach(([name, seat, from]) => {
       const at = secs => {
         const { stage, root } = mountPoster(singleAt(name, secs, seat), 1920, 1080);
         const field = root.querySelector('.dt-field');
         const out = { used: parseFloat(root.style.getPropertyValue('--used')), W: field.getBoundingClientRect().width,
-          edge: length(field, 'var(--edge)'), seat: lum(resolve(field, '--dot-seat')),
-          ramp: pseudo(field, '::before').backgroundImage };
+          edge: length(field, 'var(--edge)'), ramp: ramp(pseudo(field, '::before')) };
         stage.destroy();
         return out;
       };
@@ -170,8 +183,12 @@
       const a = at(30), b = at(90);
       assert.near(a.edge, (1 - a.used) * a.W, 0.005 * a.W, where + ': as far as the time left');
       assert.near(b.edge, (1 - b.used) * b.W, 0.005 * b.W, where + ': as far as the time left, later');
-      assert.ok(b.seat > a.seat, where + ': smaller dots at the seat: ' + a.seat + ' → ' + b.seat);
-      assert.ok(a.ramp.indexOf('linear-gradient(to ' + (from === 'left' ? 'right' : 'left')) >= 0, where + ': from the seat');
+      [a, b].forEach(x => {
+        assert.near(x.ramp.reach, x.edge, 1, where + ': the dots die out at the edge');
+        assert.near(x.ramp.grey, 0.25 * x.used, 0.003, where + ': the grey at the seat');
+      });
+      assert.ok(b.ramp.grey > a.ramp.grey, where + ': smaller dots at the seat: ' + a.ramp.grey + ' → ' + b.ramp.grey);
+      assert.equal(a.ramp.from, from, where + ': from the seat');
     });
   });
 
@@ -212,6 +229,69 @@
     const fvs = t => { root.style.setProperty('--tension', String(t)); return getComputedStyle(digits).fontVariationSettings; };
     assert.ok(fvs(0.3) !== fvs(0.36), 'the digits tense up');
     stage.destroy();
+  });
+
+  // Top-level items of a computed list: commas inside a url() or a function do not split it.
+  function items(value) {
+    const out = [];
+    let depth = 0, quote = '', cur = '';
+    for (const ch of value) {
+      if (quote) { cur += ch; if (ch === quote) quote = ''; continue; }
+      if (ch === '"' || ch === "'") { quote = ch; cur += ch; continue; }
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) { out.push(cur.trim()); cur = ''; continue; }
+      cur += ch;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
+
+  // Consistency review §6.1: render.js writes --used (and in free debate --remain) on every step of the clock, so
+  // every box has its style worked out again many times a second. Chromium takes an image as new, and paints its box
+  // again with any filter on it, at each of those when the url() reaches the declaration through var(), or when one
+  // background or mask list holds a url() image and a gradient together. So no image is kept in a variable or written
+  // beside a var(), and no list mixes the two: the paper is painted once, the halftones only when the time left moves
+  // a step, the digits only when they change.
+  DT.test('theme riso: no image reaches a rule through a variable or shares a list with a gradient', () => {
+    let seen = 0;
+    Array.from(document.styleSheets).forEach(sh => {
+      let rules;
+      try { rules = sh.cssRules; } catch (e) { return; }
+      Array.from(rules).forEach(function walk(r) {
+        if (r.cssRules) Array.from(r.cssRules).forEach(walk);
+        if (!r.style || !/data-theme="riso"/.test(r.selectorText || '')) return;
+        seen++;
+        for (let i = 0; i < r.style.length; i++) {
+          const name = r.style[i], v = r.style.getPropertyValue(name);
+          if (!/url\(\s*["']?data:/.test(v)) continue;
+          assert.ok(name.indexOf('--') !== 0, r.selectorText + ': ' + name + ' holds an image');
+          assert.ok(!/var\(/.test(v), r.selectorText + ' ' + name + ': an image beside a var()');
+        }
+      });
+    });
+    assert.ok(seen > 40, 'read the theme\'s rules: ' + seen);
+    const title = E.view(E.createSession(F(), MATCH, T0, { theme: 'riso' }), T0);
+    const brk = E.view(E.toggle(E.goto(E.createSession(F(), MATCH, T0, { theme: 'riso' }),
+      F().stages.findIndex(x => x.type === 'break'), T0), T0), T0 + 5000);
+    [[singleAt(OPENING, 60)], [singleAt(REBUTTAL, 60, 'right')], [singleAt(OPENING, 187)], [dualAt(30)], [title], [brk],
+      [singleAt(OPENING, 60), 240, 135], [dualAt(30), 240, 135], [title, 240, 135]].forEach(([view, w, h]) => {
+      const { stage, root } = mountPoster(view, w || 960, h || 540);
+      let images = 0;
+      root.querySelectorAll('*').forEach(el => [null, '::before', '::after'].forEach(p => {
+        const cs = getComputedStyle(el, p);
+        const where = root.dataset.mode + '/' + root.dataset.kind + '/' + root.dataset.phase + ' ' + (w || 960) + ' ' +
+          (typeof el.className === 'string' ? el.className : el.tagName) + (p || '');
+        ['backgroundImage', 'maskImage', 'webkitMaskImage'].forEach(prop => {
+          const list = items(cs[prop] || 'none').filter(x => x !== 'none');
+          const urls = list.filter(x => /^url\(/.test(x)).length;
+          images += urls;
+          assert.ok(urls === 0 || urls === list.length, where + ' ' + prop + ': ' + list.map(x => x.slice(0, 28)).join(' | '));
+        });
+      }));
+      assert.ok(images > 3, root.dataset.mode + ': the images were read: ' + images);
+      stage.destroy();
+    });
   });
 
   // Spec §2.4: headings set like a poster: heavy and tight, with the top bar tracked out; the stage name printed in
@@ -323,7 +403,7 @@
       assert.ok(lum(inkPro) > lum('rgb(' + RED + ')') + 0.15, seat + ': faded: ' + inkPro);
       [pro, con].forEach(h => {
         const f = h.querySelector('.dt-half-field');
-        assert.ok(/to top/.test(pseudo(f, '::before').backgroundImage), seat + ': dots thin upward from the floor');
+        assert.equal(ramp(pseudo(f, '::before'), true).from, 'bottom', seat + ': dots thin upward from the floor');
         const digits = getComputedStyle(h.querySelector('.dt-digits')).color;
         const c = contrast(digits, getComputedStyle(f).backgroundColor);
         assert.ok(c >= 3, seat + ' ' + h.dataset.side + ': the digits read on the ink: ' + c.toFixed(2));
@@ -338,7 +418,7 @@
       const h = root.querySelector('.dt-half[data-side="con"]');
       const f = h.querySelector('.dt-half-field');
       const out = { remain: parseFloat(h.style.getPropertyValue('--remain')), H: f.getBoundingClientRect().height,
-        edge: length(f, 'var(--edge)', 'height'), seat: lum(resolve(f, '--dot-seat')) };
+        edge: length(f, 'var(--edge)', 'height'), ramp: ramp(pseudo(f, '::before'), true) };
       stage.destroy();
       return out;
     };
@@ -346,7 +426,28 @@
     assert.ok(b.remain < a.remain);
     assert.near(a.edge, a.remain * a.H, 0.01 * a.H, 'the dots reach as high as the time left');
     assert.near(b.edge, b.remain * b.H, 0.01 * b.H, 'later, lower');
-    assert.ok(b.seat > a.seat, 'and they are smaller at the floor');
+    [a, b].forEach(x => assert.near(x.ramp.reach, x.edge, 1, 'the ramp reaches the grey there'));
+    assert.ok(b.ramp.grey > a.ramp.grey, 'and they are smaller at the floor');
+  });
+
+  // Near the end of a side's time the stretched ramp is short: the poster above it is still white paper, not a full
+  // screen of dots, and with no time left it is blank.
+  DT.test('theme riso: a poster with little time left keeps its paper white above the dots', () => {
+    const { stage, root } = mountPoster(dualAt(30), 1920, 1080);
+    const f = root.querySelector('.dt-half[data-side="con"] .dt-half-field');
+    const H = f.getBoundingClientRect().height;
+    [0.01, 0.0025, 0].forEach(q => {
+      f.style.setProperty('--remain-q', String(q));
+      const cs = pseudo(f, '::before'), r = ramp(cs, true);
+      const sizes = cs.backgroundSize.split(','), pos = cs.backgroundPosition.split(',');
+      const top = r.reach + 39 * (r.reach + r.back);   // the ramp image's white runs up to here
+      const white = /^left 0px bottom (-?[\d.]+)px$/.exec(pos[2].trim());
+      assert.ok(white && sizes[2].trim() === '100% 100%', q + ': a sheet of white: ' + pos[2] + ' / ' + sizes[2]);
+      assert.ok(Number(white[1]) <= Math.max(top, 0) + 0.5, q + ': it starts below the ramp\'s own white ends: ' + white[1] + ' / ' + top);
+      assert.ok(Number(white[1]) >= r.reach - 0.5, q + ': and above the dots: ' + white[1] + ' / ' + r.reach);
+      assert.ok(top < H || q > 0.005, q + ': (the ramp alone would not reach the top: ' + top + ' / ' + H + ')');
+    });
+    stage.destroy();
   });
 
   DT.test('theme riso: a thumbnail keeps a coarse screen without the fine grain', () => {
@@ -593,10 +694,11 @@
       assert.ok(lum(field(con)) > lum('rgb(' + BLUE + ')') + 0.15, seat + ': then faded: ' + field(con));
       // The screens hang from the seats.
       const right = root.querySelector('.dt-half:last-child .dt-half-field'), left = root.querySelector('.dt-half:first-child .dt-half-field');
-      // x of the grain and of the dot screen (layers 1 and 3; the ramp is vertical)
+      // x of the grain and of the dot screen (the first layer and the last; the ramp and the white rise from the floor)
       const xs = el => pseudo(el, '::before').backgroundPosition.split(',').map(l => l.trim().split(/\s+/)[0]);
-      assert.ok(xs(right)[0] === '100%' && xs(right)[2] === '100%', seat + ': the right poster from its right edge: ' + xs(right));
-      assert.ok(/^0(px|%)$/.test(xs(left)[0]) && /^0(px|%)$/.test(xs(left)[2]), seat + ': the left from its left: ' + xs(left));
+      const ends = el => [xs(el)[0], xs(el)[xs(el).length - 1]];
+      assert.ok(ends(right).every(x => x === '100%'), seat + ': the right poster from its right edge: ' + xs(right));
+      assert.ok(ends(left).every(x => /^0(px|%)$/.test(x)), seat + ': the left from its left: ' + xs(left));
       // The stage name: the left seat's ink up and to the left, whoever speaks.
       [dualAt(10, seat), dualAt(30, seat)].forEach(v => {
         stage.update(v);
@@ -648,7 +750,13 @@
       assert.equal(s.animationName, 'dt-riso-hold', where);
       assert.equal(s.animationDuration, '0.32s', where);
       assert.ok(/steps\(1(, end)?\)|step-end/.test(s.animationTimingFunction), where + ': one crisp step: ' + s.animationTimingFunction);
-      assert.ok(/rgb\(64, 64, 64\)/.test(s.backgroundImage), where + ': at the dots\' last size: ' + s.backgroundImage.slice(0, 160));
+      const r = ramp(s), under = pseudo(root.querySelector('.dt-field'), '::before');
+      assert.near(r.grey, 0.25, 0.003, where + ': at the dots\' last size, the seat a quarter of the way to white: ' + r.grey);
+      assert.near(r.reach, 0.07 * root.getBoundingClientRect().width, 1, where + ': dying out at the stub\'s edge: ' + r.reach);
+      assert.equal(r.from, from, where + ': from the seat');
+      const rot = cs => (/rotate\((-?[\d.]+)\)/.exec(cs.backgroundImage) || [])[1];
+      assert.equal(rot(s), rot(under), where + ': through the field\'s own screen');
+      assert.near(ramp(under).grey, 0, 0.001, where + ': over the stub at full strength');
       const W = root.getBoundingClientRect().width;
       assert.near(px(s.width), 0.1 * W, 2, where + ': only the stub');
       assert.near(from === 'left' ? px(s.left) : px(s.right), 0, 1, where + ': at the seat');

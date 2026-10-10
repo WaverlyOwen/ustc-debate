@@ -23,14 +23,6 @@
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
   --text-field: var(--ground);   /* the halftone stays below the head, so all text above it sits on the paper */
   --text-deep: var(--ground);
-  /* A screen of dots, one tile: every cell holds a cone, black at its centre and white a pitch away, so a threshold
-     of the tile plus a ramp gives dots whose size follows the ramp. The screen is turned the way a riso turns each
-     drum's screen, by atan(1/3) so the tile still repeats (every √10 pitches); 反方's the other way. */
-  --screen-pro: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
-  --screen-con: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(-18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
-  /* Riso ink never lies quite even: a fine noise screened into the halftone before the threshold roughens each dot's
-     edge and leaves a few pinholes. Drawn pixel for pixel; scaled it would turn into a mesh. */
-  --ink-grain: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='3 0 0 0 -1.85  3 0 0 0 -1.85  3 0 0 0 -1.85  0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
   /* The light on the sheet, a little darker toward its edges. The paper's tooth and the registration targets are
      drawn over it by .dt-backdrop::before (below). */
   --backdrop: radial-gradient(130% 100% at 50% 40%, transparent 60%, rgb(0 35 67 / .05));
@@ -45,15 +37,13 @@
   --clock-y: 59%;           /* the digits printed in the middle of the halftone */
   --own-ink: var(--pro);
   --other-ink: var(--con);
-  --screen: var(--screen-pro);
-  --screen-grain: var(--ink-grain);
   --tile: calc(3.16228 * var(--dot-pitch));
   --remain-q: calc(1 - var(--used));
 }
-.dt-stage[data-theme="riso"][data-side="con"] { --own-ink: var(--con); --other-ink: var(--pro); --screen: var(--screen-con); }
+.dt-stage[data-theme="riso"][data-side="con"] { --own-ink: var(--con); --other-ink: var(--pro); }
 
-/* The halftone is repainted only when the time left moves a step (400 steps a stage), not on every frame; and the
-   tile is a whole number of pixels, so it repeats without seams. */
+/* The halftone is repainted only when the time left moves a step (400 steps a stage), not on every frame (see "the
+   halftone"); and the tile is a whole number of pixels, so it repeats without seams. */
 @supports (width: round(nearest, 1px, 1px)) {
   .dt-stage[data-theme="riso"] {
     --tile: round(nearest, calc(3.16228 * var(--dot-pitch)), 1px);
@@ -62,11 +52,10 @@
 }
 
 /* On a thumbnail the screen is coarser, so it still reads as dots, and the grain, which would only be noise there,
-   is left out. */
+   is left out (each halftone's rules below). */
 @container (max-width: 520px) {
   .dt-stage[data-theme="riso"] {
     --dot-pitch: 4.2cqh;
-    --screen-grain: none;
     --backdrop: none;
   }
 }
@@ -95,43 +84,66 @@
 /* ---- the halftone ---- */
 
 /* Printed like a riso prints: the side's ink where the thresholded screen is dark, nothing where it is white, and
-   that sheet multiplied onto the paper. The screen's ramp starts at --dot-seat, the grey that gives the dots at the
-   seat (touching when the time is full, two thirds of that size at the end), and reaches the threshold at --edge, where the
-   dots die out. */
+   that sheet multiplied onto the paper. Three images are screened together, then thresholded (contrast(14)):
+   - at the bottom, the screen, one tile of dots: every cell holds a cone, black at its centre and white a pitch away,
+     so a threshold of the tile plus a ramp gives dots whose size follows the ramp. It is turned the way a riso turns
+     each drum's screen, by atan(1/3) so the tile still repeats (every √10 pitches); 反方's the other way.
+   - the ramp: black to the threshold's grey, then white. It passes the seat at --seat-grey (a quarter of the way to
+     white while time runs: dots touching when the time is full, two thirds of that size at the end) and reaches the
+     grey at --edge, where the dots die out; so it starts --riso-back behind the seat. An SVG image, stretched and
+     placed by lengths: the gradient it replaces, in a list with images, had the halftone painted again at every step
+     of the clock (see "the paper"). Its far end is the same ramp turned round, so one image serves either seat.
+   - on top, a fine noise: riso ink never lies quite even, and the noise screened into the halftone before the
+     threshold roughens each dot's edge and leaves a few pinholes. Drawn pixel for pixel; scaled it would turn into a
+     mesh. Not on a thumbnail.
+   The images are written out in each rule that draws them, never through var(). */
 .dt-stage[data-theme="riso"] .dt-field,
 .dt-stage[data-theme="riso"] .dt-half-field {
-  --dot-seat: hsl(0 0% calc(25% * (1 - var(--remain-q))));
+  --seat-grey: calc(.25 * (1 - var(--remain-q)));
   background: var(--side-color);
   isolation: isolate;
 }
 .dt-stage[data-theme="riso"] .dt-field { mix-blend-mode: multiply; }
 .dt-stage[data-theme="riso"] .dt-field::before,
 .dt-stage[data-theme="riso"] .dt-half-field::before {
+  --riso-back: calc(var(--edge) * var(--seat-grey) / (.5 - var(--seat-grey)));
   content: "";
   position: absolute;
   inset: 0;
-  background:
-    var(--screen-grain) 0 0 / 256px 256px,
-    linear-gradient(to right, var(--dot-seat) 0, hsl(0 0% 50%) var(--edge), #fff var(--edge)),
-    var(--screen) 0 0 / var(--tile) var(--tile);
-  background-blend-mode: screen, screen, normal;
   filter: contrast(14);
   mix-blend-mode: screen;
+}
+.dt-stage[data-theme="riso"] .dt-field::before {
+  background-image:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='3 0 0 0 -1.85  3 0 0 0 -1.85  3 0 0 0 -1.85  0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 1' preserveAspectRatio='none'><linearGradient id='r'><stop offset='0'/><stop offset='.025' stop-color='hsl(0 0%25 50%25)'/><stop offset='.025' stop-color='%23fff'/><stop offset='.975' stop-color='%23fff'/><stop offset='.975' stop-color='hsl(0 0%25 50%25)'/><stop offset='1'/></linearGradient><rect width='40' height='1' fill='url(%23r)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
+  background-size: 256px 256px, calc(40 * (var(--edge) + var(--riso-back))) 100%, var(--tile) var(--tile);
+  background-position: 0 0, calc(-1 * var(--riso-back)) 0, 0 0;
+  background-repeat: repeat, no-repeat, repeat;
+  background-blend-mode: screen, screen, normal;
+}
+.dt-stage[data-theme="riso"][data-side="con"] .dt-field::before {
+  background-image:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='3 0 0 0 -1.85  3 0 0 0 -1.85  3 0 0 0 -1.85  0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 1' preserveAspectRatio='none'><linearGradient id='r'><stop offset='0'/><stop offset='.025' stop-color='hsl(0 0%25 50%25)'/><stop offset='.025' stop-color='%23fff'/><stop offset='.975' stop-color='%23fff'/><stop offset='.975' stop-color='hsl(0 0%25 50%25)'/><stop offset='1'/></linearGradient><rect width='40' height='1' fill='url(%23r)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(-18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
 }
 /* The ramp from the right-hand seat. */
 .dt-stage[data-theme="riso"][data-pro-seat="right"][data-side="pro"] .dt-field::before,
 .dt-stage[data-theme="riso"][data-pro-seat="left"][data-side="con"] .dt-field::before {
-  background:
-    var(--screen-grain) 0 0 / 256px 256px,
-    linear-gradient(to left, var(--dot-seat) 0, hsl(0 0% 50%) var(--edge), #fff var(--edge)),
-    var(--screen) 0 0 / var(--tile) var(--tile);
-  background-blend-mode: screen, screen, normal;
+  background-position: 0 0, right calc(-1 * var(--riso-back)) top 0, 0 0;
+}
+@container (max-width: 520px) {
+  .dt-stage[data-theme="riso"] .dt-field::before { background-image: none, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 1' preserveAspectRatio='none'><linearGradient id='r'><stop offset='0'/><stop offset='.025' stop-color='hsl(0 0%25 50%25)'/><stop offset='.025' stop-color='%23fff'/><stop offset='.975' stop-color='%23fff'/><stop offset='.975' stop-color='hsl(0 0%25 50%25)'/><stop offset='1'/></linearGradient><rect width='40' height='1' fill='url(%23r)'/></svg>"), url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>"); }
+  .dt-stage[data-theme="riso"][data-side="con"] .dt-field::before { background-image: none, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 1' preserveAspectRatio='none'><linearGradient id='r'><stop offset='0'/><stop offset='.025' stop-color='hsl(0 0%25 50%25)'/><stop offset='.025' stop-color='%23fff'/><stop offset='.975' stop-color='%23fff'/><stop offset='.975' stop-color='hsl(0 0%25 50%25)'/><stop offset='1'/></linearGradient><rect width='40' height='1' fill='url(%23r)'/></svg>"), url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(-18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>"); }
 }
 /* [data-mode] ranks this with stage.css's per-seat clip-path rules, which it replaces: the dots thin out instead of
    being cut back. They never quite reach the seat: a stub stays there as the time runs out and through overtime,
-   clear of the digits, so the room still sees whose floor it is (spec §1.5). */
+   clear of the digits, so the room still sees whose floor it is (spec §1.5). The field spans the stage, so --edge is
+   a share of 100cqw: a length, as a percentage would place the ramp by the room left beside it. */
 .dt-stage[data-theme="riso"][data-mode] .dt-field {
-  --edge: max(var(--stub), var(--remain-q) * 100%);
+  --edge: max(var(--stub), var(--remain-q) * 100cqw);
   top: var(--band-top);
   bottom: auto;
   height: calc(var(--band-bottom) - var(--band-top));
@@ -139,7 +151,7 @@
 }
 
 /* When the time is up the stub is printed at full strength, so it still reads beside the slipped digits. */
-.dt-stage[data-theme="riso"][data-phase="over"] .dt-field { --dot-seat: #000; }
+.dt-stage[data-theme="riso"][data-phase="over"] .dt-field { --seat-grey: 0; }
 
 /* ---- digits: through both drums, the second off register, the ink a little uneven ---- */
 
@@ -224,13 +236,12 @@
   width: 9cqh;
   height: 9cqh;
   margin-left: -4.5cqh;
-  background: var(--target) center / contain no-repeat;
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><circle r='11.6' fill='%23EDF0EF'/><g fill='none' stroke-width='2.4'><g stroke='%23F15060' transform='translate(-.6 -.4)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g><g stroke='%23002343' transform='translate(.3 .2)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g></g></svg>") center / contain no-repeat;
   -webkit-mask-image: none;
   mask-image: none;
-  --target: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><circle r='11.6' fill='%23EDF0EF'/><g fill='none' stroke-width='2.4'><g stroke='%23F15060' transform='translate(-.6 -.4)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g><g stroke='%23002343' transform='translate(.3 .2)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g></g></svg>");
 }
 .dt-stage[data-theme="riso"][data-side="con"] .dt-warnline {
-  --target: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><circle r='11.6' fill='%23EDF0EF'/><g fill='none' stroke-width='2.4'><g stroke='%230078BF' transform='translate(-.6 -.4)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g><g stroke='%23002343' transform='translate(.3 .2)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g></g></svg>");
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><circle r='11.6' fill='%23EDF0EF'/><g fill='none' stroke-width='2.4'><g stroke='%230078BF' transform='translate(-.6 -.4)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g><g stroke='%23002343' transform='translate(.3 .2)'><circle r='6'/><path d='M-10.5 0H10.5M0-10.5V10.5'/></g></g></svg>");
 }
 .dt-stage[data-theme="riso"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
 .dt-stage[data-theme="riso"][data-pro-seat="left"][data-side="con"] .dt-warnline {
@@ -278,25 +289,32 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: var(--riso-was);
-  background:
-    var(--screen-grain) 0 0 / 256px 256px,
-    linear-gradient(to right, hsl(0 0% 25%) 0, hsl(0 0% 50%) var(--edge), #fff var(--edge)),
-    var(--screen) 0 0 / var(--tile) var(--tile);
+  /* the field's images as they were: at the time's end the ramp passes the seat a quarter of the way to white, so it
+     starts an edge's length behind it */
+  background-image:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='3 0 0 0 -1.85  3 0 0 0 -1.85  3 0 0 0 -1.85  0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 1' preserveAspectRatio='none'><linearGradient id='r'><stop offset='0'/><stop offset='.025' stop-color='hsl(0 0%25 50%25)'/><stop offset='.025' stop-color='%23fff'/><stop offset='.975' stop-color='%23fff'/><stop offset='.975' stop-color='hsl(0 0%25 50%25)'/><stop offset='1'/></linearGradient><rect width='40' height='1' fill='url(%23r)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
+  background-size: 256px 256px, calc(80 * var(--edge)) 100%, var(--tile) var(--tile);
+  background-position: 0 0, calc(-1 * var(--edge)) 0, 0 0;
+  background-repeat: repeat, no-repeat, repeat;
   background-blend-mode: screen, screen, normal;
   filter: contrast(14);
   mix-blend-mode: screen;
   opacity: 0;
   animation: dt-riso-hold 320ms step-end;
 }
+.dt-stage[data-theme="riso"]:not([data-still])[data-phase="over"][data-side="con"] .dt-field::after {
+  background-image:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='3 0 0 0 -1.85  3 0 0 0 -1.85  3 0 0 0 -1.85  0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 1' preserveAspectRatio='none'><linearGradient id='r'><stop offset='0'/><stop offset='.025' stop-color='hsl(0 0%25 50%25)'/><stop offset='.025' stop-color='%23fff'/><stop offset='.975' stop-color='%23fff'/><stop offset='.975' stop-color='hsl(0 0%25 50%25)'/><stop offset='1'/></linearGradient><rect width='40' height='1' fill='url(%23r)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(-18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
+}
 /* At the right-hand seat: the copy's tiles start where the field's do, a stage's width to the left. */
 .dt-stage[data-theme="riso"]:not([data-still])[data-phase="over"][data-pro-seat="right"][data-side="pro"] .dt-field::after,
 .dt-stage[data-theme="riso"]:not([data-still])[data-phase="over"][data-pro-seat="left"][data-side="con"] .dt-field::after {
   inset: 0 0 0 auto;
-  background:
-    var(--screen-grain) calc(var(--riso-was) - 100cqw) 0 / 256px 256px,
-    linear-gradient(to left, hsl(0 0% 25%) 0, hsl(0 0% 50%) var(--edge), #fff var(--edge)),
-    var(--screen) calc(var(--riso-was) - 100cqw) 0 / var(--tile) var(--tile);
-  background-blend-mode: screen, screen, normal;
+  background-position: calc(var(--riso-was) - 100cqw) 0, right calc(-1 * var(--edge)) top 0, calc(var(--riso-was) - 100cqw) 0;
 }
 @keyframes dt-riso-hold { from { opacity: 1; } }
 
@@ -306,7 +324,6 @@
   --half-ground: transparent;   /* the paper runs under both */
   --own-ink: var(--pro);
   --other-ink: var(--con);
-  --screen: var(--screen-pro);
   --dual-top: 25cqh;            /* below the teams and the stage name */
   /* A poster that has hung in the sun: its ink gone pale (46% of the ink in the paper), its type printed lighter (the
      drums .22cqh apart), by the shared --dim, so the fade runs with the switch (520 ms) and no colour is cut. */
@@ -319,15 +336,16 @@
 .dt-stage[data-theme="riso"] .dt-half[data-side="con"] {
   --own-ink: var(--con);
   --other-ink: var(--pro);
-  --screen: var(--screen-con);
   --side-color: color-mix(in srgb, var(--con) calc(100% - 54% * var(--dim)), var(--ground));
 }
 /* Faded by its ink, not greyed by a filter. */
 .dt-stage[data-theme="riso"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: none; }
-/* Each poster's dots thin from the top down: the ramp runs up from the floor to as high as the time left. */
+/* Each poster's dots thin from the top down: the ramp runs up from the floor to as high as the time left (a share of
+   the poster's height, band-bottom less dual-top, as a length). Above twice that, a sheet of white: near the end of a
+   side's time the stretched ramp is too short to reach the poster's top by itself. */
 .dt-stage[data-theme="riso"] .dt-half-field {
   --remain-q: var(--remain, 1);
-  --edge: calc(var(--remain-q) * 100%);
+  --edge: calc(var(--remain-q) * (var(--band-bottom) - var(--dual-top)));
   inset: var(--dual-top) 2.2cqw calc(100cqh - var(--band-bottom));
   height: auto;
   clip-path: inset(0);
@@ -336,15 +354,32 @@
   .dt-stage[data-theme="riso"] .dt-half-field { --remain-q: round(nearest, var(--remain, 1), .0025); }
 }
 .dt-stage[data-theme="riso"] .dt-half-field::before {
-  background:
-    var(--screen-grain) 0 0 / 256px 256px,
-    linear-gradient(to top, var(--dot-seat) 0, hsl(0 0% 50%) var(--edge), #fff var(--edge)),
-    var(--screen) 0 0 / var(--tile) var(--tile);
-  background-blend-mode: screen, screen, normal;
+  background-image:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='3 0 0 0 -1.85  3 0 0 0 -1.85  3 0 0 0 -1.85  0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 40' preserveAspectRatio='none'><linearGradient id='r' x2='0' y1='1' y2='0'><stop offset='0'/><stop offset='.025' stop-color='hsl(0 0%25 50%25)'/><stop offset='.025' stop-color='%23fff'/></linearGradient><rect width='1' height='40' fill='url(%23r)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'><rect width='1' height='1' fill='%23fff'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
+  background-size: 256px 256px, 100% calc(40 * (var(--edge) + var(--riso-back))), 100% 100%, var(--tile) var(--tile);
+  background-position: 0 0, left 0 bottom calc(-1 * var(--riso-back)), left 0 bottom calc(2 * var(--edge)), 0 0;
+  background-repeat: repeat, no-repeat, no-repeat, repeat;
+  background-blend-mode: screen, screen, screen, normal;
+}
+.dt-stage[data-theme="riso"] .dt-half[data-side="con"] .dt-half-field::before {
+  background-image:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='3 0 0 0 -1.85  3 0 0 0 -1.85  3 0 0 0 -1.85  0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 40' preserveAspectRatio='none'><linearGradient id='r' x2='0' y1='1' y2='0'><stop offset='0'/><stop offset='.025' stop-color='hsl(0 0%25 50%25)'/><stop offset='.025' stop-color='%23fff'/></linearGradient><rect width='1' height='40' fill='url(%23r)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'><rect width='1' height='1' fill='%23fff'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(-18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
+}
+@container (max-width: 520px) {
+  .dt-stage[data-theme="riso"] .dt-half-field::before { background-image: none, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 40' preserveAspectRatio='none'><linearGradient id='r' x2='0' y1='1' y2='0'><stop offset='0'/><stop offset='.025' stop-color='hsl(0 0%25 50%25)'/><stop offset='.025' stop-color='%23fff'/></linearGradient><rect width='1' height='40' fill='url(%23r)'/></svg>"), url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'><rect width='1' height='1' fill='%23fff'/></svg>"), url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>"); }
+  .dt-stage[data-theme="riso"] .dt-half[data-side="con"] .dt-half-field::before { background-image: none, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 40' preserveAspectRatio='none'><linearGradient id='r' x2='0' y1='1' y2='0'><stop offset='0'/><stop offset='.025' stop-color='hsl(0 0%25 50%25)'/><stop offset='.025' stop-color='%23fff'/></linearGradient><rect width='1' height='40' fill='url(%23r)'/></svg>"), url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'><rect width='1' height='1' fill='%23fff'/></svg>"), url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(-18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>"); }
 }
 /* The right-hand poster's screen and grain hang from its right edge, its seat, as the left one's hang from its left:
    while the divider springs, its dots stay where they are and only the sheet's inner edge moves. */
-.dt-stage[data-theme="riso"] .dt-half:last-child .dt-half-field::before { background-position: 100% 0, 0 0, 100% 0; }
+.dt-stage[data-theme="riso"] .dt-half:last-child .dt-half-field::before {
+  background-position: 100% 0, left 0 bottom calc(-1 * var(--riso-back)), left 0 bottom calc(2 * var(--edge)), 100% 0;
+}
 /* A side out of time or yielding: its poster lifts off the sheet where it is (300 ms), and its time left drops to none
    only once it has gone. stage.css's 520 ms drain of --remain would print the dots again on every frame under the
    threshold filter. Timed out, the poster is blank already. As in stage.css, only the transitions wait for the
@@ -391,14 +426,14 @@
 
 /* The title card and the break are the poster's picture: a halftone disc of each ink rising from its side's seat,
    the pro drum on the deco under the text and the con drum on the one over it, each printed onto the paper. The dots
-   are densest at the seat and die out at the rim, clear of the motions and the bars. */
-.dt-stage[data-theme="riso"] { --pro-x: 0%; --con-x: 100%; }
-.dt-stage[data-theme="riso"][data-pro-seat="right"] { --pro-x: 100%; --con-x: 0%; }
+   are densest at the seat and die out at the rim, clear of the motions and the bars. The disc's ramp is an SVG image
+   (a radial ramp 36cqh across in a field of white) centred on the seat, for the reason the field's is. */
+.dt-stage[data-theme="riso"] { --pro-x: 0cqw; --con-x: 100cqw; }
+.dt-stage[data-theme="riso"][data-pro-seat="right"] { --pro-x: 100cqw; --con-x: 0cqw; }
 .dt-stage[data-theme="riso"][data-mode="title"] .dt-deco,
 .dt-stage[data-theme="riso"][data-mode="stage"][data-kind="break"] .dt-deco {
   --disc-x: var(--pro-x);
-  --disc-y: 56%;
-  --screen: var(--screen-pro);
+  --disc-y: 56cqh;
   background: var(--pro);
   mix-blend-mode: multiply;
   isolation: isolate;
@@ -406,8 +441,7 @@
 .dt-stage[data-theme="riso"][data-mode="title"] .dt-deco-over,
 .dt-stage[data-theme="riso"][data-mode="stage"][data-kind="break"] .dt-deco-over {
   --disc-x: var(--con-x);
-  --disc-y: 44%;
-  --screen: var(--screen-con);
+  --disc-y: 44cqh;
   background: var(--con);
   mix-blend-mode: multiply;
   isolation: isolate;
@@ -417,13 +451,33 @@
   content: "";
   position: absolute;
   inset: 0;
-  background:
-    var(--screen-grain) 0 0 / 256px 256px,
-    radial-gradient(circle 36cqh at var(--disc-x) var(--disc-y), hsl(0 0% 6%) 0, hsl(0 0% 50%) 100%, #fff 100%),
-    var(--screen) 0 0 / var(--tile) var(--tile);
+  background-image:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='3 0 0 0 -1.85  3 0 0 0 -1.85  3 0 0 0 -1.85  0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 20 20'><radialGradient id='d' gradientUnits='userSpaceOnUse' cx='0' cy='0' r='1'><stop offset='0' stop-color='hsl(0 0%25 6%25)'/><stop offset='1' stop-color='hsl(0 0%25 50%25)'/><stop offset='1' stop-color='%23fff'/></radialGradient><rect x='-10' y='-10' width='20' height='20' fill='url(%23d)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
+  background-size: 256px 256px, 720cqh 720cqh, var(--tile) var(--tile);
+  background-position: 0 0, calc(var(--disc-x) - 360cqh) calc(var(--disc-y) - 360cqh), 0 0;
+  background-repeat: repeat, no-repeat, repeat;
   background-blend-mode: screen, screen, normal;
   filter: contrast(14);
   mix-blend-mode: screen;
+}
+.dt-stage[data-theme="riso"][data-mode="title"] .dt-deco-over::before,
+.dt-stage[data-theme="riso"][data-mode="stage"][data-kind="break"] .dt-deco-over::before {
+  background-image:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='3 0 0 0 -1.85  3 0 0 0 -1.85  3 0 0 0 -1.85  0 0 0 0 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 20 20'><radialGradient id='d' gradientUnits='userSpaceOnUse' cx='0' cy='0' r='1'><stop offset='0' stop-color='hsl(0 0%25 6%25)'/><stop offset='1' stop-color='hsl(0 0%25 50%25)'/><stop offset='1' stop-color='%23fff'/></radialGradient><rect x='-10' y='-10' width='20' height='20' fill='url(%23d)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(-18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
+}
+@container (max-width: 520px) {
+  .dt-stage[data-theme="riso"][data-mode="title"] :is(.dt-deco, .dt-deco-over)::before,
+  .dt-stage[data-theme="riso"][data-mode="stage"][data-kind="break"] :is(.dt-deco, .dt-deco-over)::before {
+    background-image: none, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 20 20'><radialGradient id='d' gradientUnits='userSpaceOnUse' cx='0' cy='0' r='1'><stop offset='0' stop-color='hsl(0 0%25 6%25)'/><stop offset='1' stop-color='hsl(0 0%25 50%25)'/><stop offset='1' stop-color='%23fff'/></radialGradient><rect x='-10' y='-10' width='20' height='20' fill='url(%23d)'/></svg>"), url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
+  }
+  .dt-stage[data-theme="riso"][data-mode="title"] .dt-deco-over::before,
+  .dt-stage[data-theme="riso"][data-mode="stage"][data-kind="break"] .dt-deco-over::before {
+    background-image: none, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 20 20'><radialGradient id='d' gradientUnits='userSpaceOnUse' cx='0' cy='0' r='1'><stop offset='0' stop-color='hsl(0 0%25 6%25)'/><stop offset='1' stop-color='hsl(0 0%25 50%25)'/><stop offset='1' stop-color='%23fff'/></radialGradient><rect x='-10' y='-10' width='20' height='20' fill='url(%23d)'/></svg>"), url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3.16228 3.16228'><defs><radialGradient id='g' r='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></radialGradient><pattern id='p' width='1' height='1' patternUnits='userSpaceOnUse' patternTransform='rotate(-18.4349)'><rect width='1' height='1' fill='url(%23g)'/></pattern></defs><rect width='3.16228' height='3.16228' fill='url(%23p)'/></svg>");
+  }
 }
 
 /* ---- the bells: a ring printed through both drums ---- */
