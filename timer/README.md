@@ -163,13 +163,13 @@ CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（
 **动效的钩子**（来由与时序见 `docs/superpowers/specs/2026-10-06-timer-theme-animations-design.md`）：
 
 - 换环节时舞台带 `.is-entering` 1100 毫秒，主题自己的入场动画不超过 1000 毫秒。揭幕从本方席位一侧开始、560 毫秒内让色场落定；铃声波纹和地线可以换成本主题的形（流星、辉光、墨洇、色带上的两道线……），但时点不变：铃响那一刻、第二声的 320 毫秒、换边的 520 毫秒
-- 铃声波纹 `.dt-ring` 在响铃的那个 `.dt-clock` 里、数字之下，带 `data-type`（`warn` / `end`）、`data-nth`（`1` / `2`）、`data-side`（`pro` / `con` / `none`）。`--bell-w`、`--bell-h` 是字形的宽和高（舞台宽、高的百分比），`--bell-dy` 是字形中心比时钟中心低多少；自由辩半区里还有 `--ring-to`（不出本列的最大缩放），间隔里是 1.2。它用 margin 居中，`translate` 留给主题；第一次 `animationend` 时被移除（最晚 1.5 秒）。它不能用 `mix-blend-mode`（时钟是独立的合成组），在半区里会继承那一半的变暗滤镜，也会被半区裁切
-- 舞台的 `data-bell`（`warn` / `count` / `end`）与 `data-bell-clock`（`main` / `pro` / `con`）：铃响后保留 1.5 秒，换环节时清除，减少动态效果时不设，冻结截图与缩略图里没有。投影窗口可能先收到状态、后收到铃，按它键控的终态会先闪一帧
+- 铃声波纹 `.dt-ring` 在响铃的那个 `.dt-clock` 里、数字之下，带 `data-type`（`warn` / `end`）、`data-nth`（`1` / `2`）、`data-side`（`pro` / `con` / `none`）。`--bell-w`、`--bell-h` 是字形的宽和高（舞台宽、高的百分比），`--bell-dy` 是字形中心比时钟中心低多少；自由辩半区里还有 `--ring-to`（不出本列的最大缩放），间隔里是 1.2。它用 margin 居中，`translate` 留给主题；第一次 `animationend` 时被移除（最晚 1.5 秒）；换环节时立即移除，终止铃（单方、间隔）还没画出的第二圈也一并取消。它不能用 `mix-blend-mode`（时钟是独立的合成组），在半区里会继承那一半的变暗滤镜，也会被半区裁切
+- 舞台的 `data-bell`（`warn` / `count` / `end`）与 `data-bell-clock`（`main` / `pro` / `con`）：铃响后保留 1.5 秒，换环节时清除，减少动态效果时不设，冻结截图与缩略图里没有。投影窗口可能先收到状态、后收到铃（操作当场补响的铃，即扣时越过铃点或撤销，总是先发状态、后发铃），按它键控的终态会先闪一帧
 - 每一半的 `data-locking`：一方用完或放弃的那一刻起 1 秒（打开时已经锁定的不算），给锁定的一次性动画用；目前没有主题用它
-- `@property` 注册的 `--dim`（每一半上，发言 0、等待 1，随换边 520 毫秒过渡；按颜色变暗的主题读它）和 `--remain`（锁定时 520 毫秒排空，读它的高度、笔触、表盘一起收）
+- `@property` 注册的 `--dim`（每一半上，发言 0、等待 1，随换边 520 毫秒过渡；按颜色或不透明度变暗的主题读它）和 `--remain`（锁定时 520 毫秒排空：按它定长短的部件——共享的水位、昼的横带、黑板的排线、绿幕底板上的本方色——随之收回。滤镜层的尺寸读它的主题（墨、孔版）先让那一层 300 毫秒淡出，再在自己的锁定规则里写 `--remain 0s linear 300ms`，一步归零。构成的表盘按 `--secs` 走，放弃时靠自己的 `--construct-sweep` 过渡转回；星轨的星云靠自己的不透明度过渡淡出）
 - `--over-ink`：超时时数字和冒号的颜色，默认 `--accent`
 - `--colon-rest`：冒号停下时的不透明度，默认 .55。`--beat-delay`（渲染器写在时钟上）让呼吸的峰值落在秒跳上；`--colon-from`（写在冒号上）是它停下那一刻的不透明度，停下后 200 毫秒的 `dt-colon-settle` 从这里落到 `--colon-rest`，`dt-colon-wake` 在开始时从 `--colon-rest` 接上呼吸
-- 超时的「+」（`.dt-sign`）绝对定位在数字左侧，空时不透明度为 0；时钟的 `data-long` 表示分钟有两位，舞台比 3:2 更方时「+」回到排版里
+- 超时的「+」（`.dt-sign`）绝对定位在数字左侧，空时不透明度为 0；时钟的 `data-long` 表示分钟有两位（倒计时与超时都设）。只有超时分钟到两位（+10:00 起）且舞台为 3:2 或更方（4:3、5:4）时，「+」才回到排版里，+10:00 以下仍悬在左侧
 - `.dt-state[data-was]`：继续计时后「暂停」被清空，靠 `:empty::before` 留着字淡出；另设了 `.dt-state` 不透明度的主题要把 `:empty` 设回 0
 - 锁定的一方（`[data-locked]`）数字不透明度为 0、缩到 .92 并留着位置，`.dt-state` 居中
 - 共享关键帧都只有 `from`：`dt-fade-in`、`dt-rise`、`dt-stamp`（超时记号：`animation: dt-stamp 300ms var(--ease-out) 320ms backwards`，落在第二声铃上）
@@ -182,14 +182,14 @@ CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（
 - 不要把 `animation` 门控在 `:not(.is-entering)` 下：类移除时规则重新匹配，动画会再放一遍。只有 `transition` 可以这样门控
 - 移除一个动画不会让过渡从它的当前值起算；不要用 `animation-play-state` 做暂停与恢复
 - 计时器驱动的状态（`data-bell`、`data-locking`、只在入场时出现的层）不能进静帧；循环动画的周期要整除 10 秒
-- 不给 `font-variation-settings`、`--tension`、`--used` 加过渡
+- 不给 `font-variation-settings`、`--tension`、`--used` 加过渡；带 feTurbulence 或笔刷滤镜的层上，不放随 `--used`、`--remain`、`--dim` 连续变化的渐变或颜色（改为叠一层只变不透明度的层）；滤镜层自己的尺寸读 `--remain` 时，锁定改为淡出后一步归零（见 `ink.css`、`riso.css`），不要用共享的 520 毫秒排空
 - 波纹不能用 `mix-blend-mode`；它在半区里继承那一半的滤镜，滤镜重的主题可以给 `.dt-half:not([data-active]) .dt-ring` 另写样式或藏起来
 
 **四条 Chromium 规则**（实测）：渲染器每一步都写 `--used`，整棵子树重算样式，下面的写法会让那个盒子连同它的滤镜每一步整盒重画，或者把滤镜画坏：
 
 1. `url()` 图片放进自定义属性再用 `var()` 引用，或者含 `url()` 图片的声明里另有任何 `var()`：每次重算都当作新图。`--backdrop` 也是这样（`stage.css` 经 `var(--backdrop)` 画它）。图片要字面写在用到它的盒子上，比如主题自己的 `.dt-backdrop::before`
 2. 同一个 `background` 或 `mask` 列表里既有 `url()` 图片又有渐变：普通元素和伪元素都会每次重画。把渐变画成 SVG 图（`linearGradient`、`rect`），或者把图片单独放到另一个盒子上
-3. 带滤镜的元素自成一层时标 `will-change: transform`：合成器每帧重跑滤镜。标 `will-change: opacity`，滤镜只画进图层一次；滤镜写在子元素（比如 `::before`）上，动的只是父元素的裁切、遮罩，或这一层的不透明度与变换（见 `ink.css`、`chalk.css`）
+3. 带滤镜的元素自成一层时标 `will-change: transform`：合成器每帧重跑滤镜。标 `will-change: opacity`，滤镜只画进图层一次；滤镜写在子元素（比如 `::before`）上，动的只是父元素的裁切、遮罩，或这一层的不透明度与变换（见 `ink.css`、`chalk.css`）。这一层的不透明度也会变时，两项都标：`will-change: transform, opacity`。只标 `transform`，不透明度每次离开 1 或回到 1，这一层连同其中的滤镜都要整层重新栅格化（`ink.css` 的半区笔触）
 4. 自成一层的滤镜元素落在半像素上（`translate: -50%` 居中）：颗粒被重新采样、洗掉。用 left / top 定位
 
 **JS（可选）**：`timer/src/themes/mytheme.js`，经典脚本，调用：
