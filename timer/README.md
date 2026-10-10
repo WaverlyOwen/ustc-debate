@@ -135,6 +135,9 @@ python timer/build.py
 一个主题是 `timer/src/themes/` 下的一个 CSS 文件（必需），再加一个同名的 JS 文件（可选，要 SVG 滤镜或画布时才写）。
 
 1. 复制 `timer/src/themes/hall.css`，改名，比如 `mytheme.css`
+
+   `hall.css` 末尾的「换场」一段（新一方的光推开旧一方的光：旧色场留在新色场之下淡去，底色过渡，远端席位的标题等色场到了再浮起）假定色场是共享的全屏色场（`.dt-field`），并且用了全局的名字：`@property --hall-deep`、`--hall-was-field`、`--hall-was-l`、`--hall-was-r` 和 `@keyframes dt-hall-outgoing`。这些名字不分主题，同名的定义以后加载的为准，所以色场形状相同的主题要把它们改成自己的名字（如 `--mytheme-was-field`、`dt-mytheme-outgoing`），否则改了初值或关键帧会连堂一起改掉；色场形状不同的主题（横带、底板、笔触）把这一段连同顶光规则里的 `.dt-deco::before`、`.dt-deco::after` 一起删掉。这一段靠渲染器先进入新环节、再写新环节的属性才保得住旧色场（`theme-hall.test.js` 钉着这个顺序），并且占用 `.dt-deco` 的 `transition` 与 `::before` / `::after`。
+
 2. 改第一行元数据：`/* @theme id=mytheme name=我的主题 desc=一句话说明 tone=dark order=9 */`。`tone` 只能是 `dark`（暗场）或 `light`（亮场），开赛页缩略图和编辑器靠它决定文字颜色；缺了或写错，`build.py` 会报错并指出文件名。`order` 是它在网格和下拉框里的位置（整数，可不写，不写就排在最后）
 3. 把文件里所有 `[data-theme="hall"]` 换成 `[data-theme="mytheme"]`。主题的规则全部写在自己的 `[data-theme="<id>"]` 下，不改公共样式
 4. 改变量的值
@@ -153,9 +156,41 @@ python timer/build.py
 | `--digits-on-field` | 数字落在本方色场上时的颜色 |
 | `--digits-off-field` | 数字落在色场收回后露出的底上时的颜色 |
 
-可选：`--on-accent`（实心强调色上文字的颜色，比如待确认的「再点一次重置」；默认是面板色，强调色和面板色太接近的主题要另指一个，`themes.test.js` 要求 4.5:1）、`--backdrop`（任意 `background` 值，画在色场之下）、`.stage-deco` 装饰层、`--text-field` / `--text-deep`（文字所在的两种底，默认是本方色和本方深色；色场够不到标题和顶栏的主题要指向真正的底色）、`--speaker-ink`（发言人一行的颜色）、`--half-ground`（双方环节每一半的底色，有画布的主题可设为 `transparent`）、`--field-ground`（数字落在色场上时真正的底色，默认是本方色；色场不是平涂本方色的主题要如实写，比如「墨」等待方的淡墨笔触、「星轨」双方环节的星云光晕）。组件的 CSS 里不写死颜色，颜色只从这些变量来。
+可选：`--on-accent`（实心强调色上文字的颜色，比如待确认的「再点一次重置」；默认是面板色，强调色和面板色太接近的主题要另指一个，`themes.test.js` 要求 4.5:1）、`--backdrop`（任意 `background` 值，画在色场之下；里面不要放 `url()` 图片，见下面的「四条 Chromium 规则」）、`.stage-deco` 装饰层、`--text-field` / `--text-deep`（文字所在的两种底，默认是本方色和本方深色；色场够不到标题和顶栏的主题要指向真正的底色）、`--speaker-ink`（发言人一行的颜色）、`--half-ground`（双方环节每一半的底色，有画布的主题可设为 `transparent`）、`--field-ground`（数字落在色场上时真正的底色，默认是本方色；色场不是平涂本方色的主题要如实写，比如「墨」等待方的淡墨笔触、「星轨」双方环节的星云光晕）。组件的 CSS 里不写死颜色，颜色只从这些变量来。
 
-CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（单方、间隔）和每一半上的 `--remain`（双方），以及舞台和每一半上的 `--secs`、`--secs-total`（剩余与总长的整秒数）。`--used`、`--remain` 以 1/2000 为一步，`--tension` 随显示的整秒变化，值不变就不重写，主题不用自己再量化。纹理可以用 `background-image: url("data:image/svg+xml,…")`。
+CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（单方、间隔）和每一半上的 `--remain`（双方），以及舞台和每一半上的 `--secs`、`--secs-total`（剩余与总长的整秒数）。`--used`、`--remain` 以 1/2000 为一步，`--tension` 随显示的整秒变化，值不变就不重写，主题不用自己再量化。纹理可以用 `background-image: url("data:image/svg+xml,…")`，写成字面量放在用到它的盒子上（见下面的「四条 Chromium 规则」）。
+
+**动效的钩子**（来由与时序见 `docs/superpowers/specs/2026-10-06-timer-theme-animations-design.md`）：
+
+- 换环节时舞台带 `.is-entering` 1100 毫秒，主题自己的入场动画不超过 1000 毫秒。揭幕从本方席位一侧开始、560 毫秒内让色场落定；铃声波纹和地线可以换成本主题的形（流星、辉光、墨洇、色带上的两道线……），但时点不变：铃响那一刻、第二声的 320 毫秒、换边的 520 毫秒
+- 铃声波纹 `.dt-ring` 在响铃的那个 `.dt-clock` 里、数字之下，带 `data-type`（`warn` / `end`）、`data-nth`（`1` / `2`）、`data-side`（`pro` / `con` / `none`）。`--bell-w`、`--bell-h` 是字形的宽和高（舞台宽、高的百分比），`--bell-dy` 是字形中心比时钟中心低多少；自由辩半区里还有 `--ring-to`（不出本列的最大缩放），间隔里是 1.2。它用 margin 居中，`translate` 留给主题；第一次 `animationend` 时被移除（最晚 1.5 秒）。它不能用 `mix-blend-mode`（时钟是独立的合成组），在半区里会继承那一半的变暗滤镜，也会被半区裁切
+- 舞台的 `data-bell`（`warn` / `count` / `end`）与 `data-bell-clock`（`main` / `pro` / `con`）：铃响后保留 1.5 秒，换环节时清除，减少动态效果时不设，冻结截图与缩略图里没有。投影窗口可能先收到状态、后收到铃，按它键控的终态会先闪一帧
+- 每一半的 `data-locking`：一方用完或放弃的那一刻起 1 秒（打开时已经锁定的不算），给锁定的一次性动画用；目前没有主题用它
+- `@property` 注册的 `--dim`（每一半上，发言 0、等待 1，随换边 520 毫秒过渡；按颜色变暗的主题读它）和 `--remain`（锁定时 520 毫秒排空，读它的高度、笔触、表盘一起收）
+- `--over-ink`：超时时数字和冒号的颜色，默认 `--accent`
+- `--colon-rest`：冒号停下时的不透明度，默认 .55。`--beat-delay`（渲染器写在时钟上）让呼吸的峰值落在秒跳上；`--colon-from`（写在冒号上）是它停下那一刻的不透明度，停下后 200 毫秒的 `dt-colon-settle` 从这里落到 `--colon-rest`，`dt-colon-wake` 在开始时从 `--colon-rest` 接上呼吸
+- 超时的「+」（`.dt-sign`）绝对定位在数字左侧，空时不透明度为 0；时钟的 `data-long` 表示分钟有两位，舞台比 3:2 更方时「+」回到排版里
+- `.dt-state[data-was]`：继续计时后「暂停」被清空，靠 `:empty::before` 留着字淡出；另设了 `.dt-state` 不透明度的主题要把 `:empty` 设回 0
+- 锁定的一方（`[data-locked]`）数字不透明度为 0、缩到 .92 并留着位置，`.dt-state` 居中
+- 共享关键帧都只有 `from`：`dt-fade-in`、`dt-rise`、`dt-stamp`（超时记号：`animation: dt-stamp 300ms var(--ease-out) 320ms backwards`，落在第二声铃上）
+- 缩略图和冻结截图的舞台带 `data-still`；冻结与减少动态的规则也管舞台自己的 `::before` / `::after`
+
+**写动效的义务**：
+
+- 重写某个元素的 `transition` 时，把它原有的过渡全部写上：更具体的规则里的简写会替换整张表。`.dt-half` 上要保留 `filter` 和 `--dim`，锁定的规则里再加 `--remain`；`.dt-half .dt-digits` 上保留 `font-size` 和 `color`；`.dt-sign` 上保留 `opacity 300ms`
+- 一次性动画只写 `from` 帧，用 `backwards` 填充，终态就是实时值，冻结截图里自然落定。`both` 或 `forwards` 会在动画结束后继续占着属性，那个属性上的过渡不再启动，元素也常驻合成层
+- 不要把 `animation` 门控在 `:not(.is-entering)` 下：类移除时规则重新匹配，动画会再放一遍。只有 `transition` 可以这样门控
+- 移除一个动画不会让过渡从它的当前值起算；不要用 `animation-play-state` 做暂停与恢复
+- 计时器驱动的状态（`data-bell`、`data-locking`、只在入场时出现的层）不能进静帧；循环动画的周期要整除 10 秒
+- 不给 `font-variation-settings`、`--tension`、`--used` 加过渡
+- 波纹不能用 `mix-blend-mode`；它在半区里继承那一半的滤镜，滤镜重的主题可以给 `.dt-half:not([data-active]) .dt-ring` 另写样式或藏起来
+
+**四条 Chromium 规则**（实测）：渲染器每一步都写 `--used`，整棵子树重算样式，下面的写法会让那个盒子连同它的滤镜每一步整盒重画，或者把滤镜画坏：
+
+1. `url()` 图片放进自定义属性再用 `var()` 引用，或者含 `url()` 图片的声明里另有任何 `var()`：每次重算都当作新图。`--backdrop` 也是这样（`stage.css` 经 `var(--backdrop)` 画它）。图片要字面写在用到它的盒子上，比如主题自己的 `.dt-backdrop::before`
+2. 同一个 `background` 或 `mask` 列表里既有 `url()` 图片又有渐变：普通元素和伪元素都会每次重画。把渐变画成 SVG 图（`linearGradient`、`rect`），或者把图片单独放到另一个盒子上
+3. 带滤镜的元素自成一层时标 `will-change: transform`：合成器每帧重跑滤镜。标 `will-change: opacity`，滤镜只画进图层一次；滤镜写在子元素（比如 `::before`）上，动的只是父元素的裁切、遮罩，或这一层的不透明度与变换（见 `ink.css`、`chalk.css`）
+4. 自成一层的滤镜元素落在半像素上（`translate: -50%` 居中）：颗粒被重新采样、洗掉。用 left / top 定位
 
 **JS（可选）**：`timer/src/themes/mytheme.js`，经典脚本，调用：
 
@@ -178,7 +213,7 @@ python timer/tests/screenshots.py --theme mytheme                   # 每个演�
 python timer/tests/screenshots.py --theme mytheme --size 1366x768
 ```
 
-存到 `timer/tests/out/<分辨率>/mytheme/`。开场卡、单方、质询、超时、自由辩、间隔、结束卡都看一遍，席位对调（`seat-right`）也看。
+存到 `timer/tests/out/<分辨率>/mytheme/`。开场卡、单方、质询、超时、自由辩、间隔、结束卡都看一遍，席位对调（`seat-right`）也看。截图是冻结的终态，动效要用 `frames.py` 逐帧录下来看（见「开发」）。
 
 ## 开发
 
@@ -207,9 +242,19 @@ python timer/tests/screenshots.py --size 1366x768
 python timer/tests/screenshots.py --size 1280x720 --only dock,help   # 控制条在常见的 720p 投影上排成一行
 python timer/tests/screenshots.py --size 1024x768 --only dock,help    # 4:3 投影
 python timer/tests/screenshots.py --theme ink    # 某一个主题的全部场景
+python timer/tests/frames.py --theme hall                                    # 录动画：换环节的入场，16 帧、每 50 毫秒一帧
+python timer/tests/frames.py --theme ink --demo dual --skip 1200 --key KeyL  # 入场结束后，自由辩换边
+python timer/tests/frames.py --theme hall --skip 76500 --count 24 --step 60  # 提示铃（single 还剩 30 秒时）
+python timer/tests/frames.py --theme chalk --size 1024x768                   # 4:3 投影上的入场
 ```
 
 截图用的是 `?demo=<名字>` 的固定场景（标题、单方、超时、双方、间隔、结束卡、长名字、控制条、键位帮助、开赛页、编辑器、操作台等；加 `&theme=<id>` 换主题），可以直接在浏览器里打开 `debate-timer.html?demo=long` 看。
+
+`frames.py` 打开不冻结的 `?demo=<名字>&theme=<id>`，把页面时钟停住，`--skip` 先把时钟拨快若干毫秒，`--key` 再按一个键，然后每隔 `--step` 毫秒（页面时间）截一帧，共 `--count` 帧，存到 `timer/tests/out/frames/<宽>x<高>/<主题>/<演示态>[-<键>][-skip<毫秒>]/000.png…`；装了 ffmpeg 时旁边还有一张 `sheet.png`，每行四帧、按时间顺序排开，一眼看出一个时刻里色场、文字、铃各自什么时候动。终端每帧一行：时间、`data-phase`、`data-side`、`data-kind`、是否还在入场。几点要注意：
+
+- `frames.py` 的 `--size` 是页面（投影）的大小；`screenshots.py` 的 `--size` 是窗口大小，页面要矮约 88 像素（1366x768 拍到的是 1366x680 的舞台），判断 4:3、5:4 上会不会出屏要用 `frames.py`
+- 引擎会丢掉 1.5 秒前越过的铃，所以 `--skip` 要停在铃点之前，让某一帧跨过它
+- 录换边或锁定用 `--skip 1200`：入场的 1.1 秒里锁定的过渡被门控，是一帧切换
 
 ## 已知限制
 
