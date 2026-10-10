@@ -5,12 +5,17 @@
   const BUILTIN_THEMES = ['hall', 'daylight', 'chroma'];   // used when build.py has not injected DT.THEMES
   const LONG_TITLE = 14;       // characters; longer stage names step the title down a size
   const LONG_TEAM = 12;        // characters; longer team names step down in a dual stage's half (and then clip)
-  const ENTER_MS = 600;        // the entrance class outlives the longest entrance animation (560 ms)
+  const ENTER_MS = 1100;       // the entrance class outlives the longest entrance animation (a theme's, up to 1000 ms)
   const TOAST_MS = 1500;
-  const RING_MS = 1500;        // fallback removal when no animationend arrives (no stylesheet, animation off)
+  const RING_MS = 1500;        // fallback removal when no animationend arrives (no stylesheet, animation off); also how
+                               // long the stage says which bell rang (data-bell). Never below 1420: chroma's two-flash
+                               // end bell (cr-flash-twice) runs that long on data-bell
   const RING_GAP_MS = 320;     // the second ring of an end bell, in step with the double bell
+  const RING_REACH = 1.65;     // the scale a ring grows to (stage.css); a half's ring may stop short of it
   const BUMP_MS = 240;
+  const LOCKING_MS = 1000;     // how long a half that has just run out or yielded carries data-locking
   const ACTIVE_COL = 58;       // percent of the width the speaking half takes in a dual stage
+  const STEPS = 2000;          // --used and --remain move in steps of 1/2000: about a pixel of a 1920 px stage
   const FRAME_MS = 33;         // a theme's painter draws at most 30 frames a second
 
   const DIGITS = '<span class="dt-sign"></span><span class="dt-min"></span><span class="dt-colon">:</span>' +
@@ -33,7 +38,6 @@
     '<p class="dt-motion" data-side="con"></p></div>' +
     '<div class="dt-teams"><span data-side="pro"></span><span data-side="con"></span></div>' +
     '<table class="dt-record" hidden></table></section>' +
-    '<div class="dt-rings"></div>' +
     '<footer class="dt-bottom"><div class="dt-progress"></div><div class="dt-next">' +
     '<span class="dt-next-label"></span><span class="dt-next-name"></span><span class="dt-next-time"></span></div></footer>' +
     '<div class="dt-toast" role="status" aria-live="polite"></div>';
@@ -57,6 +61,7 @@
   }
 
   const clamp01 = x => Math.min(1, Math.max(0, x));
+  const quantize = x => Math.round(x * STEPS) / STEPS;
   const reducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   // A frozen demo (?demo=…&frozen=1) is a still for review: painters draw it as they would under reduced motion.
   const frozenPage = () => /[?&]frozen=1(?:&|$)/.test(window.location.search || '');
@@ -118,13 +123,17 @@
     return ids.indexOf(id) >= 0 ? id : 'hall';
   }
 
-  // Digits tighten as time runs out; overtime and finished clocks stay tight; breaks never tense up. In steps of
-  // 0.02, so --tension changes about every few seconds rather than every frame: each new value sets the digits'
-  // font-variation-settings again, which lays the whole page out again (new spec §3, P5).
+  // The whole seconds a clock shows (m:ss rounds up while time remains); overtime counts as none left.
+  const wholeSecs = clock => Math.max(0, Math.ceil(clock.remaining / 1000));
+  const totalSecs = clock => Math.max(1, Math.ceil(clock.total / 1000));
+
+  // Digits tighten as time runs out; overtime and finished clocks stay tight; breaks never tense up. By the whole
+  // second shown, so --tension changes once a second, on the frame the digits change, never between ticks: each new
+  // value sets the digits' font-variation-settings again, which lays the whole page out again (new spec §3, P5).
   function tension(clock, kind) {
     if (!clock || kind === 'break') return 0;
     if (clock.phase === 'over' || clock.phase === 'done') return 1;
-    return Math.round(clamp01(1 - clock.fraction) * 50) / 50;
+    return clamp01(1 - wholeSecs(clock) / totalSecs(clock));
   }
 
   function stateText(clock, kind) {
@@ -136,15 +145,16 @@
   // Rounded to whole seconds for the record table.
   function duration(ms) { return DT.engine.fmt(Math.round(ms / 1000) * 1000); }
 
-  // opts.thumbnail: a still preview (spec §3.2): no entrance, rings or toasts, and the painter draws once.
+  // opts.thumbnail: a still preview (spec §3.2): no entrance, rings or toasts, the painter draws once, and stage.css
+  // stands it still.
   function mount(host, opts) {
     const thumbnail = !!(opts && opts.thumbnail);
     host.classList.add('dt-stage-host');
     const stage = document.createElement('div');
     stage.className = 'dt-stage';
     stage.innerHTML = TEMPLATE;
-    // A frozen demo's stage is a still: stage.css lands its transitions and animations at their ends.
-    if (frozenPage()) stage.setAttribute('data-still', '');
+    // A frozen demo's stage and a thumbnail are stills: stage.css lands their transitions and animations at their ends.
+    if (frozenPage() || thumbnail) stage.setAttribute('data-still', '');
     const $ = sel => stage.querySelector(sel);
     const els = {
       deco: $('.dt-deco'), field: $('.dt-field'), warnline: $('.dt-warnline'),
@@ -153,13 +163,15 @@
       halves: $('.dt-halves'),
       motions: { pro: $('.dt-motion[data-side="pro"]'), con: $('.dt-motion[data-side="con"]') },
       teams: $('.dt-teams'),
-      record: $('.dt-record'), rings: $('.dt-rings'), progress: $('.dt-progress'),
+      record: $('.dt-record'), progress: $('.dt-progress'),
       next: [$('.dt-next-label'), $('.dt-next-name'), $('.dt-next-time')],
       toast: $('.dt-toast'),
     };
+    // bell: the glyphs' geometry measured for this clock's last bell, which an end bell's second ring reuses.
     const clockParts = el => ({
       el, sign: el.querySelectorAll('.dt-sign'), min: el.querySelectorAll('.dt-min'),
-      sec: el.querySelectorAll('.dt-sec'), state: el.querySelector('.dt-state'),
+      sec: el.querySelectorAll('.dt-sec'), colons: el.querySelectorAll('.dt-colon'),
+      state: el.querySelector('.dt-state'), bell: null,
     });
     const clocks = { main: clockParts($('.dt-clock[data-clock="main"]')) };
     const halves = {};
@@ -175,7 +187,9 @@
     let destroyed = false;
     let lastKey = null, lastSeat = null, progressSig = null, recordSig = null;
     let segs = [];
-    let enterTimer = null, toastTimer = null;
+    let enterTimer = null, toastTimer = null, bellTimer = null, ringTimer = null;
+    let lockSeen = null;    // the halves' locked state as last painted, and on which stage: {key, pro, con}
+    const lockTimers = { pro: null, con: null };
     let theme = null;       // the theme on screen
     let paint = null;       // while that theme has a painter: its canvas, context, instance and frame bookkeeping
     let lastView = null, lastSig = null;
@@ -209,9 +223,63 @@
       both(parts.sign, over ? '+' : '');
       both(parts.min, hm[0]);
       both(parts.sec, hm[1] || '');
-      text(parts.state, stateText(clock, kind));
+      attr(parts.el, 'data-long', hm[0].length > 1 ? '' : null);   // two-digit minutes (stage.css seats the sign)
+      // 「暂停」 keeps its word (stage.css :empty::before) while it fades on resume; a locked side's word never lingers.
+      const word = stateText(clock, kind);
+      if (word) attr(parts.state, 'data-was', word === '暂停' ? word : '');
+      text(parts.state, word);
       attr(parts.el, 'data-phase', clock.phase);
+      const wasRunning = parts.el.getAttribute('data-running') === 'true';
+      if (clock.running && !wasRunning) beat(parts, clock);
       attr(parts.el, 'data-running', clock.running ? 'true' : 'false');
+    }
+
+    // A clock that stops takes its colon's breath away (stage.css), and the colon settles to rest from where the breath
+    // was: each colon's live opacity, read while the breath still runs, is the settle's from (--colon-from). `list`
+    // pairs each clock about to be painted with what it will show. update() calls this before it writes anything, so
+    // the read (a style flush) finds nothing half-written: part way through, it would split the update's changes in
+    // two, and a transition one of them starts (a waiting half's digit colour) would not reach what inherits it (the
+    // half's colon).
+    function settle(list) {
+      const stopping = list.filter(([parts, clock]) =>
+        clock && !clock.running && parts.el.getAttribute('data-running') === 'true');
+      const from = stopping.map(([parts]) => Array.from(parts.colons, colon => getComputedStyle(colon).opacity));
+      stopping.forEach(([parts], i) => parts.colons.forEach((colon, j) => cssVar(colon, '--colon-from', from[i][j])));
+    }
+
+    // A clock that starts or resumes breathes its colon in step with the seconds: the breath (1000 ms, at full strength
+    // at the start of each cycle) peaks as the digits change. The breath starts with the clock (stage.css), so its delay
+    // is -(1000 - ms to the next tick), a new stage's 0 ms, for every colon of the clock. It is written before the clock
+    // says it runs, so the breath is made with it: a delay changed while the new breath and the colon's wake are still
+    // pending leaves the wake out of their first frame, and the colon would flash to the breath's value.
+    function beat(parts, clock) {
+      const rem = clock.remaining;
+      const toTick = rem >= 0 ? rem % 1000 || 1000 : 1000 - (-rem % 1000);
+      cssVar(parts.el, '--beat-delay', -Math.round(1000 - toTick) + 'ms');
+    }
+
+    // A half seen to run out or yield on the stage it was painted on carries data-locking for LOCKING_MS, for a theme's
+    // one-shot. A stage that opens with a half already locked, the first paint after mounting and a thumbnail do not.
+    function noteLocks(key, list) {
+      const seen = lockSeen && lockSeen.key === key ? lockSeen : null;
+      lockSeen = { key };
+      list.forEach(c => {
+        lockSeen[c.id] = c.locked;
+        if (thumbnail || !seen || seen[c.id] !== false || !c.locked) return;
+        const el = halves[c.id].el;
+        attr(el, 'data-locking', true);
+        cancel(lockTimers[c.id]);
+        lockTimers[c.id] = later(() => { lockTimers[c.id] = null; attr(el, 'data-locking', false); }, LOCKING_MS);
+      });
+    }
+
+    function clearLocking() {
+      lockSeen = null;
+      ['pro', 'con'].forEach(side => {
+        cancel(lockTimers[side]);
+        lockTimers[side] = null;
+        attr(halves[side].el, 'data-locking', false);
+      });
     }
 
     // Put the pro element first when the pro side sits on the left, last otherwise.
@@ -375,17 +443,18 @@
       const kind = st ? st.type : 'break';
       const seat = v.proSeat === 'right' ? 'right' : 'left';
       const match = v.match || {};
+      const active = kind === 'dual' ? v.clocks.find(c => c.active) || null : v.clocks[0] || null;
+      const idle = kind === 'dual' && !active;
+      settle(kind === 'dual' ? v.clocks.map(c => [clocks[c.id], c]) : st ? [[clocks.main, active]] : []);
 
       const key = v.mode + '|' + (st ? st.id : '');
-      if (key !== lastKey) { lastKey = key; enter(); }
+      if (key !== lastKey) { lastKey = key; clearLocking(); clearBell(); clearRings(); enter(); }
       if (seat !== lastSeat) {
         lastSeat = seat;
         seatOrder(els.halves, halves.pro.el, halves.con.el, seat);
         seatOrder(els.teams, teamSpans.pro, teamSpans.con, seat);
       }
 
-      const active = kind === 'dual' ? v.clocks.find(c => c.active) || null : v.clocks[0] || null;
-      const idle = kind === 'dual' && !active;
       attr(stage, 'data-mode', v.mode);
       attr(stage, 'data-kind', kind);
       attr(stage, 'data-side', (active && kind !== 'break' && active.side) || 'none');
@@ -396,8 +465,11 @@
       useTheme(themeId);
       attr(stage, 'data-pro-seat', seat);
       attr(stage, 'data-long', st && Array.from(st.name).length > LONG_TITLE ? 'true' : 'false');
-      cssVar(stage, '--used', kind !== 'dual' && active ? 1 - active.fraction : 0);
+      cssVar(stage, '--used', kind !== 'dual' && active ? quantize(1 - active.fraction) : 0);
       cssVar(stage, '--tension', tension(active, kind));
+      // Whole seconds left on the clock that holds the floor, and its length: they change once a second.
+      cssVar(stage, '--secs', active ? wholeSecs(active) : 0);
+      cssVar(stage, '--secs-total', active ? totalSecs(active) : 0);
       cssVar(stage, '--warn-at', v.warnAt || 0);
       attr(els.warnline, 'hidden', !st || v.warnAt === null || v.warnAt === undefined);
 
@@ -417,10 +489,13 @@
           const h = halves[c.id];
           attr(h.el, 'data-active', !idle && c.active);
           attr(h.el, 'data-locked', c.locked);
-          cssVar(h.el, '--remain', c.locked ? 0 : c.fraction);
+          cssVar(h.el, '--remain', c.locked ? 0 : quantize(c.fraction));
           cssVar(h.el, '--tension', tension(c, kind));
+          cssVar(h.el, '--secs', wholeSecs(c));
+          cssVar(h.el, '--secs-total', totalSecs(c));
           paintClock(clocks[c.id], c, kind);
         });
+        noteLocks(key, v.clocks);
       }
 
       ['pro', 'con'].forEach(side => {
@@ -446,36 +521,99 @@
       draw(v, lastSig);
     }
 
-    // A ring centred on the digits of the clock that rang.
-    function ring(clockId) {
-      if (destroyed) return;
-      const parts = clocks[clockId] || clocks.main;
+    // The glyphs of a clock as the room sees them: the union of its off-field layer's parts that have a box (an
+    // empty sign has none), or the clock's own box when none has. In stage percent: w of the width; h, and dy (the
+    // glyphs' centre below the clock's, which the digits' .07em drop puts there), of the height.
+    function measureBell(parts) {
       const box = stage.getBoundingClientRect();
-      const r = parts.el.querySelector('.dt-digits').getBoundingClientRect();
-      const x = box.width && r.width ? (r.left + r.width / 2 - box.left) / box.width * 100 : 50;
-      const y = box.height && r.height ? (r.top + r.height / 2 - box.top) / box.height * 100 : 50;
+      const own = parts.el.getBoundingClientRect();
+      let u = null;
+      parts.el.querySelectorAll('.dt-digits:not(.dt-digits-on) > span').forEach(span => {
+        const r = span.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        u = u ? { left: Math.min(u.left, r.left), top: Math.min(u.top, r.top), right: Math.max(u.right, r.right),
+          bottom: Math.max(u.bottom, r.bottom) } : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+      });
+      if (!u) u = { left: own.left, top: own.top, right: own.right, bottom: own.bottom };
+      const x = box.width ? 100 / box.width : 0, y = box.height ? 100 / box.height : 0;
+      const dy = ((u.top + u.bottom) - (own.top + own.bottom)) / 2;
+      return { w: (u.right - u.left) * x, h: (u.bottom - u.top) * y, dy: dy * y };
+    }
+
+    // How far a half's ring may grow and still stay inside its column (96% of it), as the column will be once the
+    // bell's switch, if any, has sprung: a warn bell rings for the half holding the floor; a side that runs out
+    // hands the floor over, unless the other side is out already and the columns stay as they are.
+    function reach(id, type, g) {
+      const box = stage.getBoundingClientRect();
+      const other = lastView && lastView.clocks ? lastView.clocks.find(c => c.id !== id) : null;
+      const col = type === 'end' && !(other && other.locked) ? 100 - ACTIVE_COL : ACTIVE_COL;
+      const ringW = (g.w * box.width + 3 * box.height) / 100;   // stage.css: --bell-w × 1cqw + 3cqh
+      return ringW > 0 ? Math.min(RING_REACH, .96 * col * box.width / 100 / ringW) : RING_REACH;
+    }
+
+    // A ring inside the clock that rang, under its digits and sized from their glyphs (stage.css). The second ring of
+    // an end bell reuses the first's measure, so the two are concentric whatever the sign or a lock has done since.
+    function ring(id, type, nth) {
+      if (destroyed) return;
+      const parts = clocks[id];
+      const g = nth > 1 && parts.bell ? parts.bell : (parts.bell = measureBell(parts));
       const el = document.createElement('i');
       el.className = 'dt-ring';
-      el.style.left = x + '%';
-      el.style.top = y + '%';
+      attr(el, 'data-type', type);
+      attr(el, 'data-nth', nth);
+      attr(el, 'data-side', id !== 'main' ? id : (lastView && lastView.stage && lastView.stage.side) || 'none');
+      cssVar(el, '--bell-w', g.w);
+      cssVar(el, '--bell-h', g.h);
+      cssVar(el, '--bell-dy', g.dy);
+      if (id !== 'main') cssVar(el, '--ring-to', reach(id, type, g));
       let fallback = null;
       const done = () => { cancel(fallback); el.remove(); };
       el.addEventListener('animationend', done);
       fallback = later(done, RING_MS);
-      els.rings.appendChild(el);
+      parts.el.appendChild(el);
+    }
+
+    // Which bell rang and on which clock, on the stage for RING_MS, for a theme's one-shot (a plate's edge flashing).
+    // A new stage clears it at once, with the rings still playing and an end bell's second ring not yet drawn
+    // (clearRings): a bell is the stage's that rang it, not the next one's. A repaint of the same stage keeps them.
+    function markBell(type, id) {
+      attr(stage, 'data-bell', type);
+      attr(stage, 'data-bell-clock', id);
+      cancel(bellTimer);
+      bellTimer = later(clearBell, RING_MS);
+    }
+
+    function clearRings() {
+      cancel(ringTimer);
+      ringTimer = null;
+      stage.querySelectorAll('.dt-ring').forEach(el => el.remove());
+    }
+
+    function clearBell() {
+      cancel(bellTimer);
+      bellTimer = null;
+      attr(stage, 'data-bell', false);
+      attr(stage, 'data-bell-clock', false);
     }
 
     function pulse(event) {
       if (destroyed || thumbnail || !event || reducedMotion()) return;
+      const id = clocks[event.clock] ? event.clock : 'main';
+      if (event.type === 'count' || event.type === 'warn' || event.type === 'end') markBell(event.type, id);
       if (event.type === 'count') {
-        const parts = clocks[event.clock] || clocks.main;
+        const parts = clocks[id];
         replay(parts.el, 'is-bump');
         later(() => parts.el.classList.remove('is-bump'), BUMP_MS);
       } else if (event.type === 'warn') {
-        ring(event.clock);
+        ring(id, 'warn', 1);
       } else if (event.type === 'end') {
-        ring(event.clock);
-        later(() => ring(event.clock), RING_GAP_MS);
+        ring(id, 'end', 1);
+        // A free-debate side that runs out rings once, as the floor goes over at the same moment (spec §5.5); a single
+        // stage's end rings twice, in step with the double bell.
+        if (id === 'main') {
+          cancel(ringTimer);
+          ringTimer = later(() => { ringTimer = null; ring(id, 'end', 2); }, RING_GAP_MS);
+        }
       }
       // 'switch' needs nothing extra: the halves' own transition is the animation.
     }

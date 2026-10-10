@@ -2,6 +2,12 @@
 
 /* ---- frame ---- */
 
+/* Registered so they can be transitioned. --dim (0 speaking, 1 waiting) eases a free-debate half down with the switch,
+   for themes that dim by colour or opacity rather than by the filter. --remain is a half's time left (render.js); it
+   eases only into a lock, so a yielded half drains instead of emptying in one frame. */
+@property --dim { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --remain { syntax: "<number>"; inherits: true; initial-value: 1; }
+
 .dt-stage {
   --side-color: color-mix(in oklab, var(--ground) 90%, var(--ink));
   --side-deep: var(--ground);
@@ -23,9 +29,9 @@
 .dt-stage[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
 
 /* ---- layers, bottom to top (spec §1.5): backdrop, canvas, deco, field / halves, deco-over, warn line, content,
-   rings, toast ---- */
+   toast. A bell's ring is drawn inside the clock that rang, under its digits (see "rings and toast"). ---- */
 
-.dt-backdrop, .dt-canvas, .dt-deco, .dt-field, .dt-halves, .dt-deco-over, .dt-warnline, .dt-rings {
+.dt-backdrop, .dt-canvas, .dt-deco, .dt-field, .dt-halves, .dt-deco-over, .dt-warnline {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -38,7 +44,6 @@
 .dt-deco-over { z-index: 3; }           /* decoration over the field and the halves: seals, marks, grain */
 .dt-warnline { z-index: 4; }
 .dt-top, .dt-head, .dt-clock, .dt-card, .dt-bottom { position: relative; z-index: 5; }
-.dt-rings { z-index: 6; overflow: hidden; }
 .dt-toast { z-index: 7; }
 
 /* The colour field: time is taken back toward the speaking side's own seat. */
@@ -135,6 +140,7 @@
 .dt-stage[data-kind="single"] .dt-clock { color: var(--on-side); }
 
 .dt-digits {
+  position: relative;             /* the box the overtime sign hangs from; .dt-digits-on stays absolute */
   display: flex;
   color: var(--digits-off-field);
   align-items: baseline;
@@ -150,14 +156,37 @@
   translate: 0 .07em;
   transition: color 300ms ease;
 }
-.dt-colon { padding: 0 .03em; opacity: .55; transition: color 300ms ease; }
-.dt-clock[data-running="true"] .dt-colon { animation: dt-breathe 1000ms ease-in-out infinite; }
+/* The colon breathes while its clock runs. Starting and stopping are from-only one-shots: started, it rises from
+   --colon-rest into the breath; stopped, the breath goes and it settles in 200 ms from where the breath was
+   (--colon-from, which render.js reads off each colon as its clock stops) to --colon-rest, and then nothing runs on
+   it. A running animation, or a finished `forwards` fill, keeps the colon composited, and inside a free debate's
+   filtered waiting half that makes the half a surface redrawn with its filter every frame. render.js sets
+   --beat-delay on a clock as it starts, so the breath peaks as the seconds change. A still stands running at the
+   breath's start (1) and stopped at --colon-rest. */
+.dt-colon {
+  padding: 0 .03em;
+  opacity: var(--colon-rest, .55);
+  transition: color 300ms ease;
+  animation: dt-colon-settle 200ms ease;
+}
+.dt-clock[data-running="true"] .dt-colon {
+  animation: dt-breathe 1000ms ease-in-out var(--beat-delay, 0ms) infinite, dt-colon-wake 200ms ease;
+}
 .dt-clock[data-phase="warn"] .dt-colon,
 .dt-clock[data-phase="count"] .dt-colon { color: var(--accent); }
-.dt-clock[data-phase="over"] .dt-digits { color: var(--accent); }
-.dt-sign { margin-right: .04em; }
-.dt-sign:empty { display: none; }
-.dt-clock[data-phase="over"] .dt-sign { animation: dt-breathe 2000ms ease-in-out infinite; }
+/* Overtime: the digits and the colon take --over-ink together, so the gold warn colon does not pass through another
+   colour on the way. */
+.dt-clock[data-phase="over"] .dt-digits,
+.dt-clock[data-phase="over"] .dt-colon { color: var(--over-ink, var(--accent)); }
+/* The overtime sign hangs outside the row, left of the digits, so they keep their place when it comes; it fades in
+   with the colour change, then breathes. The layers' clips reach -50% past their box, so it is not cut. */
+.dt-sign { position: absolute; top: 0; right: 100%; margin-right: .04em; opacity: 1; transition: opacity 300ms ease; }
+.dt-sign:empty { opacity: 0; }
+/* The breath waits out the fade's 300 ms. */
+.dt-clock[data-phase="over"] .dt-sign { animation: dt-breathe 2000ms ease-in-out 300ms infinite; }
+/* Hung outside the row, the sign of +MM:SS would leave a stage squarer than about 1.42:1 (4:3, 5:4). There it joins
+   the row once the minutes have two digits (render.js data-long), at +10:00, where the row re-centres anyway. */
+@container (max-aspect-ratio: 3/2) { .dt-clock[data-phase="over"][data-long] .dt-sign { position: static; } }
 .dt-clock.is-bump .dt-digits { animation: dt-bump 240ms ease-out; }
 
 /* Two layers of the same digits (spec §1.5): .dt-digits in --digits-off-field, and over it .dt-digits-on in
@@ -207,6 +236,9 @@
   transition: opacity 200ms ease;
 }
 .dt-state:empty { opacity: 0; }
+/* Emptied on resume, it keeps its word (render.js data-was, 「暂停」 only) while it fades out; a new stage cuts it. */
+.dt-state:empty::before { content: attr(data-was) / ""; }
+.dt-stage.is-entering .dt-state { transition: none; }
 
 /* ---- dual: two halves by seat, the speaking side widens to 58% ---- */
 
@@ -227,11 +259,13 @@
   min-width: 0;
   overflow: hidden;
   background: var(--half-ground, var(--side-deep));   /* a painter theme sets it transparent to show its canvas */
-  transition: filter 300ms ease;
+  --dim: 0;
+  /* A theme that declares another transition here lists filter and --dim again (and --remain in the locked rule). */
+  transition: filter 520ms var(--ease-out), --dim 520ms var(--ease-out);
 }
 .dt-half[data-side="con"] { --side-color: var(--con); --side-deep: var(--con-deep); }
 .dt-half + .dt-half { box-shadow: inset 1px 0 0 color-mix(in oklab, var(--ink) 16%, transparent); }
-.dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: saturate(.45) brightness(.78); }
+.dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: saturate(.45) brightness(.78); --dim: 1; }
 
 /* Each half is its side's field, drained from the top like a falling water level. */
 .dt-half-field {
@@ -280,19 +314,34 @@
 }
 .dt-half .dt-digits {
   font-size: min(15cqh, 9cqw);
-  transition: font-size 520ms var(--ease-spring), color 300ms ease;
+  transition: font-size 520ms var(--ease-out), color 300ms ease;
 }
 .dt-halves[data-idle] .dt-digits { font-size: min(24cqh, 14cqw); }
 .dt-half[data-active] .dt-digits { font-size: min(30cqh, 17cqw); }
-.dt-half[data-locked] .dt-digits { display: none; }
+/* A side out of time: its digits recede where they stood, keeping the clock's size, and 时间到 / 已放弃 fades in over
+   their place once they are gone. The end state holds at once; only the transitions wait for the entrance to be over,
+   so a stage that opens with a side already out shows it still (a transition fires on a change, an animation whenever
+   its rule starts to match, so animations are never gated this way). */
+.dt-half[data-locked] .dt-digits { opacity: 0; scale: .92; }
 .dt-half[data-locked] .dt-state {
-  position: static;
-  translate: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
   margin: 0;
+  translate: -50% -50%;
   font-family: var(--font-title);
   font-size: 6cqh;
   letter-spacing: .3em;
   opacity: .92;
+  animation: dt-fade-in 300ms ease 200ms backwards;   /* not `both`: a held opacity keeps it composited in the half */
+}
+.dt-stage:not(.is-entering) .dt-half[data-locked] .dt-digits {
+  transition: font-size 520ms var(--ease-out), color 300ms ease, opacity 240ms ease, scale 240ms var(--ease-out);
+}
+/* A yield empties the time left at once: every reader of --remain drains with the spring instead. Unlocking (undo,
+   reset) is still a cut, and the per-frame drain never eases. */
+.dt-stage:not(.is-entering) .dt-half[data-locked] {
+  transition: filter 520ms var(--ease-out), --dim 520ms var(--ease-out), --remain 520ms var(--ease-out);
 }
 
 /* The speaker's gold floor line (spec §5.4): on the floor of the half, its full width, opening from the middle. */
@@ -463,6 +512,7 @@
   background: var(--seg);
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--ink) 22%, transparent);
   opacity: .35;
+  transition: opacity 300ms ease;
 }
 .dt-seg[data-side="pro"] { --seg: var(--pro); }
 .dt-seg[data-side="con"] { --seg: var(--con); }
@@ -478,6 +528,7 @@
   height: .35cqh;
   border-radius: .2cqh;
   background: var(--accent);
+  animation: dt-fade-in 300ms ease backwards;
 }
 
 .dt-next { display: flex; align-items: baseline; gap: 1.1em; min-width: 0; white-space: nowrap; }
@@ -489,16 +540,31 @@
 
 /* ---- rings and toast ---- */
 
+/* A bell's ring: an ellipse round the glyphs of the clock that rang, inside that clock and under its digits (the clock
+   is a stacking context), so it rides the free debate's spring and stays where a locked side's digits were. render.js
+   writes the glyphs' size in stage percent (--bell-w of the width, --bell-h of the height) and their centre's offset
+   from the clock's (--bell-dy, of the height), and in a half --ring-to, a last scale that stays inside its column.
+   From 1.15 it starts clear of the glyphs' corners; at 1.65 it still clears a single stage's speaker line. A break's
+   ring stops at 1.2 (below): its centred name sits 3cqh above the digits, and the clock paints over the head. Centred
+   by its margins, so a theme's own ring is free to use translate. It cannot blend with the field (mix-blend-mode) from
+   inside the clock, and in a half it takes the half's dimming. */
 .dt-ring {
+  --ring-w: calc(var(--bell-w, 30) * 1cqw + 3cqh);
+  --ring-h: calc(var(--bell-h, 30) * 1cqh + 3cqh);
   position: absolute;
-  width: 34cqh;
-  height: 34cqh;
-  margin: -17cqh 0 0 -17cqh;
+  left: 50%;
+  top: calc(50% + var(--bell-dy, 0) * 1cqh);
+  width: var(--ring-w);
+  height: var(--ring-h);
+  margin: calc(var(--ring-h) / -2) 0 0 calc(var(--ring-w) / -2);
+  z-index: -1;
+  pointer-events: none;
   border: .45cqh solid var(--accent);
   border-radius: 50%;
   opacity: 0;
   animation: dt-ring 1100ms ease-out forwards;
 }
+.dt-stage[data-kind="break"] .dt-ring { --ring-to: 1.2; }
 
 .dt-toast {
   position: absolute;
@@ -514,9 +580,9 @@
   letter-spacing: .06em;
   white-space: nowrap;
   translate: -50% -110%;
-  transition: translate 200ms var(--ease-out);
+  transition: translate 200ms ease-in;
 }
-.dt-toast.is-shown { translate: -50% 0; }
+.dt-toast.is-shown { translate: -50% 0; transition-timing-function: var(--ease-out); }
 .dt-toast:empty { visibility: hidden; }
 
 /* ---- the one orchestrated moment: a new stage sweeps in from its side's seat ---- */
@@ -526,35 +592,50 @@
 .dt-stage.is-entering[data-pro-seat="left"][data-side="con"] .dt-field { animation-name: dt-sweep-r; }
 .dt-stage.is-entering .dt-half:first-child .dt-half-field { animation: dt-sweep-l 560ms var(--ease-out); }
 .dt-stage.is-entering .dt-half:last-child .dt-half-field { animation: dt-sweep-r 560ms var(--ease-out); }
+/* The text rises in reading order, 0 / 70 / 140 ms; a card's parts each on their own (the break: name, digits, then the
+   motions). The warn line comes in with the field. Fill `backwards`, never `both`: an animation that holds a property
+   after it ends stops every transition on it until the class goes (1100 ms). */
 .dt-stage.is-entering .dt-title,
-.dt-stage.is-entering .dt-card { animation: dt-rise 420ms var(--ease-out) both; }
+.dt-stage.is-entering .dt-motions { animation: dt-rise 420ms var(--ease-out) backwards; }
 .dt-stage.is-entering .dt-speaker,
-.dt-stage.is-entering .dt-team { animation: dt-rise 420ms var(--ease-out) 70ms both; }
-.dt-stage.is-entering .dt-clock { animation: dt-rise 420ms var(--ease-out) 140ms both; }
+.dt-stage.is-entering .dt-team,
+.dt-stage.is-entering .dt-teams { animation: dt-rise 420ms var(--ease-out) 70ms backwards; }
+.dt-stage.is-entering .dt-clock,
+.dt-stage.is-entering .dt-record { animation: dt-rise 420ms var(--ease-out) 140ms backwards; }
+.dt-stage.is-entering[data-mode="stage"][data-kind="break"] .dt-motions { animation-delay: 210ms; }
+.dt-stage.is-entering .dt-warnline { animation: dt-fade-in 300ms var(--ease-out) 260ms backwards; }
 
-/* No `to` frame: the sweep ends on the field's live clip-path. */
+/* No `to` frame: the sweep ends on the field's live clip-path. Likewise every one-shot below that has only a `from`
+   ends on the live value, so a still ([data-still]) shows it landed. */
 @keyframes dt-sweep-l { from { clip-path: inset(0 100% 0 0); } }
 @keyframes dt-sweep-r { from { clip-path: inset(0 0 0 100%); } }
 @keyframes dt-rise { from { opacity: 0; transform: translateY(1.1cqh); } }
+@keyframes dt-fade-in { from { opacity: 0; } }
+/* A theme's overtime mark lands on the second bell: animation: dt-stamp 300ms var(--ease-out) 320ms backwards.
+   Fill backwards, not both: a held fill keeps the mark composited, and with it any filtered ancestor. */
+@keyframes dt-stamp { from { opacity: 0; scale: 1.12; } }
 @keyframes dt-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+@keyframes dt-colon-settle { from { opacity: var(--colon-from, var(--colon-rest, .55)); } }
+@keyframes dt-colon-wake { from { opacity: var(--colon-rest, .55); } }
 @keyframes dt-bump { from { transform: scale(1.07); } }
 @keyframes dt-ring {
-  from { transform: scale(.6); opacity: .9; }
-  to { transform: scale(2.4); opacity: 0; }
+  from { scale: 1.15; opacity: .8; }
+  to { scale: var(--ring-to, 1.65); opacity: 0; }
 }
 
 /* A frozen demo (?demo=…&frozen=1) is a still for review: it shows each state at its end. A transition lands at
    once; an animation stands 10 s in, so a one-shot is over (a ring gone, an entrance risen) and a loop is at its
    start (a breathe at full strength), however long the browser took to take the picture. This also keeps a headless
    browser from stalling a transition part way, as it does under a painter's canvas. */
-.dt-stage[data-still], .dt-stage[data-still] *, .dt-stage[data-still] *::before, .dt-stage[data-still] *::after {
+.dt-stage[data-still], .dt-stage[data-still]::before, .dt-stage[data-still]::after,
+.dt-stage[data-still] *, .dt-stage[data-still] *::before, .dt-stage[data-still] *::after {
   transition: none !important;
   animation-delay: -10s !important;
   animation-play-state: paused !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dt-stage, .dt-stage *, .dt-stage *::before, .dt-stage *::after {
+  .dt-stage, .dt-stage::before, .dt-stage::after, .dt-stage *, .dt-stage *::before, .dt-stage *::after {
     animation: none !important;
     transition: none !important;
   }

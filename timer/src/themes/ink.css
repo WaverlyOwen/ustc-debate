@@ -18,40 +18,66 @@
   --digits-on-field: var(--paper-ink);
   --digits-off-field: var(--ink);
   --speaker-ink: var(--ink);
+  /* Overtime: the digits and the colon turn the ochre gold of the accent (4.5:1 on the paper), as overtime turns gold in
+     the other themes, with 超时 stamped beside them: from the back of a lit hall a black +0:07 would read as a calm
+     clock. Not the seal's red, which would read as 正方's cinnabar while 反方 runs over. */
+  --over-ink: var(--accent);
   --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
   --font-title: "Source Han Serif SC", "Noto Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", "SimSun", serif;
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
   /* Paper, drawn by feTurbulence in one tile: faint clouds where it took the size unevenly, a fine tooth, grey and
      pale fibres and a few specks of old ink. Sized in cqh, so a thumbnail shows the same sheet, smaller; one image,
-     because each tiled image layer is painted again wherever the digits change. */
-  --backdrop:
-    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='800'><filter id='p' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.0022' numOctaves='3' seed='30' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .32  0 0 0 0 .38  0 0 0 0 .37  .45 0 0 0 -.19' result='cloud'/><feTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .3  0 0 0 0 .33  0 0 0 0 .32  .4 0 0 0 -.17' result='tooth'/><feTurbulence type='turbulence' baseFrequency='.014 .0075' numOctaves='3' seed='12' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .42  0 0 0 0 .46  0 0 0 0 .45  -6 0 0 0 .16' result='grey'/><feTurbulence type='turbulence' baseFrequency='.008 .015' numOctaves='3' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 .99  -9 0 0 0 .4' result='pale'/><feTurbulence type='fractalNoise' baseFrequency='.3' numOctaves='2' seed='21' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .1  0 0 0 0 .11  0 0 0 0 .13  26 0 0 0 -20.6' result='specks'/><feMerge><feMergeNode in='cloud'/><feMergeNode in='tooth'/><feMergeNode in='grey'/><feMergeNode in='pale'/><feMergeNode in='specks'/></feMerge></filter><rect width='100%25' height='100%25' filter='url(%23p)'/></svg>") 0 0 / 80cqh 80cqh,
-    radial-gradient(120% 90% at 50% 45%, transparent 55%, rgb(40 52 50 / .07));
+     because each tiled image layer is painted again wherever the digits change. The sheet itself is .dt-backdrop's
+     ::before, the tile written out there (see "the paper", below); --backdrop is only the light under it. The tile is
+     named here for the paper laid over a stroke before the brush reaches it (落笔, below), which is the same sheet. */
+  --ink-paper: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='800'><filter id='p' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.0022' numOctaves='3' seed='30' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .32  0 0 0 0 .38  0 0 0 0 .37  .45 0 0 0 -.19' result='cloud'/><feTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .3  0 0 0 0 .33  0 0 0 0 .32  .4 0 0 0 -.17' result='tooth'/><feTurbulence type='turbulence' baseFrequency='.014 .0075' numOctaves='3' seed='12' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .42  0 0 0 0 .46  0 0 0 0 .45  -6 0 0 0 .16' result='grey'/><feTurbulence type='turbulence' baseFrequency='.008 .015' numOctaves='3' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 .99  -9 0 0 0 .4' result='pale'/><feTurbulence type='fractalNoise' baseFrequency='.3' numOctaves='2' seed='21' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .1  0 0 0 0 .11  0 0 0 0 .13  26 0 0 0 -20.6' result='specks'/><feMerge><feMergeNode in='cloud'/><feMergeNode in='tooth'/><feMergeNode in='grey'/><feMergeNode in='pale'/><feMergeNode in='specks'/></feMerge></filter><rect width='100%25' height='100%25' filter='url(%23p)'/></svg>");
+  --backdrop: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgb(40 52 50 / .07));
   --text-field: var(--ground);   /* the stroke stays below the head, so all text above it sits on the paper */
   --text-deep: var(--ground);
   --stroke-box: 48cqh;           /* the stroke's box; the ink itself is about 44cqh of it (spec §2.1) */
   --stroke-tail: 3cqw;           /* the stroke begins off screen, behind its seat's edge */
-  --stroke-dry: 7cqw;            /* the stroke's last stretch: loose hairs only, the brush's dry tip */
+  --ink-dry: 7;                  /* the stroke's last stretch, in cqw: loose hairs only, the brush's dry tip */
+  --stroke-dry: calc(var(--ink-dry) * 1cqw);
 }
 
-.dt-stage[data-theme="ink"] { --ink-stroke: var(--side-color); }
+/* The brush's gestures. 提笔 lifts a brush (in and out, --ink-lift); 按笔 presses one down (at once, then settling: the
+   stage's --ease-out). 落笔 lays a stroke: the brush lands, gathers speed, and is still moving fast as it runs dry at the
+   tip (--ink-lay). Ink soaking into paper spreads fast, then ever slower (dt-ink-bloom's first keyframe). */
+.dt-stage[data-theme="ink"] {
+  --ink-stroke: var(--side-color);
+  --ink-y: 55cqh;                         /* stage.css --clock-y, in the stage's own units */
+  --u: calc(var(--stroke-box) / 48);      /* a unit of the brush's head: 1/48 of the stroke's box */
+  --ink-lift: cubic-bezier(.42, 0, .58, 1);
+  --ink-lay: cubic-bezier(.45, .25, .4, 1);
+}
 
 /* ---- the stroke ---- */
 
-/* The ink is painted as a background as long as the time left, from the seat, so the brush filter frays its tip
-   wherever it ends. Two layers: loose hairs over the whole length (they show only near the tip, the dry end of the
-   brush) and the full body up to a little before the tip. Inside the box: loose hairs at top and bottom, the body
-   between. */
+/* Two boxes. The field (in free debate, a half's field) carries the stroke, and paints nothing itself; its ::before is
+   the ink, painted as a background as long as the time left, from the seat, so the brush filter frays its tip wherever
+   it ends. A half's field is a compositor layer of its own (below), so it is scaled and faded without its filtered
+   stroke being drawn again: the filter sits on the child, which is drawn once into the field's layer (a filter on the
+   layer itself would be applied again on every frame). Its will-change names opacity as well as transform: with
+   transform alone the layer is rasterized again, filtered stroke and all, whenever its opacity leaves 1 or comes back
+   to it, as both halves' do on every switch and yield. Two background layers: loose hairs over the whole length (they
+   show only near the tip, the dry end of the brush) and the full body up to a little before the tip. Inside the box:
+   loose hairs at top and bottom, the body between. */
 .dt-stage[data-theme="ink"] .dt-field,
 .dt-stage[data-theme="ink"] .dt-half-field {
   --stroke-len: calc(var(--stroke-tail) + (1 - var(--used)) * 100cqw);
-  background-color: transparent;
+  --stroke-at: max(var(--stroke-stub, 0px), var(--stroke-len));
+  background: none;
+}
+.dt-stage[data-theme="ink"] .dt-field::before,
+.dt-stage[data-theme="ink"] .dt-half-field::before {
+  content: "";
+  position: absolute;
+  inset: 0;
   background-image:
     repeating-linear-gradient(to bottom, var(--ink-stroke) 0 1.1cqh, transparent 1.1cqh 1.5cqh, var(--ink-stroke) 1.5cqh 2.2cqh,
       transparent 2.2cqh 2.9cqh, var(--ink-stroke) 2.9cqh 4.6cqh, transparent 4.6cqh 4.9cqh),
     linear-gradient(to bottom, transparent 4%, var(--ink-stroke) 4% 5.6%, transparent 5.6% 7%, var(--ink-stroke) 7% 91.4%,
       transparent 91.4% 92.6%, var(--ink-stroke) 92.6% 94%, transparent 94%);
-  --stroke-at: max(var(--stroke-stub, 0px), var(--stroke-len));
   background-size: var(--stroke-at) 86%, max(0px, var(--stroke-at) - var(--stroke-dry)) 100%;
   background-position: 0% 50%;
   background-repeat: no-repeat;
@@ -68,10 +94,13 @@
   clip-path: inset(0);   /* the whole stroke: its end is the filtered tip, not a straight cut */
 }
 /* Drawn back toward the right-hand seat: the stroke lies against the right edge. */
-.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] .dt-field,
-.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] .dt-field { background-position: 100% 50%; }
+.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] .dt-field::before,
+.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] .dt-field::before { background-position: 100% 50%; }
 /* The ink runs out at the seat, not off the screen: a short dry stub of the side's colour stays at its edge as the
-   time runs out and through overtime, clear of the digits, so the room still sees whose floor it is (spec §1.5). */
+   time runs out and through overtime, clear of the digit row, so the room still sees whose floor it is (spec §1.5).
+   The "+" of +M:SS hangs outside the row (stage.css): on a stage squarer than about 1.42:1 with the speaking seat on
+   the left it reaches into the stub and is drawn over it, kept whole by the digits' paper halo. It touches the stub at
+   4:3 and overlaps it at 5:4, by about 50 px at 1280x1024. */
 .dt-stage[data-theme="ink"] .dt-field { --stroke-stub: calc(var(--stroke-tail) + 6cqw); }
 
 /* The stroke's end moves in steps of a few pixels, so the filtered stroke is painted again a few times a second
@@ -83,17 +112,123 @@
 
 /* The brush for the stage's size (see ink.js). */
 @container (max-width: 1600px) {
-  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-l); }
+  .dt-stage[data-theme="ink"] .dt-field::before, .dt-stage[data-theme="ink"] .dt-half-field::before { filter: url(#dt-ink-brush-l); }
 }
 @container (max-width: 1100px) {
-  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-m); }
+  .dt-stage[data-theme="ink"] .dt-field::before, .dt-stage[data-theme="ink"] .dt-half-field::before { filter: url(#dt-ink-brush-m); }
 }
 @container (max-width: 520px) {
-  .dt-stage[data-theme="ink"] .dt-field, .dt-stage[data-theme="ink"] .dt-half-field { filter: url(#dt-ink-brush-s); }
+  .dt-stage[data-theme="ink"] .dt-field::before, .dt-stage[data-theme="ink"] .dt-half-field::before { filter: url(#dt-ink-brush-s); }
 }
 
+/* ---- 落笔: a new stage's stroke is laid from its seat ---- */
+
+/* The stroke is all there from the first frame, drawn once, under a sheet of the same paper (the stage's ::after, over
+   everything in the stroke's band, the digits too); the brush is the sheet's edge as it is drawn back from the seat. The
+   edge is a brush's head (a mask image: a belly that leads at mid-height, feathered over 3 units, loose hairs a few
+   units ahead), so the stroke is uncovered as if laid, its tip the filtered tip; only the sheet's mask moves, so the
+   stroke is not drawn again, and the sheet is the paper's tile and nothing more. The brush lands at the seat, gathers
+   speed and runs on through the dry tip without slowing (it slows only past the far edge, where nothing is left to
+   uncover): for a full stroke it passes under the digits at about 110-215 ms, as they begin to rise under the sheet, and
+   reaches the far edge at about 265 ms; it ends at 560 ms, with the stage's other entrances. The digits come out from
+   under it with the ink: 字随墨至. A free debate's two strokes are each laid from their own seat, at once, over the
+   speaking column's width (each half's ::after). */
+.dt-stage[data-theme="ink"] {
+  --ink-head-l: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='48' viewBox='0 0 300 48'%3E%3Cdefs%3E%3Cpath id='p' fill-rule='evenodd' d='M14.13,0 L16.3,2 L17.19,4 L16.88,6 L17.97,8 L18.42,10 L19.44,12 L19.64,14 L18.61,16 L19.92,18 L20.2,20 L20.08,22 L20.18,24 L19.06,26 L20.25,28 L20.38,30 L19.18,32 L19.27,34 L18.47,36 L18.96,38 L18.68,40 L16.76,42 L16.58,44 L15.86,46 L14.94,48 L301,48 L301,0 Z M18.13,7.9 L20.97,8.17 L18.13,8.45 Z M19.82,24.93 L22.34,25.14 L19.82,25.36 Z M20.38,21.62 L23.23,21.89 L20.38,22.17 Z M17.12,5.61 L18.56,5.94 L17.12,6.28 Z M21.22,20.67 L25.21,21.01 L21.22,21.35 Z M19.79,18.29 L21.79,18.64 L19.79,18.99 Z M20.29,27.07 L24.83,27.39 L20.29,27.7 Z M17.25,41.54 L19.32,41.89 L17.25,42.23 Z M19.86,18.69 L23.87,19.01 L19.86,19.33 Z M19.64,16.67 L21.65,16.95 L19.64,17.23 Z M19.44,32.01 L23.14,32.28 L19.44,32.56 Z M20.35,29.2 L22.82,29.41 L20.35,29.63 Z M19.66,17.07 L24.36,17.29 L19.66,17.51 Z M18.49,9.16 L20.14,9.34 L18.49,9.53 Z'/%3E%3C/defs%3E%3Cg fill='%23000'%3E%3Cuse href='%23p' x='3'/%3E%3Cuse href='%23p' x='2.7' fill-opacity='.22'/%3E%3Cuse href='%23p' x='2.4' fill-opacity='.22'/%3E%3Cuse href='%23p' x='2.1' fill-opacity='.22'/%3E%3Cuse href='%23p' x='1.8' fill-opacity='.22'/%3E%3Cuse href='%23p' x='1.5' fill-opacity='.22'/%3E%3Cuse href='%23p' x='1.2' fill-opacity='.22'/%3E%3Cuse href='%23p' x='0.9' fill-opacity='.22'/%3E%3Cuse href='%23p' x='0.6' fill-opacity='.22'/%3E%3Cuse href='%23p' x='0.3' fill-opacity='.22'/%3E%3Cuse href='%23p' x='0' fill-opacity='.22'/%3E%3C/g%3E%3C/svg%3E");
+  --ink-head-r: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='48' viewBox='0 0 300 48'%3E%3Cg transform='matrix(-1 0 0 1 300 0)'%3E%3Cdefs%3E%3Cpath id='p' fill-rule='evenodd' d='M14.13,0 L16.3,2 L17.19,4 L16.88,6 L17.97,8 L18.42,10 L19.44,12 L19.64,14 L18.61,16 L19.92,18 L20.2,20 L20.08,22 L20.18,24 L19.06,26 L20.25,28 L20.38,30 L19.18,32 L19.27,34 L18.47,36 L18.96,38 L18.68,40 L16.76,42 L16.58,44 L15.86,46 L14.94,48 L301,48 L301,0 Z M18.13,7.9 L20.97,8.17 L18.13,8.45 Z M19.82,24.93 L22.34,25.14 L19.82,25.36 Z M20.38,21.62 L23.23,21.89 L20.38,22.17 Z M17.12,5.61 L18.56,5.94 L17.12,6.28 Z M21.22,20.67 L25.21,21.01 L21.22,21.35 Z M19.79,18.29 L21.79,18.64 L19.79,18.99 Z M20.29,27.07 L24.83,27.39 L20.29,27.7 Z M17.25,41.54 L19.32,41.89 L17.25,42.23 Z M19.86,18.69 L23.87,19.01 L19.86,19.33 Z M19.64,16.67 L21.65,16.95 L19.64,17.23 Z M19.44,32.01 L23.14,32.28 L19.44,32.56 Z M20.35,29.2 L22.82,29.41 L20.35,29.63 Z M19.66,17.07 L24.36,17.29 L19.66,17.51 Z M18.49,9.16 L20.14,9.34 L18.49,9.53 Z'/%3E%3C/defs%3E%3Cg fill='%23000'%3E%3Cuse href='%23p' x='3'/%3E%3Cuse href='%23p' x='2.7' fill-opacity='.22'/%3E%3Cuse href='%23p' x='2.4' fill-opacity='.22'/%3E%3Cuse href='%23p' x='2.1' fill-opacity='.22'/%3E%3Cuse href='%23p' x='1.8' fill-opacity='.22'/%3E%3Cuse href='%23p' x='1.5' fill-opacity='.22'/%3E%3Cuse href='%23p' x='1.2' fill-opacity='.22'/%3E%3Cuse href='%23p' x='0.9' fill-opacity='.22'/%3E%3Cuse href='%23p' x='0.6' fill-opacity='.22'/%3E%3Cuse href='%23p' x='0.3' fill-opacity='.22'/%3E%3Cuse href='%23p' x='0' fill-opacity='.22'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");   /* the same head, mirrored, for a stroke laid from the right */
+}
+.dt-stage[data-theme="ink"]::after,
+.dt-stage[data-theme="ink"] .dt-half::after {
+  /* The belly starts 4 units behind the seat's edge and ends half a width again past the far edge (the head's image is
+     300 units wide, its belly 20 units in). */
+  --lay-from: calc(-24 * var(--u));
+  --lay-to: calc(var(--lay-span) * 1.5 - 8 * var(--u));
+  --lay-span: 100cqw;
+  --lay-y: 0px;                 /* the head's top: the band's, in the sheet's box */
+  content: "";
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: calc(300 * var(--u)) var(--stroke-box);
+  mask-size: calc(300 * var(--u)) var(--stroke-box);
+}
+.dt-stage[data-theme="ink"]::after {
+  z-index: 6;
+  inset: 0;
+  /* The stage's own paper: the same box, the same sheet (the tile, its light, the ground under them). */
+  background: var(--ink-paper) 0 0 / 80cqh 80cqh, var(--backdrop), var(--ground);
+}
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"].is-entering:not([data-still])::after {
+  --lay-y: calc(var(--ink-y) - var(--stroke-box) / 2);
+  display: block;
+  -webkit-mask-image: var(--ink-head-l);
+  mask-image: var(--ink-head-l);
+  -webkit-mask-position: var(--lay-to) var(--lay-y);
+  mask-position: var(--lay-to) var(--lay-y);
+  animation: dt-ink-lay-l 560ms var(--ink-lay) backwards;
+}
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"].is-entering:not([data-still])[data-pro-seat="right"][data-side="pro"]::after,
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"].is-entering:not([data-still])[data-pro-seat="left"][data-side="con"]::after {
+  -webkit-mask-image: var(--ink-head-r);
+  mask-image: var(--ink-head-r);
+  -webkit-mask-position: right var(--lay-to) top var(--lay-y);
+  mask-position: right var(--lay-to) top var(--lay-y);
+  animation-name: dt-ink-lay-r;
+}
+/* A half's sheet: its stroke's band, inside the half (whose overflow crops it at the divider), over its digits, laid
+   over the speaking column's width. Its paper is the stage's tile and light, set back by where the band lies on the
+   stage: the right half's left edge is 100cqw less its width (100% here); the band's top is its row less half the box. */
+.dt-stage[data-theme="ink"] .dt-half::after {
+  --band: calc(var(--row) - var(--stroke-box) / 2);
+  --lay-span: calc(var(--ink-basis) * 1cqw);
+  z-index: 2;
+  left: 0;
+  right: 0;
+  top: var(--band);
+  height: var(--stroke-box);
+  background:
+    var(--ink-paper) 0 calc(-1 * var(--band)) / 80cqh 80cqh,
+    radial-gradient(120% 90% at 50% 45%, transparent 55%, rgb(40 52 50 / .07)) 0 calc(-1 * var(--band)) / 100cqw 100cqh no-repeat,
+    var(--ground);
+}
+.dt-stage[data-theme="ink"] .dt-half:last-child::after {
+  background-position: calc(100% - 100cqw) calc(-1 * var(--band)), 100% calc(-1 * var(--band)), 0 0;
+}
+.dt-stage[data-theme="ink"][data-mode="stage"].is-entering:not([data-still]) .dt-half::after {
+  display: block;
+  -webkit-mask-image: var(--ink-head-l);
+  mask-image: var(--ink-head-l);
+  -webkit-mask-position: var(--lay-to) 0;
+  mask-position: var(--lay-to) 0;
+  animation: dt-ink-lay-l 560ms var(--ink-lay) backwards;
+}
+.dt-stage[data-theme="ink"][data-mode="stage"].is-entering:not([data-still]) .dt-half:last-child::after {
+  -webkit-mask-image: var(--ink-head-r);
+  mask-image: var(--ink-head-r);
+  -webkit-mask-position: right var(--lay-to) top 0;
+  mask-position: right var(--lay-to) top 0;
+  animation-name: dt-ink-lay-r;
+}
+/* The shared sweep's straight clip would cut through the stroke under the sheet: the stroke stands whole. */
+.dt-stage[data-theme="ink"][data-mode].is-entering .dt-field,
+.dt-stage[data-theme="ink"][data-mode].is-entering .dt-half .dt-half-field { animation: none; }
+/* No `to` frame: the sheet ends on its live position, the brush half a width past the far edge, where it hides nothing. */
+@keyframes dt-ink-lay-l {
+  from { -webkit-mask-position: var(--lay-from) var(--lay-y); mask-position: var(--lay-from) var(--lay-y); }
+}
+@keyframes dt-ink-lay-r {
+  from { -webkit-mask-position: right var(--lay-from) top var(--lay-y); mask-position: right var(--lay-from) top var(--lay-y); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dt-stage[data-theme="ink"]::after, .dt-stage[data-theme="ink"] .dt-half::after { display: none !important; }
+}
+
+/* ---- the digits ---- */
+
 /* The digits' two layers change colour where the stroke's solid body ends, not at the tip of its dry hairs: across
-   the hairs the paper shows between them, so the digits stay ink there. Each layer carries a halo of the other
+   the hairs the paper shows between them, so the digits stay ink there. Each glyph carries a halo of the other
    ground's colour, so a hair that still crosses it (paper in the body, ink beyond) keeps its edges. The ink layer's
    halo is the wider one: over the dry tip it lies on loose cinnabar or indigo hairs (ink on cinnabar is only 2.4:1),
    and the band of paper round each stroke is what keeps the digit whole there. */
@@ -104,20 +239,33 @@
 .dt-stage[data-theme="ink"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-clock {
   --cut: calc(var(--used) * 100cqw + var(--stroke-dry) - 50cqw + 50%);
 }
-.dt-stage[data-theme="ink"] .dt-digits-on { filter: drop-shadow(0 0 .012em var(--digits-on-halo, rgb(27 29 33 / .6))); }
-.dt-stage[data-theme="ink"] .dt-digits:not(.dt-digits-on) {
+/* The halo is on each glyph, not on the layer: the colon breathes on every frame of a running clock, and inside a
+   filtered layer that makes the compositor draw the whole layer's halo again on every frame. */
+.dt-stage[data-theme="ink"] .dt-digits-on > * { filter: drop-shadow(0 0 .012em var(--digits-on-halo, rgb(27 29 33 / .6))); }
+.dt-stage[data-theme="ink"] .dt-digits:not(.dt-digits-on) > * {
   filter: drop-shadow(0 0 .012em var(--paper-ink)) drop-shadow(0 0 .02em var(--paper-ink)) drop-shadow(0 0 .02em var(--paper-ink));
 }
 /* In warn the colon turns gold leaf on the stroke. */
 .dt-stage[data-theme="ink"] .dt-clock[data-phase="warn"] .dt-digits-on .dt-colon,
 .dt-stage[data-theme="ink"] .dt-clock[data-phase="count"] .dt-digits-on .dt-colon { color: var(--accent-on-field); }
-/* Overtime: the stroke is gone and the digits turn the ochre gold of the accent (4.5:1 on the paper), as overtime turns
-   gold in the other themes, with 超时 stamped beside them: from the back of a lit hall a black +0:07 would read as a
-   calm clock. Not the seal's red, which would read as 正方's cinnabar while 反方 runs over. */
-.dt-stage[data-theme="ink"] .dt-clock[data-phase="over"] .dt-digits { color: var(--accent); }
 /* 「暂停」 goes under the stroke, onto the paper, in ink. */
 .dt-stage[data-theme="ink"][data-kind="single"] .dt-clock .dt-state { top: calc(50% + 25cqh); margin-top: 0; color: var(--ink); opacity: .8; }
+/* Emptied on resume it keeps its word (stage.css :empty::before) while it fades, so it must still go to 0 here. */
+.dt-stage[data-theme="ink"][data-kind="single"] .dt-clock .dt-state:empty { opacity: 0; }
 
+/* ---- the paper ---- */
+
+/* The sheet over the backdrop's light. render.js writes --used on every step of the clock, and the style of every box
+   is worked out again: Chromium then takes an image as new, and paints its box again, when the url() reaches the rule
+   through var() (stage.css draws --backdrop so) or shares its list with a gradient. So the tile is written out here,
+   alone in its list: the sheet is drawn once. (The sheets laid over a stroke as it comes in reach it through
+   --ink-paper; they are drawn again on every frame of their run anyway, and only then.) */
+.dt-stage[data-theme="ink"] .dt-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='800'><filter id='p' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.0022' numOctaves='3' seed='30' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .32  0 0 0 0 .38  0 0 0 0 .37  .45 0 0 0 -.19' result='cloud'/><feTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .3  0 0 0 0 .33  0 0 0 0 .32  .4 0 0 0 -.17' result='tooth'/><feTurbulence type='turbulence' baseFrequency='.014 .0075' numOctaves='3' seed='12' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .42  0 0 0 0 .46  0 0 0 0 .45  -6 0 0 0 .16' result='grey'/><feTurbulence type='turbulence' baseFrequency='.008 .015' numOctaves='3' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 .99  -9 0 0 0 .4' result='pale'/><feTurbulence type='fractalNoise' baseFrequency='.3' numOctaves='2' seed='21' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .1  0 0 0 0 .11  0 0 0 0 .13  26 0 0 0 -20.6' result='specks'/><feMerge><feMergeNode in='cloud'/><feMergeNode in='tooth'/><feMergeNode in='grey'/><feMergeNode in='pale'/><feMergeNode in='specks'/></feMerge></filter><rect width='100%25' height='100%25' filter='url(%23p)'/></svg>") 0 0 / 80cqh 80cqh;
+}
 /* The paper and the digits each get a layer of their own: the paper's feTurbulence tile is then drawn once, not
    again under every frame's change of the digits (in software rendering that halves the frame rate). */
 .dt-stage[data-theme="ink"] .dt-backdrop,
@@ -143,6 +291,39 @@
 .dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
 .dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] .dt-warnline {
   left: clamp(1.3cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 1.3cqh));
+}
+
+/* ---- the bell: ink blooming in the paper behind the digits ---- */
+
+/* The ring is a drop of ink spreading in wet paper round the digits: the tide line at its edge, an uneven loop frayed by
+   the paper's fibres, with the faintest wash inside it. The fibres are its ::before's (the drop's filter), drawn once
+   into the ring's layer; the bloom itself only scales and fades on the compositor. It spreads fast, then ever slower,
+   and stops well short of the shared ring's reach; an end bell's second bloom, 320 ms on, is turned a little, spreads
+   a little further and is paler. 1100 ms, the shared ring's length, so the second bloom is gone by 1420 ms. One
+   animation, so the ring is removed on its one animationend (render.js), within RING_MS. */
+.dt-stage[data-theme="ink"] .dt-ring {
+  --bloom-to: min(1.35, var(--ring-to, 1.65));
+  --bloom-peak: .75;
+  border: 0;
+  animation: dt-ink-bloom 1100ms linear forwards;
+}
+.dt-stage[data-theme="ink"] .dt-ring[data-nth="2"] { --bloom-to: min(1.5, var(--ring-to, 1.65)); --bloom-peak: .55; }
+.dt-stage[data-theme="ink"] .dt-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: solid rgb(27 29 33 / .42);
+  border-width: .6cqh .4cqh .55cqh .45cqh;   /* a tide line is uneven */
+  border-radius: 47% 53% 44% 56% / 56% 44% 58% 42%;
+  background: radial-gradient(closest-side, transparent 60%, rgb(27 29 33 / .07) 96%);
+  filter: url(#dt-ink-drop);
+}
+.dt-stage[data-theme="ink"] .dt-ring[data-nth="2"]::before { rotate: 7deg; }
+@keyframes dt-ink-bloom {
+  0% { scale: 1; opacity: 0; animation-timing-function: cubic-bezier(.1, .6, .3, 1); }   /* soaking in */
+  8% { opacity: var(--bloom-peak); animation-timing-function: linear; }
+  40% { opacity: calc(var(--bloom-peak) * .75); }
+  100% { scale: var(--bloom-to); opacity: 0; }
 }
 
 /* ---- the seal: the stage type in a small 朱文 seal before the stage name, in the app's own words ---- */
@@ -176,7 +357,10 @@
 .dt-stage[data-theme="ink"] .dt-speaker { font-family: var(--font-title); letter-spacing: .18em; }
 .dt-stage[data-theme="ink"] .dt-top { font-family: var(--font-title); letter-spacing: .16em; }
 
-/* Overtime: a larger seal, pressed at a slant against the digits' upper corner. */
+/* Overtime: a larger seal, pressed at a slant against the digits' upper corner, on the second bell, once the gold digits
+   have been read. The press only scales and fades it: the worn seal is drawn once into a layer of its own, for the
+   press only (it fills backwards: a held fill would keep the layer after it). A still (a frozen demo, a thumbnail)
+   shows it pressed, without the layer. */
 .dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::after {
   content: "超时";
   position: absolute;
@@ -195,49 +379,79 @@
   rotate: -5deg;
   filter: url(#dt-ink-seal);
 }
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"][data-phase="over"]:not([data-still]) .dt-deco-over::after {
+  animation: dt-stamp 300ms var(--ease-out) 320ms backwards;
+}
 
 /* ---- free debate: two strokes face each other, one high and one low, each from its own seat ---- */
 
+/* Each half's stroke is laid on a field as wide as the speaking column (--ink-basis, render.js's ACTIVE_COL, in cqw)
+   and stands against its seat; the half's overflow crops it. The column it is in sets its scale (--ink-col: 1 speaking,
+   42/58 waiting, 50/58 before the first floor), on the divider's own spring, so the stroke keeps its raster while the
+   columns move: only the compositor works. At its full length the stroke stops short of the divider by the gap. */
+@property --ink-col { syntax: "<number>"; inherits: true; initial-value: 1; }
 .dt-stage[data-theme="ink"] .dt-half {
   --half-ground: transparent;   /* the paper's texture runs under both halves */
   --ink-stroke: var(--side-color);
-  --row: 47%;                   /* the left stroke rides higher, the right one lower: 上下相对 */
-  --gap: 2.4cqw;                /* the paper left between the two strokes' tips */
+  --row: 47cqh;                 /* the left stroke rides higher, the right one lower: 上下相对 */
   --stroke-box: 40cqh;
+  --u: calc(var(--stroke-box) / 48);
+  --ink-basis: 58;
+  --ink-gap: 2.4;               /* the paper left between the stroke's tip and the divider, in cqw of the basis */
+  --gap: calc(var(--ink-gap) * 1cqw);
+  --ink-col: 1;
   box-shadow: none;
+  /* This half takes the floor (or nobody has it yet): the columns on the spring, the brush pressed down once the other
+     one has lifted (--dim 1 → 0 at 220-520 ms). Listed whole: it replaces stage.css's. */
+  transition: filter 520ms var(--ease-out), --dim 300ms var(--ease-out) 220ms, --ink-col 520ms var(--ease-spring);
 }
-.dt-stage[data-theme="ink"] .dt-half:last-child { --row: 57%; }
+.dt-stage[data-theme="ink"] .dt-half:last-child { --row: 57cqh; }
+.dt-stage[data-theme="ink"] .dt-halves[data-idle] .dt-half { --ink-col: calc(50 / var(--ink-basis)); }
+/* 提笔再落笔. The waiting side's brush is lifted first (--dim 0 → 1 at 0-260 ms): its stroke thins (scale .7 high) and
+   pales to 淡墨, the same ink at .42 with the paper showing through it, as diluted ink lets it. Its digits lie on that
+   (spec §1.5): ink digits with a paper halo, the warn colon ochre as on the paper. */
 .dt-stage[data-theme="ink"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) {
-  --ink-stroke: color-mix(in oklab, var(--side-color) 42%, var(--ground));   /* 淡墨: the waiting side */
-  --field-ground: var(--ink-stroke);   /* what its digits lie on (spec §1.5): the diluted stroke, not --side-color */
+  --ink-col: calc((100 - var(--ink-basis)) / var(--ink-basis));
+  --field-ground: color-mix(in srgb, var(--side-color) 42%, var(--ground));
   --digits-on-field: var(--ink);
-  --digits-on-halo: var(--paper-ink);   /* ink digits on the pale stroke: a paper halo, as off it */
+  --digits-on-halo: var(--paper-ink);
+  --accent-on-field: var(--accent);
   filter: none;
+  transition: filter 520ms var(--ease-out), --dim 260ms var(--ink-lift), --ink-col 520ms var(--ease-spring);
 }
 .dt-stage[data-theme="ink"] .dt-half-field {
-  --stroke-len: calc(var(--stroke-tail) + var(--remain, 1) * (100% - var(--stroke-tail) - var(--gap)));
+  --stroke-len: calc(var(--stroke-tail) + var(--remain, 1) * (var(--ink-basis) * 1cqw - var(--gap)));
   inset: auto;
   top: calc(var(--row) - var(--stroke-box) / 2);
   left: calc(-1 * var(--stroke-tail));
-  right: 0;
+  width: calc(var(--ink-basis) * 1cqw + var(--stroke-tail));
   height: var(--stroke-box);
+  transform-origin: var(--stroke-tail) 50%;
+  transform: scaleX(var(--ink-col));
+  scale: 1 calc(1 - .3 * var(--dim));
+  opacity: calc(1 - .58 * var(--dim));
+  will-change: transform, opacity;
 }
 .dt-stage[data-theme="ink"] .dt-half:last-child .dt-half-field {
-  left: 0;
+  left: auto;
   right: calc(-1 * var(--stroke-tail));
-  background-position: 100% 50%;
+  transform-origin: calc(100% - var(--stroke-tail)) 50%;
 }
-/* 提笔再落笔: the side taking the floor presses its brush down to a full, dense stroke; the side yielding it lifts
-   the brush, and its stroke thins and pales. */
-.dt-stage[data-theme="ink"] .dt-half-field { transition: transform 520ms var(--ease-spring); }
-.dt-stage[data-theme="ink"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-half-field { transform: scaleY(.7); }
-/* A side out of time has no ink left, not even the dry end of its brush at the edge. */
+.dt-stage[data-theme="ink"] .dt-half:last-child .dt-half-field::before { background-position: 100% 50%; }
+/* A side out of time has no ink left, not even the dry end of its brush at the edge. A yield (已放弃) takes its time
+   away at once: the stroke fades where it lay, keeping its length (--remain steps to 0 only once it is gone: eased, it
+   would draw the filtered stroke again on every frame), and its digits recede (stage.css). */
 .dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-half-field { opacity: 0; }
+.dt-stage[data-theme="ink"]:not(.is-entering) .dt-half[data-locked] .dt-half-field { transition: opacity 300ms ease; }
+.dt-stage[data-theme="ink"]:not(.is-entering) .dt-halves:not([data-idle]) .dt-half[data-locked] {
+  transition: filter 520ms var(--ease-out), --dim 260ms var(--ink-lift), --ink-col 520ms var(--ease-spring), --remain 0s linear 300ms;
+}
 
-/* The digits sit on their stroke, and change colour where its solid body ends: the clock spans the half, so --cut
-   is that point's distance from the seat in the clock's own box. */
+/* The digits sit on their stroke, and change colour where its solid body ends: the clock spans the half, which is the
+   field scaled, so in the clock's own percent the body ends at remain × (1 − gap / basis) − dry / basis, on every
+   frame of the spring too. */
 .dt-stage[data-theme="ink"] .dt-half .dt-clock {
-  --cut: max(0px, var(--remain, 1) * (100% - var(--gap)) - var(--stroke-dry));
+  --cut: max(0px, 100% * (var(--remain, 1) * (1 - var(--ink-gap) / var(--ink-basis)) - var(--ink-dry) / var(--ink-basis)));
   left: 0;
   right: 0;
   top: var(--row);
@@ -248,9 +462,65 @@
 .dt-stage[data-theme="ink"] .dt-half:first-child .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% -50% -50% var(--cut)); }
 .dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits-on { clip-path: inset(-50% -50% -50% calc(100% - var(--cut) - 1px)); }
 .dt-stage[data-theme="ink"] .dt-half:last-child .dt-digits:not(.dt-digits-on) { clip-path: inset(-50% var(--cut) -50% -50%); }
+/* The digits on a stroke change colour, and their halo with them, in one step at the moment the stroke under them
+   crosses the density where paper and ink digits read alike (.73 of 朱, .68 of 靛: 3.9:1 either way), never through
+   grey: the lifting side's at 130 ms, the pressing side's at 260 ms. The colon takes its colour from the same
+   variables rather than from its layer, so it steps with the digits and not 130 ms after them. */
+.dt-stage[data-theme="ink"] .dt-half .dt-digits-on {
+  transition: font-size 520ms var(--ease-out), color 0s linear 260ms, opacity 240ms ease, scale 240ms var(--ease-out);
+}
+.dt-stage[data-theme="ink"] .dt-half .dt-digits-on > * {
+  transition: filter 0s linear 260ms, color 0s linear 260ms, opacity 300ms ease;
+}
+.dt-stage[data-theme="ink"] .dt-half .dt-digits-on .dt-colon { color: var(--digits-on-field); }
+.dt-stage[data-theme="ink"] .dt-half .dt-clock[data-phase="warn"] .dt-digits-on .dt-colon,
+.dt-stage[data-theme="ink"] .dt-half .dt-clock[data-phase="count"] .dt-digits-on .dt-colon { color: var(--accent-on-field); }
+.dt-stage[data-theme="ink"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-digits-on {
+  transition: font-size 520ms var(--ease-out), color 0s linear 130ms, opacity 240ms ease, scale 240ms var(--ease-out);
+}
+.dt-stage[data-theme="ink"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-digits-on > * {
+  transition: filter 0s linear 130ms, color 0s linear 130ms, opacity 300ms ease;
+}
 .dt-stage[data-theme="ink"] .dt-half .dt-clock .dt-state { top: calc(50% + 21cqh); }
+.dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-clock .dt-state { top: 50%; }   /* 时间到 where the digits were */
 .dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-clock { color: var(--ink); }
 .dt-stage[data-theme="ink"] .dt-team { color: var(--ink); }
+
+/* The speaker's floor line is a dry brush line in their own ink, written out from their seat along the floor as their
+   brush presses (220-520 ms) and drawn back into the seat as it lifts (0-260 ms). A fixed length in the stage's units,
+   cropped by the half; its shape (a taper) and its dry streaks are a clip and a mask, drawn once, then only scaled. */
+.dt-stage[data-theme="ink"] .dt-floorline {
+  --ink-line-dry: repeating-linear-gradient(to bottom, #000 0 18%, rgb(0 0 0 / .35) 18% 27%, #000 27% 51%,
+    rgb(0 0 0 / .2) 51% 60%, #000 60% 100%);
+  left: 0;
+  right: auto;
+  bottom: 1.4cqh;
+  width: calc(var(--ink-basis) * 1cqw - 6cqw);
+  height: 1.5cqh;
+  background: var(--side-color);
+  clip-path: polygon(0 4%, 26% 10%, 58% 22%, 86% 34%, 100% 44%, 100% 58%, 84% 68%, 56% 80%, 24% 90%, 0 98%);
+  -webkit-mask: linear-gradient(to right, #000 52%, rgb(0 0 0 / .82) 70%, transparent), var(--ink-line-dry);
+  mask: linear-gradient(to right, #000 52%, rgb(0 0 0 / .82) 70%, transparent), var(--ink-line-dry);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  transform-origin: 0 50%;
+  transition: transform 260ms var(--ink-lift);
+}
+.dt-stage[data-theme="ink"] .dt-half:last-child .dt-floorline {
+  left: auto;
+  right: 0;
+  clip-path: polygon(100% 4%, 74% 10%, 42% 22%, 14% 34%, 0 44%, 0 58%, 16% 68%, 44% 80%, 76% 90%, 100% 98%);
+  -webkit-mask: linear-gradient(to left, #000 52%, rgb(0 0 0 / .82) 70%, transparent), var(--ink-line-dry);
+  mask: linear-gradient(to left, #000 52%, rgb(0 0 0 / .82) 70%, transparent), var(--ink-line-dry);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  transform-origin: 100% 50%;
+}
+.dt-stage[data-theme="ink"] .dt-half[data-active] .dt-floorline { transition: transform 300ms var(--ease-out) 220ms; }
+/* As a free debate comes in, the speaker's line is written once their stroke is laid. On `scale`, which multiplies the
+   transform, so a switch in the meantime still runs its transition on `transform`. */
+.dt-stage[data-theme="ink"].is-entering:not([data-still]) .dt-half[data-active] .dt-floorline { animation: dt-ink-write 320ms var(--ease-out) 240ms backwards; }
+@keyframes dt-ink-write { from { scale: 0 1; } }
 
 /* ---- cards ---- */
 
@@ -287,6 +557,22 @@
   mask-image: conic-gradient(from 200deg, transparent 0 14deg, #000 60deg 300deg, rgb(0 0 0 / .35) 336deg, transparent 346deg);
   filter: url(#dt-ink-drop);
 }
+/* As the break comes in, the circle is drawn: the brush goes once round from where it begins (200° from the top),
+   its leading edge soft over 14°, landing slowly and lifting as it dries, while the clock rises (140-840 ms). The
+   reveal is a second mask, intersected with the circle's own; at rest (and in a still) it is whole. The circle is
+   drawn again under its filter on each of these frames, a bounded cost (about 700 ms, twice a match, on a box of
+   40cqh). */
+@property --ink-enso { syntax: "<angle>"; inherits: false; initial-value: 374deg; }
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="break"].is-entering:not([data-still]) .dt-clock::before {
+  -webkit-mask-image: conic-gradient(from 200deg, #000 calc(var(--ink-enso) - 14deg), transparent var(--ink-enso)),
+    conic-gradient(from 200deg, transparent 0 14deg, #000 60deg 300deg, rgb(0 0 0 / .35) 336deg, transparent 346deg);
+  mask-image: conic-gradient(from 200deg, #000 calc(var(--ink-enso) - 14deg), transparent var(--ink-enso)),
+    conic-gradient(from 200deg, transparent 0 14deg, #000 60deg 300deg, rgb(0 0 0 / .35) 336deg, transparent 346deg);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  animation: dt-ink-enso 700ms cubic-bezier(.45, .05, .35, 1) 140ms backwards;
+}
+@keyframes dt-ink-enso { from { --ink-enso: 0deg; } }
 
 /* On a smaller projector (1366×768) the small seal wears lightly, so its two characters stay legible. */
 @container (max-width: 1600px) {

@@ -76,6 +76,9 @@
   const shown = cs => cs.content !== 'none' && cs.display !== 'none';
   const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
   const used = root => parseFloat(root.style.getPropertyValue('--used'));
+  // The whole seconds a clock shows and its length, as render.js writes them on the stage and on each half.
+  const secsOf = el => parseFloat(el.style.getPropertyValue('--secs'));
+  const totalOf = el => parseFloat(el.style.getPropertyValue('--secs-total'));
   // A 60-minute first stage: its 30 s warn bell sits within a degree of the dial's axis.
   const LONG = () => {
     const f = JSON.parse(JSON.stringify(F()));
@@ -163,9 +166,10 @@
     });
   });
 
-  // The half of the dial that shows is the whole time: the sector's angle is the time left × 180°. It is a fan about
-  // the clock's horizontal axis that closes onto that axis, so however little time is left it still runs from the
-  // hub behind the digits to a rim on the stage, and the room stays the speaking side's to the last second.
+  // The half of the dial that shows is the whole time: the sector's angle is the time left × 180°, by the whole seconds
+  // the digits show (render.js --secs of --secs-total). It is a fan about the clock's horizontal axis that closes onto
+  // that axis, so however little time is left it still runs from the hub behind the digits to a rim on the stage, and
+  // the room stays the speaking side's to the last second.
   DT.test('theme construct: the sector\'s angle is the time left and it closes onto the clock\'s axis', () => {
     SEATINGS.forEach(([name, seat, from]) => {
       [30, 90, 100, 170].forEach(secs => {
@@ -174,7 +178,7 @@
         if (root.dataset.phase === 'over') { stage.destroy(); return; }
         const field = root.querySelector('.dt-field');
         const sweep = angle(field, 'var(--construct-sweep)');
-        assert.near(sweep, (1 - used(root)) * 180, 0.6, where + ': the time left × 180°');
+        assert.near(sweep, secsOf(root) / totalOf(root) * 180, 0.01, where + ': the time left × 180°');
         const start = angle(field, 'var(--dial-from)');
         assert.near(start, (from === 'left' ? 90 : 270) - sweep / 2, 0.01, where + ': centred on the horizontal');
         // The axis is the digits' centre line, and the rim where it meets it is on the stage.
@@ -230,6 +234,29 @@
     const { stage, root } = mountPoster(singleAt(OPENING, 60));
     const band = pseudo(root.querySelector('.dt-deco'), '::before');
     assert.ok(!sameColour(band.backgroundColor, resolve(root, '--accent')), 'not yellow before the time is up');
+    stage.destroy();
+  });
+
+  // Spec §1.5: overtime's digits and their hung "+" are the band's yellow and can land on it (4:3 and 5:4 from +0:00,
+  // wider stages from +10:00), so a stroke in the ground's colour, painted under the fill, knocks them out of it.
+  DT.test('theme construct: in overtime the digits and their sign are knocked out of the band in the ground\'s colour', () => {
+    SEATINGS.forEach(([name, seat]) => {
+      const { stage, root } = mountPoster(singleAt(name, 200, seat));
+      const digits = root.querySelector('.dt-clock[data-clock="main"] .dt-digits:not(.dt-digits-on)');
+      const sign = digits.querySelector('.dt-sign');
+      assert.equal(sign.textContent, '+', name + ' / ' + seat + ': overtime');
+      const ground = resolve(root, '--ground');
+      [['digits', digits], ['sign', sign]].forEach(([part, el]) => {
+        const cs = getComputedStyle(el), where = name + ' / ' + seat + ' / ' + part;
+        assert.ok(px(cs.webkitTextStrokeWidth) > 0, where + ': stroked: ' + cs.webkitTextStrokeWidth);
+        assert.ok(sameColour(cs.webkitTextStrokeColor, ground), where + ': in the ground\'s colour: ' + cs.webkitTextStrokeColor);
+        assert.ok(/^stroke/.test(cs.paintOrder), where + ': the stroke under the fill: ' + cs.paintOrder);
+      });
+      stage.destroy();
+    });
+    const { stage, root } = mountPoster(singleAt(REBUTTAL, 60, 'left'));
+    const cs = getComputedStyle(root.querySelector('.dt-clock[data-clock="main"] .dt-digits:not(.dt-digits-on)'));
+    assert.equal(px(cs.webkitTextStrokeWidth), 0, 'no knockout before the time is up');
     stage.destroy();
   });
 
@@ -462,9 +489,9 @@
         const x = pos(f, 'var(--dial-x)');
         if (i === 0) assert.ok(x < 0, where + ': outside the left edge: ' + x);
         else assert.ok(x > b.width, where + ': outside the right edge: ' + x);
-        const remain = parseFloat(h.style.getPropertyValue('--remain'));
-        assert.near(angle(f, 'var(--construct-sweep)'), remain * 180, 0.6, where + ': the time left × 180°');
-        assert.near(angle(f, 'var(--dial-from)'), (i === 0 ? 90 : 270) - remain * 90, 0.6, where + ': centred on the horizontal');
+        const left = secsOf(h) / totalOf(h);
+        assert.near(angle(f, 'var(--construct-sweep)'), left * 180, 0.01, where + ': the time left × 180°');
+        assert.near(angle(f, 'var(--dial-from)'), (i === 0 ? 90 : 270) - left * 90, 0.01, where + ': centred on the horizontal');
       });
       const active = root.querySelector('.dt-half[data-active] .dt-half-field');
       const waiting = root.querySelector('.dt-half:not([data-active]) .dt-half-field');
@@ -498,6 +525,223 @@
     const mark = pseudo(root.querySelector('.dt-record tr[data-side="pro"] td:first-child'), '::before');
     assert.ok(/100%/.test(mark.borderTopRightRadius) || px(mark.borderTopRightRadius) >= px(mark.width) - 0.5, 'a quarter disc: ' + mark.borderRadius);
     assert.equal(px(mark.borderBottomLeftRadius), 0, 'its centre at the corner');
+    stage.destroy();
+  });
+
+  // ---- motion (design/construct-final.md) ----
+
+  // A stage still entering, as render.js leaves it for 1.1 s.
+  function mountEntering(view, w, h) {
+    const box = document.getElementById('sandbox');
+    box.innerHTML = '<div class="dt-stage-host" style="width:' + (w || 960) + 'px;height:' + (h || 540) + 'px"></div>';
+    const stage = R.mount(box.firstChild);
+    stage.update(view);
+    return { stage, root: box.querySelector('.dt-stage') };
+  }
+  const dur = s => s.split(',').map(x => parseFloat(x) * (/ms$/.test(x.trim()) ? 1 : 1000));
+  // A computed transform's matrix(a, b, c, d, e, f) as numbers (none: the identity).
+  function matrix(t) {
+    if (t === 'none') return [1, 0, 0, 1, 0, 0];
+    const m = /matrix\(([^)]*)\)/.exec(t);
+    return m ? m[1].split(',').map(Number) : null;
+  }
+
+  // CO3: the fan moves once a second, as the digits change: its angle is the whole seconds shown × 180° / the length,
+  // not the time used to the frame (between two ticks the two differ by up to a second's share).
+  DT.test('theme construct: the fan stands still between the seconds the digits show', () => {
+    SEATINGS.forEach(([name, seat]) => {
+      [30.4, 70.9, 100.2].forEach(secs => {
+        const { stage, root } = mountPoster(singleAt(name, secs, seat));
+        const where = name + ' / ' + seat + ' / ' + secs + ' s';
+        const field = root.querySelector('.dt-field');
+        const whole = secsOf(root), total = totalOf(root);
+        assert.equal(whole, Math.ceil(F().stages[idx(name)].secs - secs), where + ': --secs is the whole seconds shown');
+        assert.near(angle(field, 'var(--construct-sweep)'), whole / total * 180, 0.01, where);
+        assert.ok(Math.abs(angle(field, 'var(--construct-sweep)') - (1 - used(root)) * 180) > 0.05, where + ': not the time used');
+        stage.destroy();
+      });
+    });
+    const { stage, root } = mountPoster(dualAt(30.4));
+    root.querySelectorAll('.dt-half').forEach(h => {
+      assert.near(angle(h.querySelector('.dt-half-field'), 'var(--construct-sweep)'), secsOf(h) / totalOf(h) * 180, 0.01, 'dual ' + h.dataset.side);
+    });
+    stage.destroy();
+  });
+
+  // The step is a jump on the frame the digits change (one repaint a second), never eased; only a side that yields
+  // turns its fan back onto the axis, with the switch, and not while the stage enters.
+  DT.test('theme construct: the fan jumps to each second, and a yielded fan turns back with the switch', () => {
+    let { stage, root } = mountPoster(singleAt(OPENING, 60));
+    const field = root.querySelector('.dt-field');
+    assert.ok(!/construct-sweep/.test(getComputedStyle(field).transitionProperty), 'no eased step: ' + getComputedStyle(field).transitionProperty);
+    stage.destroy();
+    let s = E.floor(session('自由辩论'), 'pro', T0);
+    s = E.yieldTime(s, T0 + 5000);
+    ({ stage, root } = mountEntering(E.view(s, T0 + 5000)));
+    const out = root.querySelector('.dt-half[data-locked] .dt-half-field');
+    assert.ok(out, 'a side has yielded');
+    assert.ok(!/construct-sweep/.test(getComputedStyle(out).transitionProperty), 'not while the stage enters');
+    root.classList.remove('is-entering');
+    const cs = getComputedStyle(out);
+    assert.equal(cs.transitionProperty, '--construct-sweep');
+    assert.deepEqual(dur(cs.transitionDuration), [520]);
+    assert.near(angle(out, 'var(--construct-sweep)'), 0, 0.01, 'its fan is on the axis');
+    const on = root.querySelector('.dt-half:not([data-locked]) .dt-half-field');
+    assert.ok(!/construct-sweep/.test(getComputedStyle(on).transitionProperty), 'the other side still jumps');
+    stage.destroy();
+  });
+
+  // CO4: both edges of the fan are soft over a tenth of a degree, and a fan of nothing draws nothing.
+  DT.test('theme construct: the fan\'s edges are soft, and a closed fan leaves no hairline', () => {
+    let { stage, root } = mountPoster(singleAt(OPENING, 60));
+    let field = root.querySelector('.dt-field');
+    assert.near(angle(field, 'var(--dial-soft)'), 0.1, 0.001, 'a tenth of a degree');
+    const img = getComputedStyle(field).backgroundImage;
+    assert.ok(/conic-gradient\(from [^,]+ at [^,]+, (rgba\(0, 0, 0, 0\)|transparent) 0deg, rgb\(191, 42, 29\) 0\.1deg/.test(img), 'transparent into the side over .1deg: ' + img);
+    stage.destroy();
+    ({ stage, root } = mountPoster(singleAt(OPENING, 200)));
+    field = root.querySelector('.dt-field');
+    assert.near(angle(field, 'var(--dial-soft)'), 0, 0.001, 'overtime: no soft edge either');
+    stage.destroy();
+  });
+
+  // CO1: a new stage's poster is set up: the hub pushes in from the seat as the fan opens, the scale comes up after,
+  // the band slides up its diagonal from below the stage, and the stage's number rises with its name.
+  DT.test('theme construct: a new stage pushes the hub in, slides the band up its diagonal and raises the number', () => {
+    SEATINGS.forEach(([name, seat, from]) => {
+      const { stage, root } = mountEntering(singleAt(name, 60, seat));
+      const where = name + ' / ' + seat;
+      const field = root.querySelector('.dt-field');
+      assert.equal(getComputedStyle(field).animationName, 'dt-construct-open', where);
+      // At its first frame the fan is shut and the hub's disc lies just outside the seat's edge.
+      const open = root.getAnimations({ subtree: true }).find(a => a.animationName === 'dt-construct-open');
+      open.pause();
+      open.currentTime = 0;
+      assert.near(angle(field, 'var(--construct-sweep)'), 0, 0.01, where + ': the fan shut');
+      const hub = parseFloat(getComputedStyle(field).getPropertyValue('--construct-hub'));
+      assert.near(hub, 0.065 * 540, 0.5, where + ': the hub at the edge (7cqh out, less its ring)');
+      open.play();
+      const scale = pseudo(field, '::before');
+      assert.equal(scale.animationName, 'dt-fade-in', where + ': the scale');
+      assert.deepEqual(dur(scale.animationDelay), [160], where);
+      const band = pseudo(root.querySelector('.dt-deco'), '::before');
+      assert.equal(band.animationName, 'dt-construct-band', where + ': the band');
+      assert.equal(band.animationFillMode, 'backwards', where);
+      // Back toward the floor along its own length: down-left for a band rising to the right, down-right otherwise.
+      assert.equal(band.getPropertyValue('--band-back').trim(), from === 'left' ? '-1' : '1', where);
+      // At its first frame the whole band, corners and all, lies below the stage's lower edge, so it first shows
+      // coming out from under the fan, not as a stub of its far end on the bottom bar.
+      const slide = root.getAnimations({ subtree: true }).find(a => a.animationName === 'dt-construct-band');
+      slide.pause();
+      slide.currentTime = 0;
+      const b0 = pseudo(root.querySelector('.dt-deco'), '::before');
+      const tx = matrix(b0.transform)[4], turn = angle(root, b0.rotate) * Math.PI / 180;
+      const [ox, oy] = b0.transformOrigin.split(' ').map(px);
+      const top = px(b0.top) + px(b0.marginTop) + oy;
+      const highest = Math.min(...[-ox, px(b0.width) - ox].flatMap(x => [-oy, px(b0.height) - oy].map(y =>
+        top + (x + tx) * Math.sin(turn) + y * Math.cos(turn))));
+      assert.ok(highest >= root.querySelector('.dt-deco').getBoundingClientRect().height - 0.5,
+        where + ': the band starts below the stage: its highest corner at ' + highest.toFixed(1) + ' px');
+      slide.play();
+      assert.equal(pseudo(root.querySelector('.dt-seg[data-state="current"]'), '::before').animationName, 'dt-rise', where + ': the number');
+      root.classList.remove('is-entering');
+      assert.equal(getComputedStyle(field).animationName, 'none', where + ': over with the entrance');
+      assert.equal(pseudo(root.querySelector('.dt-deco'), '::before').animationName, 'none', where);
+      stage.destroy();
+    });
+    // A thumbnail never enters.
+    const box = document.getElementById('sandbox');
+    box.innerHTML = '<div class="dt-stage-host" style="width:320px;height:180px"></div>';
+    const thumb = R.mount(box.firstChild, { thumbnail: true });
+    thumb.update(singleAt(OPENING, 60));
+    assert.equal(pseudo(box.querySelector('.dt-deco'), '::before').animationName, 'none', 'thumbnail');
+    thumb.destroy();
+  });
+
+  // CO5: a bell strikes the hub and lights the scale, in yellow marks of their own; stage.css's ring is not drawn on a
+  // dial. In free debate, on the dial of the side that rang.
+  DT.test('theme construct: a bell strikes the hub and lights the scale instead of a ring round the digits', () => {
+    SEATINGS.forEach(([name, seat]) => {
+      const { stage, root } = mountPoster(singleAt(name, 60, seat), 1920, 1080);
+      const where = name + ' / ' + seat;
+      const over = root.querySelector('.dt-deco-over');
+      assert.equal(pseudo(over, '::before').content, 'none', where + ': nothing before the bell');
+      assert.equal(pseudo(over, '::after').content, 'none', where);
+      stage.pulse({ type: 'warn', clock: 'main' });
+      const ring = root.querySelector('.dt-ring');
+      assert.ok(ring && getComputedStyle(ring).display === 'none', where + ': no ring round the digits');
+      const hub = pseudo(over, '::before'), lit = pseudo(over, '::after');
+      assert.equal(hub.animationName, 'dt-construct-strike', where);
+      assert.equal(lit.animationName, 'dt-construct-lit', where);
+      // The hub's mark is centred on the dial's hub; the scale's is drawn about the same centre.
+      const field = root.querySelector('.dt-field'), o = over.getBoundingClientRect(), f = field.getBoundingClientRect();
+      const hx = f.left + pos(field, 'var(--dial-x)'), hy = f.top + pos(field, 'var(--dial-y)', 'y');
+      assert.near(o.left + px(hub.left) + px(hub.width) / 2, hx, 1, where + ': the hub\'s mark on the hub');
+      assert.near(o.top + px(hub.top) + px(hub.height) / 2, hy, 1, where);
+      assert.near(o.left + px(lit.left) + pos(over, lit.getPropertyValue('--mark-x')), hx, 1, where + ': the scale\'s mark about the hub');
+      stage.destroy();
+    });
+    // Free debate: the con side runs out; only its half's marks show.
+    const { stage, root } = mountPoster(dualAt(30), 1920, 1080);
+    stage.pulse({ type: 'end', clock: 'con' });
+    const con = root.querySelector('.dt-half[data-side="con"]'), pro = root.querySelector('.dt-half[data-side="pro"]');
+    assert.equal(pseudo(con, '::before').animationName, 'dt-construct-strike', 'dual: the side that rang');
+    assert.equal(pseudo(con, '::after').animationName, 'dt-construct-lit', 'dual');
+    assert.equal(pseudo(pro, '::before').content, 'none', 'dual: not the other side');
+    assert.equal(root.querySelectorAll('.dt-ring').length, 1, 'one ring for a side out of time (stage.css), not drawn');
+    assert.equal(getComputedStyle(root.querySelector('.dt-ring')).display, 'none');
+    stage.destroy();
+  });
+
+  // CO2: time up on a single stage: the yellow runs up the band from the floor (the concrete drawn back off it), and
+  // the scale turns yellow on the second stroke; a still and a stage opened in overtime simply show them yellow.
+  DT.test('theme construct: the end bell runs yellow up the band and lights the scale for good', () => {
+    SEATINGS.forEach(([name, seat]) => {
+      const { stage, root } = mountPoster(singleAt(name, 200, seat), 1920, 1080);
+      const where = name + ' / ' + seat;
+      const deco = root.querySelector('.dt-deco');
+      assert.equal(pseudo(deco, '::after').content, 'none', where + ': opened in overtime, no cover');
+      stage.pulse({ type: 'end', clock: 'main' });
+      const cover = pseudo(deco, '::after');
+      assert.equal(cover.animationName, 'dt-construct-band-yellow', where);
+      assert.equal(cover.backgroundColor, resolve(root, '--band'), where + ': the concrete');
+      // Its end: drawn back along the band to nothing at the far end.
+      root.getAnimations({ subtree: true }).filter(a => a.animationName === 'dt-construct-band-yellow').forEach(a => a.finish());
+      const m = matrix(pseudo(deco, '::after').transform);
+      assert.ok(m && Math.abs(m[0]) < 1e-6, where + ': drawn back to nothing: ' + pseudo(deco, '::after').transform);
+      assert.ok(sameColour(pseudo(deco, '::before').backgroundColor, resolve(root, '--accent')), where + ': yellow under it');
+      assert.equal(pseudo(root.querySelector('.dt-field'), '::before').animationName, 'dt-construct-scale-hold', where);
+      const mark = pseudo(root.querySelector('.dt-deco-over'), '::after');
+      assert.equal(mark.animationName, 'dt-fade-in', where + ': the scale\'s mark');
+      assert.deepEqual(dur(mark.animationDelay), [320], where + ': on the second stroke');
+      stage.destroy();
+    });
+  });
+
+  // CO8: in free debate each dial is drawn on a sheet the stage's width, anchored at its seat's edge, so the columns'
+  // spring only moves the half's clip.
+  DT.test('theme construct: each free-debate dial is drawn on a sheet that keeps its size through a switch', () => {
+    ['left', 'right'].forEach(seat => {
+      const { stage, root } = mountPoster(dualAt(30, seat), 1920, 1080);
+      const r = root.getBoundingClientRect();
+      const halves = root.querySelectorAll('.dt-half');
+      halves.forEach((h, i) => {
+        const f = h.querySelector('.dt-half-field').getBoundingClientRect();
+        assert.near(f.width, r.width, 1, seat + ' ' + h.dataset.side + ': the stage\'s width');
+        if (i === 0) assert.near(f.left, r.left, 1, seat + ': anchored at the left edge');
+        else assert.near(f.right, r.right, 1, seat + ': anchored at the right edge');
+      });
+      stage.destroy();
+    });
+  });
+
+  // CO9 (in part): the title card's two dials swell in from the seats as the card comes.
+  DT.test('theme construct: the title card\'s dials swell in from the seats', () => {
+    const { stage, root } = mountEntering(titleView());
+    const deco = root.querySelector('.dt-deco');
+    assert.equal(getComputedStyle(deco).animationName, 'dt-construct-disc');
+    root.classList.remove('is-entering');
+    assert.near(parseFloat(getComputedStyle(deco).getPropertyValue('--construct-disc')), 0.52 * 540, 1, 'the full dial once in');
     stage.destroy();
   });
 })();
