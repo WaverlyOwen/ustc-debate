@@ -154,6 +154,9 @@
     mounted(single(OPENING), r => {
       assert.equal(cs(MAIN).animationName, 'cr-rise');
       assert.equal(cs(MAIN).animationDelay, '0.14s');
+      // The head's words rise once most of its plate is there; the digits come with theirs.
+      assert.equal(cs('.dt-title').animationDelay, '0.1s', 'the title after its plate');
+      assert.equal(cs('.dt-speaker').animationDelay, '0.17s', 'the speaker after the title');
       assert.equal(cs(DIGITS, '::before').content, 'none', 'one matte on a single stage');
     });
     mounted(dual(), r => {
@@ -289,23 +292,48 @@
     });
   });
 
-  // A bell flashes the plate's own rim, --plate-rim inside its edge, over the plate (solid on screen).
-  DT.test('theme chroma: a bell flashes a gold rim inside the plate', () => {
-    mounted(single(OPENING), (r, h) => {
+  // A bell lights the plate's own rim, --plate-rim inside its edge, over the plate (solid on screen). A warn bell lights
+  // it where the time stands on the plate and opens it out both ways; an end bell lights it all at once.
+  DT.test('theme chroma: a bell lights a gold rim inside the plate, a warn bell from the time edge', () => {
+    // A minute into a 3:00 stage a third is used: the side's colour reaches 2/3 of the plate from the speaker's seat.
+    ['left', 'right'].forEach(seat => [[OPENING, 'pro'], [CON_OPENING, 'con']].forEach(([stage, side]) => {
+      mounted(single(stage, seat), (r, h) => {
+        r.classList.remove('is-entering');
+        h.pulse({ type: 'warn', clock: 'main' });
+        const clock = r.querySelector(MAIN), ring = clock.querySelector('.dt-ring'), where = seat + ' / ' + side;
+        assert.ok(ring, 'a ring in the clock');
+        const st = cs(ring);
+        assert.equal(st.animationName, 'cr-ignite', where);
+        assert.ok(parseFloat(st.borderTopWidth) > 0 && resolve(r, st.borderTopColor) === resolve(r, 'var(--accent)'), 'a gold rim');
+        // Opened out (it opens in 330 ms) and cooling: the whole rim, inside the plate by --plate-rim.
+        const a = ring.getAnimations()[0];
+        a.pause();
+        a.currentTime = 400;
+        const p = plate(clock), b = ring.getBoundingClientRect(), rim = cqh(0.4) - 0.5;
+        assert.ok(b.left - p.left >= rim && p.right - b.right >= rim && b.top - p.top >= rim && p.bottom - b.bottom >= rim,
+          where + ': inside the plate by --plate-rim: ' + JSON.stringify([b.left - p.left, p.right - b.right, b.top - p.top, p.bottom - b.bottom]));
+        // It was lit at the time edge: the scale's origin is where the side's colour ends on the plate.
+        const fromRight = (seat === 'right') === (side === 'pro');
+        const edge = fromRight ? p.left + (p.right - p.left) / 3 : p.left + (p.right - p.left) * 2 / 3;
+        assert.near(b.left + parseFloat(st.transformOrigin), edge, 1.5, where + ': lit at the time edge');
+      });
+    }));
+    // A free-debate side's warn bell is lit where its --remain stands.
+    mounted(dual(), (r, h) => {
       r.classList.remove('is-entering');
-      h.pulse({ type: 'warn', clock: 'main' });
-      const clock = r.querySelector(MAIN), ring = clock.querySelector('.dt-ring');
-      assert.ok(ring, 'a ring in the clock');
-      const st = cs(ring);
-      assert.ok(st.display !== 'none');
-      assert.equal(st.animationName, 'cr-flash');
-      assert.ok(parseFloat(st.borderTopWidth) > 0 && resolve(r, st.borderTopColor) === resolve(r, 'var(--accent)'), 'a gold rim');
-      const p = plate(clock), b = ring.getBoundingClientRect(), rim = cqh(0.4) - 0.5;
-      assert.ok(b.left - p.left >= rim && p.right - b.right >= rim && b.top - p.top >= rim && p.bottom - b.bottom >= rim,
-        'inside the plate by --plate-rim: ' + JSON.stringify([b.left - p.left, p.right - b.right, b.top - p.top, p.bottom - b.bottom]));
+      h.pulse({ type: 'warn', clock: 'con' });
+      const half = r.querySelector('.dt-half[data-side="con"]'), ring = half.querySelector('.dt-ring');
+      assert.equal(cs(ring).animationName, 'cr-ignite');
+      const a = ring.getAnimations()[0];
+      a.pause();
+      a.currentTime = 400;
+      const p = plate(half.querySelector('.dt-clock')), b = ring.getBoundingClientRect();
+      const remain = parseFloat(getComputedStyle(half).getPropertyValue('--remain'));
+      const edge = half.matches(':last-child') ? p.right - (p.right - p.left) * remain : p.left + (p.right - p.left) * remain;
+      assert.near(b.left + parseFloat(cs(ring).transformOrigin), edge, 1.5, 'lit at the half\'s time edge');
     });
-    // A single stage's end: one ring flashing twice; its second ring is not drawn. In overtime the sign's piece
-    // carries the left of the rim, on the same animation.
+    // A single stage's end: one closed rim flashing twice; its second ring is not drawn. The sign's piece, drawn out on
+    // the second bell, carries the rim round its own end on the same animation.
     mounted(E.view(E.toggle(E.goto(session(), idx(OPENING), T0), T0), T0 + 179900), (r, h) => {
       r.classList.remove('is-entering');
       h.pulse({ type: 'end', clock: 'main' });
@@ -313,9 +341,12 @@
       const clock = r.querySelector(MAIN), ring = clock.querySelector('.dt-ring[data-nth="1"]');
       assert.equal(clock.dataset.phase, 'over');
       assert.equal(cs(ring).animationName, 'cr-flash-twice');
-      assert.equal(cs(ring).borderLeftWidth, '0px', 'the sign\'s piece has the left of the rim');
+      assert.equal(cs(ring).borderLeftWidth, cs(ring).borderTopWidth, 'closed until the sign\'s piece covers its left');
+      assert.equal(cs(ring).transform, 'none', 'all at once');
       assert.equal(r.dataset.bell, 'end');
-      assert.equal(cs(DIGITS + ' .dt-sign', '::after').animationName, 'cr-flash-twice');
+      const sign = r.querySelector(DIGITS + ' .dt-sign');
+      assert.equal(cs(sign, '::after').animationName, 'cr-flash-twice');
+      assert.equal(cs(sign).animationDelay, '0.32s, 0.62s', 'the + comes on the second bell, then breathes');
       // The second ring, as render.js adds it 320 ms on.
       const second = document.createElement('i');
       second.className = 'dt-ring';
@@ -325,7 +356,12 @@
       assert.equal(cs(second).display, 'none', 'the second ring is not drawn');
       second.remove();
     });
-    // A free-debate side that runs out flashes once.
+    // A stage that opens already over rings no bell: its + comes with the plate, under the matte.
+    mounted(E.view(E.toggle(E.goto(session(), idx(OPENING), T0), T0), T0 + 189000), r => {
+      assert.ok(r.classList.contains('is-entering'));
+      assert.equal(cs(DIGITS + ' .dt-sign').animationDelay, '0s, 0.62s');
+    });
+    // A free-debate side that runs out flashes once, all at once.
     mounted(dual(), (r, h) => {
       r.classList.remove('is-entering');
       h.pulse({ type: 'end', clock: 'con' });

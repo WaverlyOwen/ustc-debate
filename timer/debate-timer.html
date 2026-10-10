@@ -2733,6 +2733,7 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   --plate: #2A2D33;
   --plate-radius: 2cqh;
   --plate-rim: .4cqh;       /* how far inside a plate's edge its gold rules and flashes keep */
+  --rim-w: .6cqh;           /* a bell's gold rim, the ring's and the sign piece's alike, so the two meet without a step */
 }
 .dt-stage[data-theme="chroma"][data-side="none"] { --side-color: var(--plate); }
 /* The deep colours are the plate's, so the key green is laid on the stage and the halves by hand. */
@@ -2844,10 +2845,11 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-stage[data-theme="chroma"][data-kind][data-pro-seat][data-side] .dt-clock .dt-digits:not(.dt-digits-on),
 .dt-stage[data-theme="chroma"] .dt-half .dt-digits:not(.dt-digits-on) { clip-path: none; }
 
-/* ---- overtime: the sign comes out of the plate on a piece of its own ----
+/* ---- overtime: the sign comes out of the plate on a piece of its own, on the second bell ----
    stage.css hangs the sign left of the digits, so they keep their place. Here the sign carries a piece of plate
-   (::before) as tall as the clock's plate and laid over its rounded left edge, so the + is never on the key; sign and
-   piece are wiped out of the plate's left edge (a clip on the sign) rather than faded, and the + breathes by its colour
+   (::before) as tall as the clock's plate and laid over its rounded left edge, so the + is never on the key. On the
+   first bell the digits turn gold where they stand; on the second (320 ms, render.js RING_GAP_MS) sign and piece are
+   wiped out of the plate's left edge (a clip on the sign) rather than faded, and the + then breathes by its colour
    toward the plate, since its piece must stay solid. Only a single stage runs over (engine.js). */
 .dt-stage[data-theme="chroma"] .dt-sign {
   opacity: 1;
@@ -2870,8 +2872,11 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-stage[data-theme="chroma"] .dt-sign:empty::before,
 .dt-stage[data-theme="chroma"] .dt-sign:empty::after { display: none; }
 .dt-stage[data-theme="chroma"] .dt-clock[data-phase="over"] .dt-sign {
-  animation: cr-tab-out 300ms var(--ease-out) backwards, cr-sign-breathe 2000ms ease-in-out 300ms infinite;
+  animation: cr-tab-out 300ms var(--ease-out) 320ms backwards, cr-sign-breathe 2000ms ease-in-out 620ms infinite;
 }
+/* A stage that opens already over rings no bell: its sign comes with the plate, under the clock's matte. Only the
+   wipe's delay differs, so the class going does not move the breath. */
+.dt-stage[data-theme="chroma"].is-entering .dt-clock[data-phase="over"] .dt-sign { animation-delay: 0ms, 620ms; }
 
 /* ---- 「暂停」 on a tab of plate ----
    It hangs from the clock's plate as a dark tab, joined behind the plate's bottom edge, and rolls down from it (a
@@ -2903,34 +2908,44 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   transition: none;
 }
 
-/* ---- the bell: the plate's rim flashes gold ----
-   The shared ring is drawn inside the clock that rang, over the plate and under the digits; here it is the plate's own
-   rim, --plate-rim inside its edge, lit at once and fading on the plate (solid on screen). A single stage's end bell
-   is one ring flashing twice, 320 ms apart with the double bell (its second ring is not drawn), so the sign's piece
-   can flash with it on the same animation; a free-debate side that runs out flashes once, on the plate it keeps. */
+/* ---- the bells: the plate's own rim lights gold ----
+   The shared ring is drawn inside the clock that rang, over the plate and under the digits; here it is the plate's
+   rim, --plate-rim inside its edge, so gold never meets the key, and it fades by opacity on the plate (solid on
+   screen). A warn bell lights it where the time stands on the plate (the notch the side's colour has just reached):
+   the two ticks join into a gold line that opens out both ways to the whole rim (a scale from that point, drawn by
+   the compositor), then cools. An end bell lights the whole rim at once: a single stage's ring flashes twice, 320 ms
+   apart with the double bell (its second ring is not drawn), so the sign's piece, drawn out on the second bell, can
+   carry its stretch of the rim on the same animation; a free-debate side that runs out flashes once, on the plate it
+   keeps. One animation per ring: render.js removes it at the first animationend. */
 .dt-stage[data-theme="chroma"] .dt-ring {
+  --spark: calc((1 - var(--used)) * (100% + 2 * var(--plate-rim)) - var(--plate-rim));   /* the time edge, in the ring's box */
   inset: calc(-2cqh + var(--plate-rim)) calc(-4cqh + var(--plate-rim));
   width: auto;
   height: auto;
   margin: 0;
-  border: .6cqh solid var(--accent);
+  border: var(--rim-w) solid var(--accent);
   border-radius: calc(var(--plate-radius) - var(--plate-rim));
+  transform-origin: var(--spark) 50%;
   animation-name: cr-flash;
 }
+.dt-stage[data-theme="chroma"][data-pro-seat="right"][data-side="pro"] .dt-clock[data-clock="main"] > .dt-ring,
+.dt-stage[data-theme="chroma"][data-pro-seat="left"][data-side="con"] .dt-clock[data-clock="main"] > .dt-ring {
+  --spark: calc(var(--used) * (100% + 2 * var(--plate-rim)) - var(--plate-rim));
+}
+.dt-stage[data-theme="chroma"] .dt-half .dt-ring { --spark: calc(var(--remain, 1) * (100% + 2 * var(--plate-rim)) - var(--plate-rim)); }
+.dt-stage[data-theme="chroma"] .dt-half:last-child .dt-ring { --spark: calc((1 - var(--remain, 1)) * (100% + 2 * var(--plate-rim)) - var(--plate-rim)); }
+.dt-stage[data-theme="chroma"] .dt-ring[data-type="warn"] { animation: cr-ignite 1100ms linear forwards; }
 .dt-stage[data-theme="chroma"] .dt-clock[data-clock="main"] > .dt-ring[data-type="end"] { animation: cr-flash-twice 1420ms linear forwards; }
 .dt-stage[data-theme="chroma"] .dt-clock[data-clock="main"] > .dt-ring[data-nth="2"] { display: none; }
-/* In overtime the sign's piece covers the plate's left edge, and carries that part of the rim itself. */
-.dt-stage[data-theme="chroma"] .dt-clock[data-phase="over"] > .dt-ring {
-  left: calc(-4cqh + var(--plate-radius));
-  border-left: 0;
-  border-radius: 0 calc(var(--plate-radius) - var(--plate-rim)) calc(var(--plate-radius) - var(--plate-rim)) 0;
-}
+/* In overtime the sign's piece is drawn over the plate's rounded left edge, rim and all, and carries that stretch of
+   the rim itself, ending on the plate's straight rim where the piece does (an overlap would double the bars'
+   anti-aliased edges there). */
 .dt-stage[data-theme="chroma"] .dt-sign::after {
   z-index: 0;
   top: calc(-2cqh + var(--plate-rim));
   bottom: calc(-2cqh + var(--plate-rim));
   left: calc(-4cqh + var(--plate-rim));
-  border: .6cqh solid var(--accent);
+  border: var(--rim-w) solid var(--accent);
   border-right: 0;
   border-radius: calc(var(--plate-radius) - var(--plate-rim)) 0 0 calc(var(--plate-radius) - var(--plate-rim));
   background: none;
@@ -2973,6 +2988,9 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
    rises (stage.css), by translate only where it carries a plate: a plate is never faded. */
 .dt-stage[data-theme="chroma"].is-entering .dt-clock { animation: cr-rise 420ms var(--ease-out) 140ms backwards; }
 .dt-stage[data-theme="chroma"].is-entering .dt-team { animation: cr-rise 420ms var(--ease-out) 70ms backwards; }
+/* The head's words rise once most of its plate is there (the plate goes on first, as a lower third's does). */
+.dt-stage[data-theme="chroma"].is-entering .dt-title { animation-delay: 100ms; }
+.dt-stage[data-theme="chroma"].is-entering .dt-speaker { animation-delay: 170ms; }
 
 .dt-stage[data-theme="chroma"].is-entering .dt-head::before,
 .dt-stage[data-theme="chroma"].is-entering .dt-head::after,
@@ -3028,6 +3046,12 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 @keyframes cr-tab-out { from { clip-path: inset(-50% -100% -50% 100%); } }
 @keyframes cr-sign-breathe { 50% { color: color-mix(in oklab, var(--over-ink, var(--accent)) 55%, var(--plate)); } }
 @keyframes cr-flash { from { opacity: 1; } }
+/* Lit at the time edge: a gold line across the plate that opens to the whole rim in 330 ms, then cools. */
+@keyframes cr-ignite {
+  0% { transform: scaleX(0); opacity: 1; animation-timing-function: cubic-bezier(.25, .6, .3, 1); }
+  30% { transform: none; opacity: 1; animation-timing-function: ease-out; }
+  100% { transform: none; opacity: 0; }
+}
 /* Two flashes 320 ms apart (render.js RING_GAP_MS), each the ring's 1100 ms ease-out. */
 @keyframes cr-flash-twice {
   0% { opacity: 1; animation-timing-function: ease-out; }
