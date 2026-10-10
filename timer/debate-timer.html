@@ -4498,11 +4498,6 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-stage[data-theme="startrail"][data-side="pro"] .dt-backdrop::before,
 .dt-stage[data-theme="startrail"][data-side="con"] .dt-backdrop::after,
 .dt-stage[data-theme="startrail"]:not([data-side="pro"], [data-side="con"])::after { opacity: 1; }
-/* stage.css lands stills and stops motion on the stage's descendants; the stage's own ::after is not one of them. */
-.dt-stage[data-theme="startrail"][data-still]::after { transition: none; }
-@media (prefers-reduced-motion: reduce) {
-  .dt-stage[data-theme="startrail"]::after { transition: none; }
-}
 .dt-stage[data-theme="startrail"] { --glow: 150 170 230; --glow-x: 0%; }
 /* The speaking side sits on the right: its glow and its line of time start from the right edge. */
 .dt-stage[data-theme="startrail"][data-pro-seat="right"][data-side="pro"],

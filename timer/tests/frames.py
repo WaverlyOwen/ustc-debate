@@ -3,7 +3,7 @@
 
 Usage:
     python timer/tests/frames.py --theme hall                                     # 入场：单方环节扫入
-    python timer/tests/frames.py --theme ink --demo dual --skip 700 --key KeyL    # 入场结束后，自由辩换边
+    python timer/tests/frames.py --theme ink --demo dual --skip 1200 --key KeyL   # 入场结束后，自由辩换边
     python timer/tests/frames.py --theme hall --skip 76500 --count 24 --step 60   # 提示铃的金环（single 还剩 30 秒时）
 
 The page opens as <html>?demo=<名字>&theme=<id> (not frozen) with its clock paused; --skip advances the clock that
