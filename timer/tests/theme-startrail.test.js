@@ -465,6 +465,65 @@
     });
   });
 
+  // Top-level items of a computed list: commas inside a url() or a function do not split it.
+  function items(value) {
+    const out = [];
+    let depth = 0, quote = '', cur = '';
+    for (const ch of value) {
+      if (quote) { cur += ch; if (ch === quote) quote = ''; continue; }
+      if (ch === '"' || ch === "'") { quote = ch; cur += ch; continue; }
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) { out.push(cur.trim()); cur = ''; continue; }
+      cur += ch;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
+
+  // Consistency review §6.1, spec §1.4: render.js writes --used (and in free debate --remain) on every step of the
+  // clock, and Chromium takes an image as new, and paints its box again, at each of those when the url() reaches the
+  // declaration through var(), or when one background or mask list holds a url() image and a gradient together. The
+  // nebula's mask is a noise image and a fade: both are written out as url() images on the field, the fade an SVG
+  // gradient, so the glow is painted once and not on every step (2120 tiles in 4 s at 1080 with a linear-gradient()
+  // beside the noise, against 80).
+  DT.test('theme startrail: no image reaches a rule through a variable or shares a list with a gradient', () => {
+    let seen = 0;
+    Array.from(document.styleSheets).forEach(sh => {
+      let rules;
+      try { rules = sh.cssRules; } catch (e) { return; }
+      Array.from(rules).forEach(function walk(r) {
+        if (r.cssRules) Array.from(r.cssRules).forEach(walk);
+        if (!r.style || !/data-theme="startrail"/.test(r.selectorText || '')) return;
+        seen++;
+        for (let i = 0; i < r.style.length; i++) {
+          const name = r.style[i], v = r.style.getPropertyValue(name);
+          if (!/url\(\s*["']?data:/.test(v)) continue;
+          assert.ok(name.indexOf('--') !== 0, r.selectorText + ': ' + name + ' holds an image');
+          assert.ok(!/var\(/.test(v), r.selectorText + ' ' + name + ': an image beside a var()');
+        }
+      });
+    });
+    assert.ok(seen > 20, 'read the theme\'s rules: ' + seen);
+    [[singleAt(OPENING, 60)], [singleAt(OPENING, 60, 'right')], [dualAt(30)], [singleAt(OPENING, 60), 240, 135]].forEach(([view, w, h]) => {
+      const { stage, root } = mountSky(view, w, h);
+      let images = 0;
+      root.querySelectorAll('*').forEach(el => [null, '::before', '::after'].forEach(p => {
+        const cs = getComputedStyle(el, p);
+        const where = root.dataset.mode + '/' + root.dataset.proSeat + ' ' + (w || 960) + ' ' +
+          (typeof el.className === 'string' ? el.className : el.tagName) + (p || '');
+        ['backgroundImage', 'maskImage', 'webkitMaskImage'].forEach(prop => {
+          const list = items(cs[prop] || 'none').filter(x => x !== 'none');
+          const urls = list.filter(x => /^url\(/.test(x)).length;
+          images += urls;
+          assert.ok(urls === 0 || urls === list.length, where + ' ' + prop + ': ' + list.map(x => x.slice(0, 28)).join(' | '));
+        });
+      }));
+      assert.ok(images > 3, root.dataset.mode + ': the images were read: ' + images);
+      stage.destroy();
+    });
+  });
+
   // Even in overtime, with the glow at its floor, the bottom third of the room says whose floor it is: the haze over
   // the horizon takes the speaking side's colour. A break keeps the town's warm haze. Three layers that stay on the
   // stage, one lit at a time, so a change of floor or of stage cross-fades them instead of the haze changing in a frame.
