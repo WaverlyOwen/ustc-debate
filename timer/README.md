@@ -251,7 +251,7 @@ python timer/tests/frames.py --theme riso --demo dual --skip 1200 --key KeyG,Key
 
 截图用的是 `?demo=<名字>` 的固定场景（标题、单方、超时、双方、间隔、结束卡、长名字、控制条、键位帮助、开赛页、编辑器、操作台等；加 `&theme=<id>` 换主题），可以直接在浏览器里打开 `debate-timer.html?demo=long` 看。
 
-`frames.py` 打开不冻结的 `?demo=<名字>&theme=<id>`，把页面时钟停住，`--skip` 先把时钟拨快若干毫秒，`--key` 再按一个键（逗号隔开可以连按几个，`--key-gap` 是两次之间的页面时间，默认 400 毫秒，G G 这类确认要在 250 到 1500 毫秒之间），然后每隔 `--step` 毫秒（页面时间）截一帧，共 `--count` 帧，存到 `timer/tests/out/frames/<宽>x<高>/<主题>/<演示态>[-<键>][-skip<毫秒>]/000.png…`；装了 ffmpeg 时旁边还有一张 `sheet.png`，每行四帧、按时间顺序排开，一眼看出一个时刻里色场、文字、铃各自什么时候动。终端每帧一行：时间、`data-phase`、`data-side`、`data-kind`、是否还在入场。几点要注意：
+`frames.py` 打开不冻结的 `?demo=<名字>&theme=<id>`，把页面时钟停住，`--skip` 先把时钟拨快若干毫秒，`--key` 再按一个键（逗号隔开可以连按几个，`--key-gap` 是两次之间的页面时间，默认 400 毫秒，G G 这类确认的第二下要在 1.5 秒内），然后每隔 `--step` 毫秒（页面时间）截一帧，共 `--count` 帧，存到 `timer/tests/out/frames/<宽>x<高>/<主题>/<演示态>[-<键>][-skip<毫秒>]/000.png…`；装了 ffmpeg 时旁边还有一张 `sheet.png`，每行四帧、按时间顺序排开，一眼看出一个时刻里色场、文字、铃各自什么时候动。终端每帧一行：时间、`data-phase`、`data-side`、`data-kind`、是否还在入场。几点要注意：
 
 - `frames.py` 的 `--size` 是页面（投影）的大小；`screenshots.py` 的 `--size` 是窗口大小，页面要矮约 88 像素（1366x768 拍到的是 1366x680 的舞台），判断 4:3、5:4 上会不会出屏要用 `frames.py`
 - 引擎会丢掉 1.5 秒前越过的铃，所以 `--skip` 要停在铃点之前，让某一帧跨过它

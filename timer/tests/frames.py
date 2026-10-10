@@ -2,14 +2,14 @@
 """Record a theme's animation as a sequence of PNG frames (and a tiled contact sheet) in headless Edge (or Chrome).
 
 Usage:
-    python timer/tests/frames.py --theme hall                                     # 入场：单方环节扫入
-    python timer/tests/frames.py --theme ink --demo dual --skip 1200 --key KeyL   # 入场结束后，自由辩换边
-    python timer/tests/frames.py --theme hall --skip 76500 --count 24 --step 60   # 提示铃的金环（single 还剩 30 秒时）
-    python timer/tests/frames.py --theme riso --demo dual --skip 1200 --key KeyG,KeyG   # 放弃（G G，两次相隔 --key-gap）
+    python timer/tests/frames.py --theme hall                                     # entrance: a single stage sweeps in
+    python timer/tests/frames.py --theme ink --demo dual --skip 1200 --key KeyL   # after the entrance, the free debate's floor switches sides
+    python timer/tests/frames.py --theme hall --skip 76500 --count 24 --step 60   # the warn bell's gold ring (single, 30 s left)
+    python timer/tests/frames.py --theme riso --demo dual --skip 1200 --key KeyG,KeyG   # yield (G G, the presses --key-gap apart)
 
 The page opens as <html>?demo=<名字>&theme=<id> (not frozen) with its clock paused; --skip advances the clock that
 many milliseconds, --key then presses one key (or several, comma-separated, --key-gap ms apart: the second press of
-R R / G G / Q Q must come between 250 and 1500 ms after the first), and --count frames --step ms apart are saved to
+R R / G G / Q Q must come within 1500 ms of the first), and --count frames --step ms apart are saved to
 timer/tests/out/frames/<W>x<H>/<id>/<名字>[-<key>[+<key>…]][-skip<ms>]/NNN.png, with sheet.png beside them when ffmpeg
 is installed. Each frame's line on stdout gives its time offset and the stage's data-phase, data-side, data-kind and
 whether it is still entering. A bell only shows when a capture step crosses its point (the engine drops a bell
@@ -67,7 +67,9 @@ DRIVER = """(() => {
     });
     F.seen.forEach((v, a) => { if (!live.has(a)) F.seen.delete(a); });
     F.last = now;
-    return live.size;
+    let pending = 0;
+    live.forEach(a => { if (a.pending) pending++; });
+    return [live.size, pending];
   };
   F.mark = () => { F.last = performance.now(); };
 })()"""
@@ -131,6 +133,20 @@ def load(cdp, url, tick):
         tick()
 
 
+def seat(cdp):
+    """Seat every animation at its virtual age and return how many are live.
+
+    An animation created in the last frame is still play-pending until the next render, and the capture that renders it
+    would give it the real clock's start time (so frame 000 showed every animation at its before phase: a no-fill sweep
+    at its live end state). When anything is pending, one throwaway render starts it, and a second pass seats it.
+    """
+    live, pending = cdp.evaluate("window.__dtFrames.step()")
+    if pending:
+        cdp.send("Page.captureScreenshot", {"format": "png", "clip": {"x": 0, "y": 0, "width": 1, "height": 1, "scale": 1}})
+        live, pending = cdp.evaluate("window.__dtFrames.step()")
+    return live
+
+
 def record(cdp, url, args, out_dir, w, h):
     cdp.sock.settimeout(15)   # a capture takes well under a second; a stuck one gives up here
     for domain in ("Page", "Runtime", "Animation"):
@@ -149,22 +165,22 @@ def record(cdp, url, args, out_dir, w, h):
     load(cdp, url, lambda: advance(cdp, 1))
     cdp.send("Animation.setPlaybackRate", {"playbackRate": 0.0001})
     cdp.evaluate(DRIVER)
-    cdp.evaluate("window.__dtFrames.step()")   # the entrance starts from its first frame
+    seat(cdp)   # the entrance starts from its first frame
     if args.skip:
         advance(cdp, args.skip)
         # Seat every animation at its age after the skip (one more frame lets the finished ones end and go), so a
         # transition that began at the load is not still sitting at its start when the key is pressed.
-        cdp.evaluate("window.__dtFrames.step()")
+        seat(cdp)
         advance(cdp, 16)
-        cdp.evaluate("window.__dtFrames.step()")
+        seat(cdp)
         cdp.evaluate("window.__dtFrames.mark()")   # what the key creates next counts from now, not from the load
     for i, key in enumerate(args.keys):
         if i:
             # A later key is pressed --key-gap ms of page time after the one before it, with a frame in between so
             # the page sees the first press (a second press of G G or R R confirms the first).
-            cdp.evaluate("window.__dtFrames.step()")
+            seat(cdp)
             advance(cdp, args.key_gap)
-            cdp.evaluate("window.__dtFrames.step()")
+            seat(cdp)
         d = dict(KEYS[key])
         text = d.pop("text", None)
         down = dict(type="rawKeyDown") if text is None else dict(type="keyDown", text=text, unmodifiedText=text)
@@ -174,7 +190,7 @@ def record(cdp, url, args, out_dir, w, h):
     for i in range(args.count):
         if i:
             advance(cdp, args.step)
-        n = cdp.evaluate("window.__dtFrames.step()")
+        n = seat(cdp)
         png = base64.b64decode(cdp.send("Page.captureScreenshot", {"format": "png"})["data"])
         (out_dir / f"{i:03d}.png").write_bytes(png)
         st = cdp.evaluate(STATE) or ["?", "?", "?", "?"]
