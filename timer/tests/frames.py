@@ -129,10 +129,13 @@ def load(cdp, url, tick):
         tick()
 
 
-def record(cdp, url, args, out_dir):
+def record(cdp, url, args, out_dir, w, h):
     cdp.sock.settimeout(15)   # a capture takes well under a second; a stuck one gives up here
     for domain in ("Page", "Runtime", "Animation"):
         cdp.send(domain + ".enable")
+    # The page, not the window, is w x h: a headless window's own chrome (and an infobar) takes 87 px or more of its
+    # height, so a 1024x768 window would show a page of about 1024x680.
+    cdp.send("Emulation.setDeviceMetricsOverride", {"width": w, "height": h, "deviceScaleFactor": 1, "mobile": False})
     # The animations must really run, whatever the machine prefers.
     cdp.send("Emulation.setEmulatedMedia", {"features": [{"name": "prefers-reduced-motion", "value": "no-preference"}]})
     # A warm-up of the same page in real time: a painter theme's canvas has to have been presented once before the
@@ -192,7 +195,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Record a theme's animation frame by frame.")
     ap.add_argument("--theme", required=True, help="主题 id，如 hall")
     ap.add_argument("--demo", default="single", help="演示态，默认 single")
-    ap.add_argument("--size", default="1280x720", help="窗口大小，如 1366x768")
+    ap.add_argument("--size", default="1280x720", help="页面（投影）大小，如 1366x768")
     ap.add_argument("--skip", type=int, default=0, help="先把页面时钟拨快这么多毫秒")
     ap.add_argument("--key", default="", help="然后按这个键（物理键位），如 KeyL、Space、ArrowRight")
     ap.add_argument("--count", type=int, default=16, help="截几帧")
@@ -229,7 +232,7 @@ def main(argv=None):
             print("打不开浏览器：", e)
             return 1
         try:
-            record(cdp, url, args, out_dir)
+            record(cdp, url, args, out_dir, w, h)
             break
         except (OSError, RuntimeError) as e:   # a CDP error, or a wait that ran out
             print("录制中断：", str(e)[:300], "" if attempt == 2 else "（重开浏览器再试一次）")
