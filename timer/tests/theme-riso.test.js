@@ -294,6 +294,27 @@
     });
   });
 
+  // The step the halftones wait for: the field reads the time left as --remain-q, --used rounded to .0025 (400 steps
+  // a stage, one every 450 ms on a 3:00 stage), and a poster its --remain rounded alike, so the thresholded screen is
+  // painted again only when that moves, not at each of the renderer's writes. Where round() is missing the stylesheet
+  // falls back to the exact time left, and there is no step to find.
+  DT.test('theme riso: the halftones move only when the time left moves a step of .0025', () => {
+    if (!CSS.supports('width: round(nearest, 1px, 1px)')) return;
+    const screen = el => { const cs = pseudo(el, '::before'); return cs.backgroundSize + ' | ' + cs.backgroundPosition; };
+    const { stage, root } = mountPoster(singleAt(OPENING, 60));
+    const field = root.querySelector('.dt-field');
+    const at = used => { root.style.setProperty('--used', String(used)); return screen(field); };
+    assert.equal(at(0.3001), at(0.3010), 'the field: within a step');
+    assert.ok(at(0.3001) !== at(0.3015), 'the field: across one');
+    stage.destroy();
+    const d = mountPoster(E.view(E.floor(session('自由辩论'), 'pro', T0), T0 + 5000));
+    const half = d.root.querySelector('.dt-half[data-side="pro"]'), poster = half.querySelector('.dt-half-field');
+    const left = remain => { half.style.setProperty('--remain', String(remain)); return screen(poster); };
+    assert.equal(left(0.7001), left(0.7010), 'a poster: within a step');
+    assert.ok(left(0.7001) !== left(0.7015), 'a poster: across one');
+    d.stage.destroy();
+  });
+
   // Spec §2.4: headings set like a poster: heavy and tight, with the top bar tracked out; the stage name printed in
   // both drums as the digits are.
   DT.test('theme riso: the stage name is heavy and tight, off register like the digits', () => {
@@ -352,7 +373,8 @@
   });
 
   // Overtime: the second drum slips far off register, a 超时 block is printed in the side's ink, and a stub of the
-  // side's dots stays at the seat, clear of the digits, so the room still sees whose floor it is (spec §1.5).
+  // side's dots stays at the seat, clear of the digit row, so the room still sees whose floor it is (spec §1.5). The
+  // row is the digits and the "+" hung outside their box (stage.css); on a 16:9 stage both stay clear of the stub.
   DT.test('theme riso: in overtime the drums slip, a 超时 block is printed and the seat keeps a stub of dots', () => {
     SEATINGS.forEach(([name, seat, from]) => {
       const probe = mountPoster(singleAt(name, 60, seat), 1920, 1080);
@@ -377,8 +399,12 @@
       const stub = length(field, 'var(--edge)');
       assert.near(stub, 0.07 * box.width, 2, where + ': a stub of 7cqw');
       const inner = from === 'left' ? box.left + stub : box.right - stub;
-      const d = root.querySelector('.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect();
-      assert.ok(from === 'left' ? inner + 0.02 * box.width < d.left : inner - 0.02 * box.width > d.right, where + ': clear of the digits');
+      const sign = root.querySelector('.dt-clock[data-clock="main"] .dt-sign');
+      assert.equal(sign.textContent, '+', where + ': the sign is up');
+      const d = root.querySelector('.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect(), g = sign.getBoundingClientRect();
+      const row = { left: Math.min(d.left, g.left), right: Math.max(d.right, g.right) };
+      assert.ok(from === 'left' ? inner + 0.02 * box.width < row.left : inner - 0.02 * box.width > row.right,
+        where + ': clear of the digits and the sign: the stub to ' + inner + ', the row ' + row.left + '–' + row.right);
       stage.destroy();
     });
     const calm = mountPoster(singleAt(OPENING, 60));
@@ -798,6 +824,38 @@
     const r = d.root.querySelector('.dt-half[data-side="pro"] .dt-ring');
     assert.ok(isInk(firstColor(pseudo(r, '::before').boxShadow), RED), 'pro\'s ring in pro\'s ink');
     d.stage.destroy();
+  });
+
+  // R9 (riso-final §2.9): the strokes thin in five held steps, so the ring is painted again five times in its 1100 ms,
+  // not on every frame as an eased lift would have it.
+  DT.test('theme riso: a ring\'s ink is lifted in five held steps', () => {
+    const { stage, root } = mountPoster(singleAt(OPENING, 160));
+    stage.pulse({ type: 'warn', clock: 'main' });
+    const ring = root.querySelector('.dt-clock[data-clock="main"] .dt-ring');
+    const lift = ring.getAnimations().find(a => a.animationName === 'dt-riso-lift');
+    assert.ok(lift, 'the lift: ' + ring.getAnimations().map(a => a.animationName));
+    const w = t => { lift.currentTime = t; return getComputedStyle(ring).getPropertyValue('--riso-ink-w').trim(); };
+    assert.equal(w(10), w(380), 'held through the first step');
+    assert.ok(w(380) !== w(390), 'then thinner at once: ' + w(380) + ' → ' + w(390));
+    const seen = [];
+    for (let t = 0; t < 1100; t += 10) { const v = w(t); if (v !== seen[seen.length - 1]) seen.push(v); }
+    assert.equal(seen.length, 6, 'printed, five steps, the last to nothing: ' + seen.join(' → '));
+    assert.equal(seen[5], '0px');
+    stage.destroy();
+  });
+
+  // A break's chime is no side's: its ring is printed in the two inks, red up and to the left over blue, not in a
+  // side's ink and the overprint.
+  DT.test('theme riso: a break\'s chime rings in the two inks', () => {
+    const brk = E.toggle(E.goto(E.createSession(F(), MATCH, T0, { theme: 'riso' }), F().stages.findIndex(x => x.type === 'break'), T0), T0);
+    const { stage, root } = mountPoster(E.view(brk, T0 + 5000));
+    stage.pulse({ type: 'end', clock: 'main' });
+    const ring = root.querySelector('.dt-clock[data-clock="main"] .dt-ring');
+    assert.equal(ring.dataset.side, 'none', 'no side\'s ring');
+    const a = firstColor(pseudo(ring, '::before').boxShadow), b = firstColor(pseudo(ring, '::after').boxShadow);
+    assert.ok(isInk(a, RED), 'the red drum: ' + a);
+    assert.ok(isInk(b, BLUE), 'the blue drum: ' + b);
+    stage.destroy();
   });
 
   // Shared G (yield) without re-printing the halftone every frame: a locked poster lifts off in place (300 ms opacity)

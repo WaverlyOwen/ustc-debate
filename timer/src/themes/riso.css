@@ -140,8 +140,11 @@
 }
 /* [data-mode] ranks this with stage.css's per-seat clip-path rules, which it replaces: the dots thin out instead of
    being cut back. They never quite reach the seat: a stub stays there as the time runs out and through overtime,
-   clear of the digits, so the room still sees whose floor it is (spec §1.5). The field spans the stage, so --edge is
-   a share of 100cqw: a length, as a percentage would place the ramp by the room left beside it. */
+   clear of the digit row, so the room still sees whose floor it is (spec §1.5). The "+" of +M:SS hangs outside the
+   row (stage.css), so on a stage squarer than about 1.4:1 with the speaking seat on the left it reaches into the
+   stub, a third of the way at 4:3 and two thirds at 5:4; it is printed over the dots, as the digits are over the
+   rest of the field. The field spans the stage, so --edge is a share of 100cqw: a length, as a percentage would
+   place the ramp by the room left beside it. */
 .dt-stage[data-theme="riso"][data-mode] .dt-field {
   --edge: max(var(--stub), var(--remain-q) * 100cqw);
   top: var(--band-top);
