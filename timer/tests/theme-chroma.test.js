@@ -346,6 +346,8 @@
       assert.equal(r.dataset.bell, 'end');
       const sign = r.querySelector(DIGITS + ' .dt-sign');
       assert.equal(cs(sign, '::after').animationName, 'cr-flash-twice');
+      // Live, not in a still: the shared sign fades in over 300 ms, which would fade its piece in over the key.
+      assert.deepEqual(fadesOverKey(r), [], 'the + and its piece are not faded in over the key');
       assert.equal(cs(sign).animationDelay, '0.32s, 0.62s', 'the + comes on the second bell, then breathes');
       // The second ring, as render.js adds it 320 ms on.
       const second = document.createElement('i');
@@ -356,10 +358,16 @@
       assert.equal(cs(second).display, 'none', 'the second ring is not drawn');
       second.remove();
     });
-    // A stage that opens already over rings no bell: its + comes with the plate, under the matte.
+    // A stage that opens already over rings no bell: its + comes with the plate, under the matte, which reaches out
+    // over the sign's piece; neither is faded in over the key.
     mounted(E.view(E.toggle(E.goto(session(), idx(OPENING), T0), T0), T0 + 189000), r => {
       assert.ok(r.classList.contains('is-entering'));
-      assert.equal(cs(DIGITS + ' .dt-sign').animationDelay, '0s, 0.62s');
+      const digits = r.querySelector(DIGITS), sign = digits.querySelector('.dt-sign');
+      assert.equal(cs(sign).animationDelay, '0s, 0.62s');
+      const matte = digits.getBoundingClientRect().left + parseFloat(cs(digits, '::after').left);
+      const piece = sign.getBoundingClientRect().left + parseFloat(cs(sign, '::before').left);
+      assert.ok(matte <= piece, 'the matte covers the sign\'s piece: ' + matte + ' > ' + piece);
+      assert.deepEqual(fadesOverKey(r), [], 'nothing faded in over the key');
     });
     // A free-debate side that runs out flashes once, all at once.
     mounted(dual(), (r, h) => {
@@ -387,7 +395,7 @@
       assert.equal(sign.textContent, '+');
       assert.near(centre(), before, 0.5, 'the digits do not move');
       const st = cs(sign);
-      assert.equal(st.opacity, '1', 'never faded');
+      assert.equal(st.opacity, '1', 'lands at 1');
       assert.ok(/cr-tab-out/.test(st.animationName) && /cr-sign-breathe/.test(st.animationName), st.animationName);
       assert.ok(!/dt-breathe/.test(st.animationName), st.animationName);
       const piece = cs(sign, '::before'), s = sign.getBoundingClientRect(), p = plate(r.querySelector(MAIN));
