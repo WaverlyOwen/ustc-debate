@@ -885,8 +885,12 @@
     try {
       press('Space');
       t.clock.advance(5000);
-      await Promise.race([new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))), later(1000)]);
-      assert.equal(document.querySelector('.dt-clock[data-clock="main"] .dt-sec').textContent, '55');
+      // The loop paints on the browser's own frames, which a loaded headless browser can hold back for a while:
+      // wait for the paint itself (up to 3 s), not for a fixed number of frames.
+      const sec = () => document.querySelector('.dt-clock[data-clock="main"] .dt-sec').textContent;
+      const until = Date.now() + 3000;
+      while (sec() !== '55' && Date.now() < until) await Promise.race([new Promise(r => requestAnimationFrame(r)), later(50)]);
+      assert.equal(sec(), '55');
     } finally { t.done(); }
   });
   DT.test('ui: the current row of the stage list shows its time behind a dot of its own', () => {
