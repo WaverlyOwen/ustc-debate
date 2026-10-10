@@ -139,9 +139,10 @@
    what they light, over the dial (a single stage's .dt-deco-over; in free debate the half that rang, so they ride its
    spring and take its dimming) and under the type; only their opacity moves, so the dial is not drawn again. Keyed
    on the bell (render.js data-bell, data-bell-clock): a still, a thumbnail and reduced motion never have them.
-   A single stage's marks ask for no phase, so a stage changed within the bell's 1.5 s takes the hub's fading mark to
-   its new seat; when render.js clears data-bell on a stage change, they simply stop there. Never gate them on
-   :not(.is-entering): the rule would match again as the class goes, and play the bell a second time. */
+   A single stage's marks ask for no phase. render.js clears data-bell and data-bell-clock in the update that opens a
+   new stage, before it writes the new seat, so a stage changed within the bell's 1.5 s stops them where they are:
+   they never reach the new seat. Never gate them on :not(.is-entering): the rule would match again as the class goes,
+   and play the bell a second time. */
 .dt-stage[data-theme="construct"][data-mode="stage"]:is([data-kind="single"], [data-kind="dual"]) .dt-ring { display: none; }
 .dt-stage[data-theme="construct"] .dt-half { --hub-x: calc(-1 * var(--dial-out)); --dial-dir: 1; }
 .dt-stage[data-theme="construct"] .dt-half:last-child { --hub-x: calc(100% + var(--dial-out)); --dial-dir: -1; }
@@ -263,9 +264,10 @@
     repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px calc(100cqh / 8));
 }
 
-/* A thick band rising from the floor away from the seat, under the dial and clear of the digits and of the stage's
-   number, which sits below it in the far corner. It turns yellow when the time is up. Free debate has its two dials
-   and the end card its table, so neither has it. ::after is the concrete the end bell draws back off it (below). */
+/* A thick band rising from the floor away from the seat, under the dial and clear of the stage's number, which sits
+   below it in the far corner, and of the digits until overtime's sign widens them (then they are knocked out of it:
+   below). It turns yellow when the time is up. Free debate has its two dials and the end card its table, so neither
+   has it. ::after is the concrete the end bell draws back off it (below). */
 .dt-stage[data-theme="construct"] .dt-deco::before,
 .dt-stage[data-theme="construct"] .dt-deco::after {
   content: "";
@@ -292,6 +294,10 @@
   --band-back: 1;
 }
 .dt-stage[data-theme="construct"][data-phase="over"] .dt-deco::before { background: var(--accent); }
+/* Overtime: the yellow digits and their hung "+" can land on the yellow band (4:3, 5:4 from +0:00; wider stages from
+   +10:00); a knockout in the ground's colour keeps them readable there. Painted under the fill, it leaves the glyphs
+   whole and rings them with .025em of ground; the sign, a child of the digits, inherits it. */
+.dt-stage[data-theme="construct"] .dt-clock[data-phase="over"] .dt-digits { -webkit-text-stroke: .05em var(--ground); paint-order: stroke fill; }
 .dt-stage[data-theme="construct"][data-kind="dual"] .dt-deco::before,
 .dt-stage[data-theme="construct"][data-mode="end"] .dt-deco::before { display: none; }
 /* A new stage's band slides up its own diagonal from below the stage (a translate along its length, inside the turn),

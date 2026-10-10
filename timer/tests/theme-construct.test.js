@@ -237,6 +237,29 @@
     stage.destroy();
   });
 
+  // Spec §1.5: overtime's digits and their hung "+" are the band's yellow and can land on it (4:3 and 5:4 from +0:00,
+  // wider stages from +10:00), so a stroke in the ground's colour, painted under the fill, knocks them out of it.
+  DT.test('theme construct: in overtime the digits and their sign are knocked out of the band in the ground\'s colour', () => {
+    SEATINGS.forEach(([name, seat]) => {
+      const { stage, root } = mountPoster(singleAt(name, 200, seat));
+      const digits = root.querySelector('.dt-clock[data-clock="main"] .dt-digits:not(.dt-digits-on)');
+      const sign = digits.querySelector('.dt-sign');
+      assert.equal(sign.textContent, '+', name + ' / ' + seat + ': overtime');
+      const ground = resolve(root, '--ground');
+      [['digits', digits], ['sign', sign]].forEach(([part, el]) => {
+        const cs = getComputedStyle(el), where = name + ' / ' + seat + ' / ' + part;
+        assert.ok(px(cs.webkitTextStrokeWidth) > 0, where + ': stroked: ' + cs.webkitTextStrokeWidth);
+        assert.ok(sameColour(cs.webkitTextStrokeColor, ground), where + ': in the ground\'s colour: ' + cs.webkitTextStrokeColor);
+        assert.ok(/^stroke/.test(cs.paintOrder), where + ': the stroke under the fill: ' + cs.paintOrder);
+      });
+      stage.destroy();
+    });
+    const { stage, root } = mountPoster(singleAt(REBUTTAL, 60, 'left'));
+    const cs = getComputedStyle(root.querySelector('.dt-clock[data-clock="main"] .dt-digits:not(.dt-digits-on)'));
+    assert.equal(px(cs.webkitTextStrokeWidth), 0, 'no knockout before the time is up');
+    stage.destroy();
+  });
+
   // The digits cross the sector's edge as it turns, so they are one layer that reads on the red, the blue and the
   // ground alike, never cut.
   DT.test('theme construct: the digits are one layer that reads on both sides and on the ground', () => {
