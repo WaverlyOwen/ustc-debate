@@ -333,4 +333,23 @@
       });
     });
   });
+
+  // 「暂停」 stands at .8 on the paper; emptied on resume it keeps its word (stage.css :empty::before) while it fades,
+  // so it must still fade to 0 and not stay on screen.
+  DT.test('theme ink: 暂停 fades out on resume, it does not stay on the paper', () => {
+    let s = E.toggle(session(OPENING), T0);
+    const { stage, root } = mountInk(E.view(s, T0 + 1000));
+    root.classList.remove('is-entering');
+    const state = root.querySelector('.dt-clock[data-clock="main"] .dt-state');
+    s = E.toggle(s, T0 + 2000);
+    stage.update(E.view(s, T0 + 2000));
+    state.getAnimations().forEach(a => a.finish());
+    assert.equal(getComputedStyle(state).opacity, '0.8', 'paused');
+    s = E.toggle(s, T0 + 3000);
+    stage.update(E.view(s, T0 + 3000));
+    assert.equal(state.textContent, '');
+    state.getAnimations().forEach(a => a.finish());
+    assert.equal(getComputedStyle(state).opacity, '0', 'resumed, it fades out');
+    stage.destroy();
+  });
 })();

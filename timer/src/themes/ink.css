@@ -117,6 +117,8 @@
 .dt-stage[data-theme="ink"] .dt-clock[data-phase="over"] .dt-digits { color: var(--accent); }
 /* 「暂停」 goes under the stroke, onto the paper, in ink. */
 .dt-stage[data-theme="ink"][data-kind="single"] .dt-clock .dt-state { top: calc(50% + 25cqh); margin-top: 0; color: var(--ink); opacity: .8; }
+/* Emptied on resume it keeps its word (stage.css :empty::before) while it fades, so it must still go to 0 here. */
+.dt-stage[data-theme="ink"][data-kind="single"] .dt-clock .dt-state:empty { opacity: 0; }
 
 /* The paper and the digits each get a layer of their own: the paper's feTurbulence tile is then drawn once, not
    again under every frame's change of the digits (in software rendering that halves the frame rate). */

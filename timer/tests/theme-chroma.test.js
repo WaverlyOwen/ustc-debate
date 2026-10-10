@@ -407,6 +407,25 @@
     }));
   });
 
+  // At 4:3 the sign of +10:00 and beyond joins the row (stage.css): the clock's plate grows with the row and carries
+  // the +, so the sign's own piece and its stretch of the rim are gone, and the plate stays on the stage.
+  DT.test('theme chroma: at 4:3 the sign of +10:00 rides the clock\'s own plate', () => {
+    const box = document.getElementById('sandbox');
+    box.innerHTML = '<div class="dt-stage-host" style="width:1024px;height:768px"></div>';
+    const h = R.mount(box.firstChild);
+    try {
+      h.update(E.view(E.toggle(E.goto(session(), idx(OPENING), T0), T0), T0 + 790000));   // +10:10
+      const r = root(), sign = r.querySelector(DIGITS + ' .dt-sign');
+      assert.equal(cs(sign).position, 'static', 'in the row');
+      assert.equal(cs(sign, '::before').display, 'none', 'no piece of its own');
+      assert.equal(cs(sign, '::after').display, 'none', 'nor its stretch of the rim');
+      const c = r.querySelector(MAIN).getBoundingClientRect(), s = sign.getBoundingClientRect(), st = r.getBoundingClientRect();
+      const k = 768 / 100;   // 1cqh
+      assert.ok(s.left >= c.left - 4 * k + 2 * k, 'the + on the plate, inside its rounded edge');
+      assert.ok(c.left - 4 * k >= st.left && c.right + 4 * k <= st.right, 'the plate on the stage');
+    } finally { h.destroy(); }
+  });
+
   // A side out of time keeps a plate the size of its digits, drained to the dark track, with the word on it.
   DT.test('theme chroma: a locked side keeps its plate, drained, with 时间到 on it', () => {
     frozen(() => mounted(locked(), r => {

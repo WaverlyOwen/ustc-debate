@@ -162,6 +162,12 @@
 /* A stage that opens already over rings no bell: its sign comes with the plate, under the clock's matte. Only the
    wipe's delay differs, so the class going does not move the breath. */
 .dt-stage[data-theme="chroma"].is-entering .dt-clock[data-phase="over"] .dt-sign { animation-delay: 0ms, 620ms; }
+/* Where stage.css seats a +MM:SS sign in the row (4:3, 5:4), the clock's plate grows with the row and carries the +,
+   so the sign has no piece of its own (nor its stretch of the rim: the ring goes round the grown plate). */
+@container (max-aspect-ratio: 3/2) {
+  .dt-stage[data-theme="chroma"] .dt-clock[data-phase="over"][data-long] .dt-sign::before,
+  .dt-stage[data-theme="chroma"] .dt-clock[data-phase="over"][data-long] .dt-sign::after { display: none; }
+}
 
 /* ---- 「暂停」 on a tab of plate ----
    It hangs from the clock's plate as a dark tab, joined behind the plate's bottom edge, and rolls down from it (a

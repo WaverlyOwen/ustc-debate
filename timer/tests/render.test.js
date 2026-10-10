@@ -310,6 +310,24 @@
     h.destroy();
   });
 
+  // A break's name is centred 3cqh above its digits, and the clock paints over the head: its ring stops at 1.2, short
+  // of the name (on a single stage the default 1.65 still clears the speaker line).
+  DT.test('render: a break\'s bell ring stops short of the break\'s name', () => {
+    const h = R.mount(host());
+    h.update(E.view(E.toggle(session(stageIdx('评委打分')), T0), T0 + 1000));
+    const root = document.querySelector('.dt-stage');
+    root.classList.remove('is-entering');
+    try {
+      assert.equal(root.dataset.kind, 'break');
+      h.pulse({ type: 'end', clock: 'main' });
+      const ring = root.querySelector('.dt-clock[data-clock="main"] .dt-ring');
+      assert.equal(getComputedStyle(ring).getPropertyValue('--ring-to').trim(), '1.2');
+      ring.getAnimations().forEach(a => { a.pause(); a.currentTime = 1099; });   // its last frame, short of animationend
+      const top = ring.getBoundingClientRect().top, head = root.querySelector('.dt-head').getBoundingClientRect().bottom;
+      assert.ok(top > head, 'the ring\'s top ' + top + ' stays below the name\'s bottom ' + head);
+    } finally { h.destroy(); }
+  });
+
   // S2/S5: the end bell's two rings are concentric: the second reuses the first's measure, though the sign has come in
   // between and the glyphs measured now would be wider.
   DT.test('render: a single stage\'s end rings twice, 320 ms apart, both round the same glyphs', async () => {
@@ -360,10 +378,14 @@
       assert.deepEqual([rings[0].dataset.type, rings[0].dataset.nth, rings[0].dataset.side], ['end', '1', 'pro']);
       assert.deepEqual([root.dataset.bell, root.dataset.bellClock], ['end', 'pro']);
       assert.near(num(rings[0], '--ring-to'), reachIn(rings[0], root, 0.42), 1e-3, 'the 42% it is left with');
+      rings[0].getAnimations().forEach(a => { a.currentTime = 1099; });   // its last frame, short of animationend
+      assert.near(parseFloat(getComputedStyle(rings[0]).scale), num(rings[0], '--ring-to'), 1e-3, 'and the ring grows no further than that');
       h.pulse({ type: 'warn', clock: 'con' });
       const warn = half('con').querySelector('.dt-ring');
       assert.equal(warn.dataset.side, 'con');
       assert.near(num(warn, '--ring-to'), reachIn(warn, root, 0.58), 1e-3, 'the 58% of the side holding the floor');
+      warn.getAnimations().forEach(a => { a.pause(); a.currentTime = 1099; });
+      assert.near(parseFloat(getComputedStyle(warn).scale), num(warn, '--ring-to'), 1e-3, 'nor does a warn bell\'s');
       h.pulse({ type: 'end', clock: 'con' });   // the last side runs out too
       s = E.tick(s, T0 + 480200).session;
       h.update(E.view(s, T0 + 480200));
@@ -435,6 +457,30 @@
     h.destroy();
   });
 
+  // On a 4:3 stage a hanging sign of +MM:SS would leave the stage: from +10:00 (two-digit minutes, data-long) it joins
+  // the row. Below ten minutes it still hangs, so the digits keep their place as the sign comes.
+  DT.test('render: at 4:3 the sign of +10:00 and beyond joins the row and stays on the stage', () => {
+    const box = document.getElementById('sandbox');
+    box.innerHTML = '<div class="dt-stage-host" style="width:1024px;height:768px"></div>';
+    const h = R.mount(box.firstChild);
+    const s = E.toggle(session(0), T0);   // 3:00
+    try {
+      h.update(E.view(s, T0 + 187000));   // +0:07
+      const root = document.querySelector('.dt-stage');
+      const clock = root.querySelector('.dt-clock[data-clock="main"]');
+      const sign = clock.querySelector('.dt-digits:not(.dt-digits-on) .dt-sign');
+      assert.equal(sign.textContent, '+');
+      assert.ok(!clock.hasAttribute('data-long'));
+      assert.equal(getComputedStyle(sign).position, 'absolute', '+0:07: it hangs outside the row');
+      h.update(E.view(s, T0 + 790000));   // +10:10
+      assert.equal(clock.querySelector('.dt-min').textContent, '10');
+      assert.ok(clock.hasAttribute('data-long'), 'two-digit minutes');
+      const left = sign.getBoundingClientRect().left, stage = root.getBoundingClientRect().left;
+      assert.ok(left >= stage, 'the sign\'s left ' + left + ' is on the stage (' + stage + ')');
+      assert.equal(getComputedStyle(sign).position, 'static', 'in the row');
+    } finally { h.destroy(); }
+  });
+
   // CO3 and the like: a step once a second, on the stage for the clock holding the floor and on each half for its own.
   DT.test('render: --secs and --secs-total give the whole seconds shown, on the stage and on each half', () => {
     const h = R.mount(host());
@@ -453,41 +499,53 @@
     h.destroy();
   });
 
-  // S7: the breath runs all the time; stopping and starting are one-shots over it.
-  DT.test('render: the colon settles as its clock stops and rises as it starts, over a breath that never stops', () => {
+  // S7: the colon breathes only while its clock runs. Stopped, it settles from where the breath was to --colon-rest and
+  // then runs nothing: a running animation or a held fill keeps it composited, and a free debate's filtered waiting
+  // half with it. Started, it rises from rest into the breath.
+  DT.test('render: the colon settles from its breath as its clock stops, then runs nothing, and rises as it starts', () => {
     const h = R.mount(host());
-    let s = session(0);
-    h.update(E.view(s, T0));
-    const colon = document.querySelector('.dt-clock[data-clock="main"] .dt-colon');
-    const cs = getComputedStyle(colon);
-    assert.equal(cs.animationName, 'dt-breathe, dt-colon-rest', 'stopped');
-    assert.equal(cs.animationFillMode.split(', ')[1], 'forwards', 'and staying stopped');
-    const breath = () => colon.getAnimations().find(a => a.animationName === 'dt-breathe');
-    const first = breath();
-    s = E.toggle(s, T0 + 1000);
-    h.update(E.view(s, T0 + 1000));
-    assert.equal(cs.animationName, 'dt-breathe, dt-colon-wake', 'started');
-    assert.equal(breath(), first, 'the same breath, not a new one');
-    s = E.toggle(s, T0 + 2000);
-    h.update(E.view(s, T0 + 2000));
-    assert.equal(cs.animationName, 'dt-breathe, dt-colon-rest', 'stopped again');
-    assert.equal(breath(), first);
-    assert.equal(cs.animationDuration, '1s, 0.2s');
-    h.destroy();
+    let s = E.toggle(session(0), T0);
+    try {
+      h.update(E.view(s, T0));
+      const colons = Array.from(document.querySelectorAll('.dt-clock[data-clock="main"] .dt-colon'));
+      const colon = colons[0], cs = getComputedStyle(colon);
+      assert.equal(cs.animationName, 'dt-breathe, dt-colon-wake', 'running');
+      // Part way into a breath, the wake over: where it will settle from.
+      colon.getAnimations().forEach(a => { if (a.animationName === 'dt-colon-wake') a.finish(); else a.currentTime = 250; });
+      const live = parseFloat(cs.opacity);
+      assert.ok(live > 0.6 && live < 0.95, 'part way into a breath: ' + live);
+      s = E.toggle(s, T0 + 1000);
+      h.update(E.view(s, T0 + 1000));
+      assert.equal(cs.animationName, 'dt-colon-settle', 'stopped: the breath goes');
+      assert.equal(cs.animationFillMode, 'none', 'and nothing holds the colon once it has settled');
+      assert.equal(cs.animationDuration, '0.2s');
+      assert.near(parseFloat(colon.style.getPropertyValue('--colon-from')), live, 1e-3, 'it settles from where the breath was');
+      assert.near(parseFloat(cs.opacity), live, 0.01, 'from the first frame');
+      // 200 ms on (the test page's timeline does not keep real time): the settle is over and leaves nothing behind.
+      colons.forEach(c => c.getAnimations().forEach(a => { a.currentTime = 200; }));
+      assert.deepEqual(colons.map(c => c.getAnimations().length), [0, 0], 'settled, neither layer\'s colon runs anything');
+      assert.equal(cs.opacity, '0.55', 'at rest');
+      s = E.toggle(s, T0 + 2000);
+      h.update(E.view(s, T0 + 2000));
+      assert.equal(cs.animationName, 'dt-breathe, dt-colon-wake', 'started again');
+      assert.equal(cs.animationDuration, '1s, 0.2s');
+      assert.equal(cs.opacity, '0.55', 'rising from rest, from the first frame');
+    } finally { h.destroy(); }
   });
 
-  // The breath peaks as the digits change. The delay allows for how far each colon's breath has already run.
+  // The breath peaks as the digits change. It starts with the clock, so both layers' colons take the clock's delay.
   DT.test('render: a clock that starts or resumes sets --beat-delay so its colon breathes in step with the seconds', () => {
     const h = R.mount(host());
     let s = session(0);
     h.update(E.view(s, T0));
     const clock = document.querySelector('.dt-clock[data-clock="main"]');
     const [colon, onColon] = clock.querySelectorAll('.dt-colon');
+    const breath = el => el.getAnimations().find(a => a.animationName === 'dt-breathe');
     assert.equal(clock.style.getPropertyValue('--beat-delay'), '', 'not while it waits');
+    assert.equal(breath(colon), undefined, 'nor any breath');
     s = E.toggle(s, T0);
     h.update(E.view(s, T0));
     assert.equal(clock.style.getPropertyValue('--beat-delay'), '0ms', 'a new stage: a second to the first tick');
-    const breath = el => el.getAnimations().find(a => a.animationName === 'dt-breathe');
     // Where in its cycle a colon's breath is: its time less its delay.
     const phase = el => {
       const delay = parseFloat(getComputedStyle(el).animationDelay) * 1000;
@@ -495,15 +553,63 @@
     };
     s = E.toggle(s, T0 + 1300);
     h.update(E.view(s, T0 + 1300));   // paused with 178.7 s left
-    breath(colon).currentTime = 4437;   // the breath has run on, 4.437 s, its phase anything
-    breath(onColon).currentTime = 4100;   // the on-field layer's started later (it is not shown on every stage)
+    assert.equal(breath(colon), undefined, 'no breath while it is paused');
     s = E.toggle(s, T0 + 5000);
     h.update(E.view(s, T0 + 5000));   // resumed: 700 ms to the next tick, so 300 ms into the cycle
-    assert.equal(clock.style.getPropertyValue('--beat-delay'), '-863ms');
+    // The delay is in place as the new breath is made: changed under it, the colon's wake would miss its first frame.
+    assert.equal(getComputedStyle(colon).opacity, '0.55', 'it rises from rest, from the first frame');
+    assert.equal(clock.style.getPropertyValue('--beat-delay'), '-300ms');
     assert.near(phase(colon), 300, 1, 'the colon peaks on the tick');
     assert.near(phase(onColon), 300, 1, 'and so does the other layer\'s');
-    assert.equal(onColon.style.getPropertyValue('--beat-delay'), '-200ms', 'with a delay of its own');
+    assert.equal(onColon.style.getPropertyValue('--beat-delay'), '', 'on the clock\'s delay');
     h.destroy();
+  });
+
+  // 「暂停」 fades out on resume as it faded in on pause: emptied, the label keeps the word (data-was) while it fades.
+  // A locked side's word is not kept, and a new stage cuts the label at once.
+  DT.test('render: 暂停 fades out on resume, keeping its word while it fades', () => {
+    const h = R.mount(host());
+    let s = E.toggle(session(0), T0);
+    try {
+      h.update(E.view(s, T0 + 1000));
+      const root = document.querySelector('.dt-stage');
+      root.classList.remove('is-entering');
+      const state = root.querySelector('.dt-clock[data-clock="main"] .dt-state');
+      s = E.toggle(s, T0 + 2000);
+      h.update(E.view(s, T0 + 2000));
+      assert.equal(state.textContent, '暂停');
+      assert.equal(state.dataset.was, '暂停');
+      state.getAnimations().forEach(a => a.finish());
+      assert.equal(getComputedStyle(state).opacity, '0.72');
+      s = E.toggle(s, T0 + 3000);
+      h.update(E.view(s, T0 + 3000));
+      assert.equal(state.textContent, '', 'resumed');
+      const kept = getComputedStyle(state, '::before').content;
+      assert.ok(/暂停/.test(kept), 'the word stays while it fades: ' + kept);
+      assert.ok(state.getBoundingClientRect().width > 0, 'in its own box');
+      const fade = state.getAnimations().find(a => a.transitionProperty === 'opacity');
+      assert.ok(fade, 'a fade on its opacity');
+      fade.finish();
+      assert.equal(getComputedStyle(state).opacity, '0', 'out');
+      // Paused again, then a new stage: the label is cut, not faded over the new stage.
+      s = E.toggle(s, T0 + 4000);
+      h.update(E.view(s, T0 + 4000));
+      state.getAnimations().forEach(a => a.finish());
+      h.update(E.view(E.goto(s, 1, T0 + 5000), T0 + 5000));
+      assert.ok(root.classList.contains('is-entering'));
+      assert.equal(state.textContent, '');
+      assert.equal(state.getAnimations().length, 0, 'no fade while a new stage enters');
+      assert.equal(getComputedStyle(state).opacity, '0');
+    } finally { h.destroy(); }
+    // A locked side's word is not kept.
+    const d = R.mount(host());
+    let f = E.toggle(session(stageIdx('自由辩论')), T0);
+    f = E.tick(f, T0 + 241000).session;
+    d.update(E.view(f, T0 + 241000));
+    const word = document.querySelector('.dt-half[data-side="pro"] .dt-state');
+    assert.equal(word.textContent, '时间到');
+    assert.equal(word.dataset.was, '', 'nothing to keep');
+    d.destroy();
   });
 
   DT.test('render: a still shows a running colon at full strength and a stopped one at rest', () => {
@@ -592,6 +698,11 @@
     assert.equal(d.scale, '0.92');
     assert.equal(st.position, 'absolute');
     assert.ok(/dt-fade-in/.test(st.animationName) && st.animationDelay === '0.2s', 'the word comes in after them: ' + st.animationName);
+    // Filling backwards only: a held opacity would keep the word composited, and the filtered half a surface of its own.
+    assert.equal(st.animationFillMode, 'backwards');
+    state.getAnimations().forEach(a => a.finish());
+    assert.equal(state.getAnimations().length, 0, 'once in, nothing runs on it');
+    assert.equal(st.opacity, '0.92', 'and it stands at its own opacity');
     const c = clock.getBoundingClientRect(), r = state.getBoundingClientRect();
     assert.near((r.left + r.right) / 2, (c.left + c.right) / 2, 1, 'centred across');
     assert.near((r.top + r.bottom) / 2, (c.top + c.bottom) / 2, 1, 'and down');

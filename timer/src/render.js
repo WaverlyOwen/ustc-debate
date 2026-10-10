@@ -222,36 +222,39 @@
       both(parts.sign, over ? '+' : '');
       both(parts.min, hm[0]);
       both(parts.sec, hm[1] || '');
-      text(parts.state, stateText(clock, kind));
+      attr(parts.el, 'data-long', hm[0].length > 1 ? '' : null);   // two-digit minutes (stage.css seats the sign)
+      // 「暂停」 keeps its word (stage.css :empty::before) while it fades on resume; a locked side's word never lingers.
+      const word = stateText(clock, kind);
+      if (word) attr(parts.state, 'data-was', word === '暂停' ? word : '');
+      text(parts.state, word);
       attr(parts.el, 'data-phase', clock.phase);
       const wasRunning = parts.el.getAttribute('data-running') === 'true';
-      attr(parts.el, 'data-running', clock.running ? 'true' : 'false');
       if (clock.running && !wasRunning) beat(parts, clock);
+      attr(parts.el, 'data-running', clock.running ? 'true' : 'false');
+    }
+
+    // A clock that stops takes its colon's breath away (stage.css), and the colon settles to rest from where the breath
+    // was: each colon's live opacity, read while the breath still runs, is the settle's from (--colon-from). `list`
+    // pairs each clock about to be painted with what it will show. update() calls this before it writes anything, so
+    // the read (a style flush) finds nothing half-written: part way through, it would split the update's changes in
+    // two, and a transition one of them starts (a waiting half's digit colour) would not reach what inherits it (the
+    // half's colon).
+    function settle(list) {
+      const stopping = list.filter(([parts, clock]) =>
+        clock && !clock.running && parts.el.getAttribute('data-running') === 'true');
+      const from = stopping.map(([parts]) => Array.from(parts.colons, colon => getComputedStyle(colon).opacity));
+      stopping.forEach(([parts], i) => parts.colons.forEach((colon, j) => cssVar(colon, '--colon-from', from[i][j])));
     }
 
     // A clock that starts or resumes breathes its colon in step with the seconds: the breath (1000 ms, at full strength
-    // at the start of each cycle) peaks as the digits change. For a breath that starts now the delay is
-    // -(1000 - ms to the next tick), a new stage's 0 ms; but the colon's breath runs all along (stage.css) and a new
-    // animation-delay only moves its phase, so the delay also allows for how far the breath has run. The clock gets the
-    // delay for its first layer's colon; a colon whose breath started at another time (the on-field layer, shown on
-    // some stages only) gets its own.
+    // at the start of each cycle) peaks as the digits change. The breath starts with the clock (stage.css), so its delay
+    // is -(1000 - ms to the next tick), a new stage's 0 ms, for every colon of the clock. It is written before the clock
+    // says it runs, so the breath is made with it: a delay changed while the new breath and the colon's wake are still
+    // pending leaves the wake out of their first frame, and the colon would flash to the breath's value.
     function beat(parts, clock) {
       const rem = clock.remaining;
       const toTick = rem >= 0 ? rem % 1000 || 1000 : 1000 - (-rem % 1000);
-      const phase = 1000 - toTick;   // how far into its cycle the breath should be now
-      const delay = colon => {
-        const list = typeof colon.getAnimations === 'function' ? colon.getAnimations() : [];
-        const breath = list.find(a => a.animationName === 'dt-breathe');
-        const ran = breath && typeof breath.currentTime === 'number' ? breath.currentTime : 0;
-        return -Math.round((((phase - ran) % 1000) + 1000) % 1000) + 'ms';
-      };
-      const first = delay(parts.colons[0]);
-      cssVar(parts.el, '--beat-delay', first);
-      for (let i = 1; i < parts.colons.length; i++) {
-        const own = delay(parts.colons[i]);
-        if (own === first) parts.colons[i].style.removeProperty('--beat-delay');
-        else cssVar(parts.colons[i], '--beat-delay', own);
-      }
+      cssVar(parts.el, '--beat-delay', -Math.round(1000 - toTick) + 'ms');
     }
 
     // A half seen to run out or yield on the stage it was painted on carries data-locking for LOCKING_MS, for a theme's
@@ -439,6 +442,9 @@
       const kind = st ? st.type : 'break';
       const seat = v.proSeat === 'right' ? 'right' : 'left';
       const match = v.match || {};
+      const active = kind === 'dual' ? v.clocks.find(c => c.active) || null : v.clocks[0] || null;
+      const idle = kind === 'dual' && !active;
+      settle(kind === 'dual' ? v.clocks.map(c => [clocks[c.id], c]) : st ? [[clocks.main, active]] : []);
 
       const key = v.mode + '|' + (st ? st.id : '');
       if (key !== lastKey) { lastKey = key; clearLocking(); enter(); }
@@ -448,8 +454,6 @@
         seatOrder(els.teams, teamSpans.pro, teamSpans.con, seat);
       }
 
-      const active = kind === 'dual' ? v.clocks.find(c => c.active) || null : v.clocks[0] || null;
-      const idle = kind === 'dual' && !active;
       attr(stage, 'data-mode', v.mode);
       attr(stage, 'data-kind', kind);
       attr(stage, 'data-side', (active && kind !== 'break' && active.side) || 'none');

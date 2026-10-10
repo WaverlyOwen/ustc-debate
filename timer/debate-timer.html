@@ -233,16 +233,18 @@ body {
   translate: 0 .07em;
   transition: color 300ms ease;
 }
-/* The colon breathes all the time. Stopping and starting are one-shots laid over the breath, whose to-only and
-   from-only keyframes meet its live value: stopped, it settles from wherever the breath was to --colon-rest in 200 ms
-   and stays there (the breath runs on beneath, unseen); started, it rises from --colon-rest back into the breath.
-   render.js sets --beat-delay on a clock as it starts, so the breath peaks as the seconds change. A still stands
-   running at the breath's start (1) and stopped at --colon-rest. */
+/* The colon breathes while its clock runs. Starting and stopping are from-only one-shots: started, it rises from
+   --colon-rest into the breath; stopped, the breath goes and it settles in 200 ms from where the breath was
+   (--colon-from, which render.js reads off each colon as its clock stops) to --colon-rest, and then nothing runs on
+   it. A running animation, or a finished `forwards` fill, keeps the colon composited, and inside a free debate's
+   filtered waiting half that makes the half a surface redrawn with its filter every frame. render.js sets
+   --beat-delay on a clock as it starts, so the breath peaks as the seconds change. A still stands running at the
+   breath's start (1) and stopped at --colon-rest. */
 .dt-colon {
   padding: 0 .03em;
   opacity: var(--colon-rest, .55);
   transition: color 300ms ease;
-  animation: dt-breathe 1000ms ease-in-out var(--beat-delay, 0ms) infinite, dt-colon-rest 200ms ease forwards;
+  animation: dt-colon-settle 200ms ease;
 }
 .dt-clock[data-running="true"] .dt-colon {
   animation: dt-breathe 1000ms ease-in-out var(--beat-delay, 0ms) infinite, dt-colon-wake 200ms ease;
@@ -259,6 +261,9 @@ body {
 .dt-sign:empty { opacity: 0; }
 /* The breath waits out the fade's 300 ms. */
 .dt-clock[data-phase="over"] .dt-sign { animation: dt-breathe 2000ms ease-in-out 300ms infinite; }
+/* Hung outside the row, the sign of +MM:SS would leave a stage squarer than about 1.42:1 (4:3, 5:4). There it joins
+   the row once the minutes have two digits (render.js data-long), at +10:00, where the row re-centres anyway. */
+@container (max-aspect-ratio: 3/2) { .dt-clock[data-phase="over"][data-long] .dt-sign { position: static; } }
 .dt-clock.is-bump .dt-digits { animation: dt-bump 240ms ease-out; }
 
 /* Two layers of the same digits (spec §1.5): .dt-digits in --digits-off-field, and over it .dt-digits-on in
@@ -308,6 +313,9 @@ body {
   transition: opacity 200ms ease;
 }
 .dt-state:empty { opacity: 0; }
+/* Emptied on resume, it keeps its word (render.js data-was, 「暂停」 only) while it fades out; a new stage cuts it. */
+.dt-state:empty::before { content: attr(data-was) / ""; }
+.dt-stage.is-entering .dt-state { transition: none; }
 
 /* ---- dual: two halves by seat, the speaking side widens to 58% ---- */
 
@@ -402,7 +410,7 @@ body {
   font-size: 6cqh;
   letter-spacing: .3em;
   opacity: .92;
-  animation: dt-fade-in 300ms ease 200ms both;
+  animation: dt-fade-in 300ms ease 200ms backwards;   /* not `both`: a held opacity keeps it composited in the half */
 }
 .dt-stage:not(.is-entering) .dt-half[data-locked] .dt-digits {
   transition: font-size 520ms var(--ease-out), color 300ms ease, opacity 240ms ease, scale 240ms var(--ease-out);
@@ -613,9 +621,10 @@ body {
    is a stacking context), so it rides the free debate's spring and stays where a locked side's digits were. render.js
    writes the glyphs' size in stage percent (--bell-w of the width, --bell-h of the height) and their centre's offset
    from the clock's (--bell-dy, of the height), and in a half --ring-to, a last scale that stays inside its column.
-   From 1.15 it starts clear of the glyphs' corners; at 1.65 it still clears the speaker line. Centred by its margins,
-   so a theme's own ring is free to use translate. It cannot blend with the field (mix-blend-mode) from inside the
-   clock, and in a half it takes the half's dimming. */
+   From 1.15 it starts clear of the glyphs' corners; at 1.65 it still clears a single stage's speaker line. A break's
+   ring stops at 1.2 (below): its centred name sits 3cqh above the digits, and the clock paints over the head. Centred
+   by its margins, so a theme's own ring is free to use translate. It cannot blend with the field (mix-blend-mode) from
+   inside the clock, and in a half it takes the half's dimming. */
 .dt-ring {
   --ring-w: calc(var(--bell-w, 30) * 1cqw + 3cqh);
   --ring-h: calc(var(--bell-h, 30) * 1cqh + 3cqh);
@@ -632,6 +641,7 @@ body {
   opacity: 0;
   animation: dt-ring 1100ms ease-out forwards;
 }
+.dt-stage[data-kind="break"] .dt-ring { --ring-to: 1.2; }
 
 .dt-toast {
   position: absolute;
@@ -681,7 +691,7 @@ body {
 /* A theme's overtime mark lands on the second bell: animation: dt-stamp 300ms var(--ease-out) 320ms both. */
 @keyframes dt-stamp { from { opacity: 0; scale: 1.12; } }
 @keyframes dt-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
-@keyframes dt-colon-rest { to { opacity: var(--colon-rest, .55); } }
+@keyframes dt-colon-settle { from { opacity: var(--colon-from, var(--colon-rest, .55)); } }
 @keyframes dt-colon-wake { from { opacity: var(--colon-rest, .55); } }
 @keyframes dt-bump { from { transform: scale(1.07); } }
 @keyframes dt-ring {
@@ -2877,6 +2887,12 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 /* A stage that opens already over rings no bell: its sign comes with the plate, under the clock's matte. Only the
    wipe's delay differs, so the class going does not move the breath. */
 .dt-stage[data-theme="chroma"].is-entering .dt-clock[data-phase="over"] .dt-sign { animation-delay: 0ms, 620ms; }
+/* Where stage.css seats a +MM:SS sign in the row (4:3, 5:4), the clock's plate grows with the row and carries the +,
+   so the sign has no piece of its own (nor its stretch of the rim: the ring goes round the grown plate). */
+@container (max-aspect-ratio: 3/2) {
+  .dt-stage[data-theme="chroma"] .dt-clock[data-phase="over"][data-long] .dt-sign::before,
+  .dt-stage[data-theme="chroma"] .dt-clock[data-phase="over"][data-long] .dt-sign::after { display: none; }
+}
 
 /* ---- 「暂停」 on a tab of plate ----
    It hangs from the clock's plate as a dark tab, joined behind the plate's bottom edge, and rolls down from it (a
@@ -3848,6 +3864,8 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-stage[data-theme="ink"] .dt-clock[data-phase="over"] .dt-digits { color: var(--accent); }
 /* 「暂停」 goes under the stroke, onto the paper, in ink. */
 .dt-stage[data-theme="ink"][data-kind="single"] .dt-clock .dt-state { top: calc(50% + 25cqh); margin-top: 0; color: var(--ink); opacity: .8; }
+/* Emptied on resume it keeps its word (stage.css :empty::before) while it fades, so it must still go to 0 here. */
+.dt-stage[data-theme="ink"][data-kind="single"] .dt-clock .dt-state:empty { opacity: 0; }
 
 /* The paper and the digits each get a layer of their own: the paper's feTurbulence tile is then drawn once, not
    again under every frame's change of the digits (in software rendering that halves the frame rate). */
@@ -6836,36 +6854,39 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       both(parts.sign, over ? '+' : '');
       both(parts.min, hm[0]);
       both(parts.sec, hm[1] || '');
-      text(parts.state, stateText(clock, kind));
+      attr(parts.el, 'data-long', hm[0].length > 1 ? '' : null);   // two-digit minutes (stage.css seats the sign)
+      // 「暂停」 keeps its word (stage.css :empty::before) while it fades on resume; a locked side's word never lingers.
+      const word = stateText(clock, kind);
+      if (word) attr(parts.state, 'data-was', word === '暂停' ? word : '');
+      text(parts.state, word);
       attr(parts.el, 'data-phase', clock.phase);
       const wasRunning = parts.el.getAttribute('data-running') === 'true';
-      attr(parts.el, 'data-running', clock.running ? 'true' : 'false');
       if (clock.running && !wasRunning) beat(parts, clock);
+      attr(parts.el, 'data-running', clock.running ? 'true' : 'false');
+    }
+
+    // A clock that stops takes its colon's breath away (stage.css), and the colon settles to rest from where the breath
+    // was: each colon's live opacity, read while the breath still runs, is the settle's from (--colon-from). `list`
+    // pairs each clock about to be painted with what it will show. update() calls this before it writes anything, so
+    // the read (a style flush) finds nothing half-written: part way through, it would split the update's changes in
+    // two, and a transition one of them starts (a waiting half's digit colour) would not reach what inherits it (the
+    // half's colon).
+    function settle(list) {
+      const stopping = list.filter(([parts, clock]) =>
+        clock && !clock.running && parts.el.getAttribute('data-running') === 'true');
+      const from = stopping.map(([parts]) => Array.from(parts.colons, colon => getComputedStyle(colon).opacity));
+      stopping.forEach(([parts], i) => parts.colons.forEach((colon, j) => cssVar(colon, '--colon-from', from[i][j])));
     }
 
     // A clock that starts or resumes breathes its colon in step with the seconds: the breath (1000 ms, at full strength
-    // at the start of each cycle) peaks as the digits change. For a breath that starts now the delay is
-    // -(1000 - ms to the next tick), a new stage's 0 ms; but the colon's breath runs all along (stage.css) and a new
-    // animation-delay only moves its phase, so the delay also allows for how far the breath has run. The clock gets the
-    // delay for its first layer's colon; a colon whose breath started at another time (the on-field layer, shown on
-    // some stages only) gets its own.
+    // at the start of each cycle) peaks as the digits change. The breath starts with the clock (stage.css), so its delay
+    // is -(1000 - ms to the next tick), a new stage's 0 ms, for every colon of the clock. It is written before the clock
+    // says it runs, so the breath is made with it: a delay changed while the new breath and the colon's wake are still
+    // pending leaves the wake out of their first frame, and the colon would flash to the breath's value.
     function beat(parts, clock) {
       const rem = clock.remaining;
       const toTick = rem >= 0 ? rem % 1000 || 1000 : 1000 - (-rem % 1000);
-      const phase = 1000 - toTick;   // how far into its cycle the breath should be now
-      const delay = colon => {
-        const list = typeof colon.getAnimations === 'function' ? colon.getAnimations() : [];
-        const breath = list.find(a => a.animationName === 'dt-breathe');
-        const ran = breath && typeof breath.currentTime === 'number' ? breath.currentTime : 0;
-        return -Math.round((((phase - ran) % 1000) + 1000) % 1000) + 'ms';
-      };
-      const first = delay(parts.colons[0]);
-      cssVar(parts.el, '--beat-delay', first);
-      for (let i = 1; i < parts.colons.length; i++) {
-        const own = delay(parts.colons[i]);
-        if (own === first) parts.colons[i].style.removeProperty('--beat-delay');
-        else cssVar(parts.colons[i], '--beat-delay', own);
-      }
+      cssVar(parts.el, '--beat-delay', -Math.round(1000 - toTick) + 'ms');
     }
 
     // A half seen to run out or yield on the stage it was painted on carries data-locking for LOCKING_MS, for a theme's
@@ -7053,6 +7074,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       const kind = st ? st.type : 'break';
       const seat = v.proSeat === 'right' ? 'right' : 'left';
       const match = v.match || {};
+      const active = kind === 'dual' ? v.clocks.find(c => c.active) || null : v.clocks[0] || null;
+      const idle = kind === 'dual' && !active;
+      settle(kind === 'dual' ? v.clocks.map(c => [clocks[c.id], c]) : st ? [[clocks.main, active]] : []);
 
       const key = v.mode + '|' + (st ? st.id : '');
       if (key !== lastKey) { lastKey = key; clearLocking(); enter(); }
@@ -7062,8 +7086,6 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         seatOrder(els.teams, teamSpans.pro, teamSpans.con, seat);
       }
 
-      const active = kind === 'dual' ? v.clocks.find(c => c.active) || null : v.clocks[0] || null;
-      const idle = kind === 'dual' && !active;
       attr(stage, 'data-mode', v.mode);
       attr(stage, 'data-kind', kind);
       attr(stage, 'data-side', (active && kind !== 'break' && active.side) || 'none');
