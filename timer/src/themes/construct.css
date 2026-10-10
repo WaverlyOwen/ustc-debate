@@ -5,7 +5,10 @@
    runs, so to the last second it runs behind the digits to the rim and the room stays the speaking side's. A fine
    grid, the stage's number in the running order set large, the top bar turned against the edges and a thick
    diagonal band make up the rest of the sheet. Red, blue and a yellow for the warn bell and overtime, on a warm
-   graphite ground. All of it is CSS. */
+   graphite ground. All of it is CSS.
+   It moves as a machine does: parts turn about the hub or slide along their own lines. A new stage's poster is set up
+   (the hub pushes in from the seat, the fan swings open, the band slides up its diagonal), the fan steps once a second
+   with the digits, and a bell strikes the hub and lights the scale. */
 [data-theme="construct"] {
   --pro: #BF2A1D;           /* constructivist red: the cream type still reads 4.9:1 on it */
   --pro-deep: var(--ground);
@@ -25,20 +28,30 @@
 }
 
 /* The dial's angle and radius are registered so the entrance can sweep the sector open and a free debate's dials can
-   grow and shrink with the halves. */
+   grow and shrink with the halves; the hub's radius as drawn and the title card's discs, so an entrance can push them
+   in from the seats. */
 @property --construct-sweep { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
 @property --construct-r { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --construct-hub { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --construct-disc { syntax: "<length>"; inherits: false; initial-value: 0px; }
 
 .dt-stage[data-theme="construct"] {
   /* The content keeps to the inner ten of twelve grid columns; the outer two carry the turned top bar. */
   padding-left: calc(100cqw / 12);
   padding-right: calc(100cqw / 12);
   --dial-out: 7cqh;         /* how far outside the seat edge the dial's centre lies */
-  --dial-y: 55cqh;          /* the main digits' centre line (stage.css --clock-y) */
+  /* The main digits' centre line: a copy, in cqh, of stage.css's --clock-y (55%), since a percentage would resolve
+     against each box it is used in (the scale's bell mark draws about it in a small box of its own). Change the two
+     together. */
+  --dial-y: 55cqh;
   --construct-r: 146cqh;    /* its rim arcs past the widest digits, on the far side from the seat */
   --hub-r: 15cqh;
   --hub-ring: transparent calc(100% - .5cqh - 1px), var(--ink) calc(100% - .5cqh), var(--ink) calc(100% - 1px), transparent 100%;
-  --construct-sweep: calc((1 - var(--used)) * 180deg);
+  /* The whole seconds the digits show (render.js --secs of --secs-total): the fan moves when they change. */
+  --construct-sweep: calc(var(--secs, 0) / max(var(--secs-total, 1), 1) * 180deg);
+  /* The hub in the stage's (or a half's) box, and which way its dial faces: for a bell's marks. */
+  --hub-x: calc(-1 * var(--dial-out));
+  --dial-dir: 1;
   /* The title card's dials, each at its side's seat. */
   --pro-x: calc(-1 * var(--dial-out));
   --con-x: calc(100% + var(--dial-out));
@@ -47,23 +60,28 @@
   --pro-x: calc(100% + var(--dial-out));
   --con-x: calc(-1 * var(--dial-out));
 }
-/* The sector is repainted when its angle moves half a degree (a second of a three-minute stage), not every frame. */
-@supports (width: round(nearest, 1px, 1px)) {
-  .dt-stage[data-theme="construct"] { --construct-sweep: round(nearest, calc((1 - var(--used)) * 180deg), .5deg); }
+.dt-stage[data-theme="construct"][data-pro-seat="right"][data-side="pro"],
+.dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] {
+  --hub-x: calc(100% + var(--dial-out));
+  --dial-dir: -1;
 }
 
 /* ---- the dial ---- */
 
 /* A disc of the side's colour at the hub, ringed in cream as the dial's pivot, which stays when the time is up so the
    room still sees whose floor it is; and the sector of time left; all cut to the dial's rim. The sector is centred
-   on the horizontal through the hub (east from the left seat); --dial-from is its upper edge. */
+   on the horizontal through the hub (east from the left seat); --dial-from is its upper edge. Its two edges are soft
+   over a tenth of a degree (less on a sliver), so they do not staircase as they turn. */
 .dt-stage[data-theme="construct"] :is(.dt-field, .dt-half-field) {
   --dial-x: calc(-1 * var(--dial-out));
   --dial-from: calc(90deg - var(--construct-sweep) / 2);
+  --dial-soft: min(.1deg, var(--construct-sweep) / 2);
+  --construct-hub: var(--hub-r);
   background:
-    radial-gradient(circle calc(var(--hub-r) + .5cqh) at var(--dial-x) var(--dial-y), var(--hub-ring)),
-    radial-gradient(circle var(--hub-r) at var(--dial-x) var(--dial-y), var(--side-color) calc(100% - 1px), transparent 100%),
-    conic-gradient(from var(--dial-from) at var(--dial-x) var(--dial-y), var(--side-color) 0 var(--construct-sweep), transparent 0);
+    radial-gradient(circle calc(var(--construct-hub) + .5cqh) at var(--dial-x) var(--dial-y), var(--hub-ring)),
+    radial-gradient(circle var(--construct-hub) at var(--dial-x) var(--dial-y), var(--side-color) calc(100% - 1px), transparent 100%),
+    conic-gradient(from calc(var(--dial-from) - var(--dial-soft) / 2) at var(--dial-x) var(--dial-y),
+      transparent 0, var(--side-color) var(--dial-soft) var(--construct-sweep), transparent calc(var(--construct-sweep) + var(--dial-soft)));
   -webkit-mask: radial-gradient(circle var(--construct-r) at var(--dial-x) var(--dial-y), #000 calc(100% - 1px), transparent 100%);
   mask: radial-gradient(circle var(--construct-r) at var(--dial-x) var(--dial-y), #000 calc(100% - 1px), transparent 100%);
 }
@@ -76,6 +94,13 @@
 .dt-stage[data-theme="construct"] .dt-half:last-child .dt-half-field {
   --dial-x: calc(100% + var(--dial-out));
   --dial-from: calc(270deg - var(--construct-sweep) / 2);
+}
+/* So the fan steps once a second, on the frame the digits change, like a quartz clock's second hand: one repaint a
+   second. (An eased step would draw the dial again on every frame of its turn, which cost a laptop drawing in software
+   at 1080p a fifth of its frames.) A side that yields turns its fan back onto the axis with the switch instead of
+   losing it in one frame (520 ms; not while a stage enters, as stage.css's locked rules). */
+.dt-stage[data-theme="construct"]:not(.is-entering) .dt-half[data-locked] .dt-half-field {
+  transition: --construct-sweep 520ms var(--ease-out);
 }
 
 /* The dial's scale: a tick every 3° and the rim, along the edge of the whole half-disc, so the empty part still reads
@@ -96,12 +121,82 @@
 }
 .dt-stage[data-theme="construct"][data-phase="over"] .dt-field::before { --tick: var(--accent); }
 
-/* The one orchestrated moment: a new stage's sector fans open from the clock's axis. The attributes rank it above
-   stage.css's per-seat sweeps, which it replaces. No `to` frame: it ends on the live angle. */
+/* The one orchestrated moment: a new stage's dial is set up. The hub pushes in from the seat's edge as the sector fans
+   open from the clock's axis, and the scale comes up as the fan finishes opening. The attributes rank it above
+   stage.css's per-seat sweeps, which it replaces. No `to` frames: each ends on the live value. */
 .dt-stage[data-theme="construct"][data-mode][data-side].is-entering :is(.dt-field, .dt-half-field) {
   animation: dt-construct-open 560ms var(--ease-out);
 }
-@keyframes dt-construct-open { from { --construct-sweep: 0deg; } }
+.dt-stage[data-theme="construct"][data-mode][data-side].is-entering :is(.dt-field, .dt-half-field)::before {
+  animation: dt-fade-in 300ms var(--ease-out) 160ms backwards;
+}
+@keyframes dt-construct-open { from { --construct-sweep: 0deg; --construct-hub: calc(var(--dial-out) - .5cqh); } }
+
+/* ---- the bells: the hub is struck, and the scale lights up ----
+   On a dial a bell is not stage.css's ring round the digits. Its stroke lands on the dial's pivot, which flashes
+   yellow and dies away, and runs out to the scale at the rim, which lights yellow a beat later and dies away (on a
+   single stage's end bell it stays lit, as overtime's mark: below). Both are marks of their own, only the size of
+   what they light, over the dial (a single stage's .dt-deco-over; in free debate the half that rang, so they ride its
+   spring and take its dimming) and under the type; only their opacity moves, so the dial is not drawn again. Keyed
+   on the bell (render.js data-bell, data-bell-clock): a still, a thumbnail and reduced motion never have them.
+   A single stage's marks ask for no phase, so a stage changed within the bell's 1.5 s takes the hub's fading mark to
+   its new seat; when render.js clears data-bell on a stage change, they simply stop there. Never gate them on
+   :not(.is-entering): the rule would match again as the class goes, and play the bell a second time. */
+.dt-stage[data-theme="construct"][data-mode="stage"]:is([data-kind="single"], [data-kind="dual"]) .dt-ring { display: none; }
+.dt-stage[data-theme="construct"] .dt-half { --hub-x: calc(-1 * var(--dial-out)); --dial-dir: 1; }
+.dt-stage[data-theme="construct"] .dt-half:last-child { --hub-x: calc(100% + var(--dial-out)); --dial-dir: -1; }
+/* The hub, in yellow: a disc over the side's own, which shows again as it dies away. */
+.dt-stage[data-theme="construct"] .dt-deco-over::before,
+.dt-stage[data-theme="construct"] .dt-half::before {
+  position: absolute;
+  z-index: 1;               /* in a half: over its dial, under its type */
+  left: calc(var(--hub-x) - var(--hub-r) - .5cqh);
+  top: calc(var(--dial-y) - var(--hub-r) - .5cqh);
+  width: calc(2 * var(--hub-r) + 1cqh);
+  height: calc(2 * var(--hub-r) + 1cqh);
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+}
+/* The scale and the rim, in yellow, in a box just round the part that shows (clear of the text above and below). */
+.dt-stage[data-theme="construct"] .dt-deco-over::after,
+.dt-stage[data-theme="construct"] .dt-half::after {
+  --mark-x: calc(7.75cqh - var(--dial-dir) * (var(--construct-r) - 7.25cqh));   /* the hub, from the box's left */
+  --mark-y: calc(var(--dial-y) - 26cqh);
+  position: absolute;
+  z-index: 0;               /* in a half: over its dial (the half's last child), under its type (z-index 1) */
+  left: calc(var(--hub-x) - var(--mark-x));
+  top: 26cqh;
+  width: 15.5cqh;
+  height: 63cqh;
+  background:
+    radial-gradient(circle var(--construct-r) at var(--mark-x) var(--mark-y), transparent calc(100% - .35cqh), var(--accent) calc(100% - .35cqh)),
+    repeating-conic-gradient(from -.25deg at var(--mark-x) var(--mark-y), var(--accent) 0 .5deg, transparent 0 3deg);
+  --mark-scale: radial-gradient(circle var(--construct-r) at var(--mark-x) var(--mark-y), transparent calc(100% - 3.2cqh),
+    #000 calc(100% - 3.2cqh) calc(100% - 1px), transparent 100%);
+  --mark-clear: linear-gradient(to bottom, transparent, #000 6cqh 58cqh, transparent);
+  -webkit-mask: var(--mark-scale), var(--mark-clear);
+  -webkit-mask-composite: source-in;
+  mask: var(--mark-scale), var(--mark-clear);
+  mask-composite: intersect;
+  pointer-events: none;
+}
+.dt-stage[data-theme="construct"][data-kind="single"]:is([data-bell="warn"], [data-bell="end"])[data-bell-clock="main"] .dt-deco-over::before,
+.dt-stage[data-theme="construct"]:is([data-bell="warn"], [data-bell="end"])[data-bell-clock="pro"] .dt-half[data-side="pro"]::before,
+.dt-stage[data-theme="construct"]:is([data-bell="warn"], [data-bell="end"])[data-bell-clock="con"] .dt-half[data-side="con"]::before {
+  content: "";
+  opacity: 0;
+  animation: dt-construct-strike 900ms ease-out;
+}
+.dt-stage[data-theme="construct"][data-kind="single"][data-bell="warn"][data-bell-clock="main"] .dt-deco-over::after,
+.dt-stage[data-theme="construct"]:is([data-bell="warn"], [data-bell="end"])[data-bell-clock="pro"] .dt-half[data-side="pro"]::after,
+.dt-stage[data-theme="construct"]:is([data-bell="warn"], [data-bell="end"])[data-bell-clock="con"] .dt-half[data-side="con"]::after {
+  content: "";
+  opacity: 0;
+  animation: dt-construct-lit 1100ms linear;
+}
+@keyframes dt-construct-strike { from { opacity: 1; } }
+@keyframes dt-construct-lit { 12% { opacity: 1; } }
 
 /* ---- the warn bell point: two yellow notches at the rim, where the fan's edges will be when it rings ---- */
 
@@ -170,8 +265,9 @@
 
 /* A thick band rising from the floor away from the seat, under the dial and clear of the digits and of the stage's
    number, which sits below it in the far corner. It turns yellow when the time is up. Free debate has its two dials
-   and the end card its table, so neither has it. */
-.dt-stage[data-theme="construct"] .dt-deco::before {
+   and the end card its table, so neither has it. ::after is the concrete the end bell draws back off it (below). */
+.dt-stage[data-theme="construct"] .dt-deco::before,
+.dt-stage[data-theme="construct"] .dt-deco::after {
   content: "";
   position: absolute;
   left: 62cqw;
@@ -182,17 +278,50 @@
   background: var(--band);
   transform-origin: 0 50%;
   rotate: -34deg;
+  --band-back: -1;          /* which way along its length is back toward the floor */
 }
+.dt-stage[data-theme="construct"] .dt-deco::after { content: none; }
 .dt-stage[data-theme="construct"][data-pro-seat="right"][data-side="pro"] .dt-deco::before,
-.dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-deco::before {
+.dt-stage[data-theme="construct"][data-pro-seat="right"][data-side="pro"] .dt-deco::after,
+.dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-deco::before,
+.dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-deco::after {
   left: auto;
   right: 62cqw;
   transform-origin: 100% 50%;
   rotate: 34deg;
+  --band-back: 1;
 }
 .dt-stage[data-theme="construct"][data-phase="over"] .dt-deco::before { background: var(--accent); }
 .dt-stage[data-theme="construct"][data-kind="dual"] .dt-deco::before,
 .dt-stage[data-theme="construct"][data-mode="end"] .dt-deco::before { display: none; }
+/* A new stage's band slides up its own diagonal from below the stage (a translate along its length, inside the turn),
+   out from under the opening fan: its whole length, and the 31cqh that take its far end, corners and all, from its
+   floor end to below the stage's lower edge (14cqh down, and half its 7.5cqh across at 34°: 17.1cqh ÷ sin 34°). */
+.dt-stage[data-theme="construct"].is-entering .dt-deco::before {
+  animation: dt-construct-band 720ms cubic-bezier(.45, 0, .2, 1) backwards;
+}
+@keyframes dt-construct-band { from { transform: translateX(calc(var(--band-back) * (100% + 31cqh))); } }
+/* Time up: yellow runs up the band from the floor between the end bell's two strokes. The band is yellow at once;
+   over it, the concrete draws back along the band to its far end, off the stage, so a still shows the yellow band.
+   Keyed on the bell (data-bell), like the scale's hold below: on the projector window the state can arrive a frame
+   before the bell, so the band and the scale show their yellow for that frame and then play from concrete and cream.
+   Accepted (keying them on the phase instead would play them on a stage opened in overtime). */
+.dt-stage[data-theme="construct"][data-phase="over"][data-bell="end"][data-bell-clock="main"]:not([data-kind="dual"]):not([data-mode="end"]) .dt-deco::after {
+  content: "";
+  transform: translateX(calc(-100% * var(--band-back))) scaleX(0);
+  animation: dt-construct-band-yellow 560ms linear backwards;
+}
+@keyframes dt-construct-band-yellow { from { transform: none; } }
+/* The scale lights for good on the end bell's second stroke: its yellow mark (above) comes up over the cream scale,
+   which turns yellow itself, under it, once the mark is up (a discrete hold, so it is drawn again once). */
+.dt-stage[data-theme="construct"][data-kind="single"][data-phase="over"][data-bell="end"][data-bell-clock="main"] .dt-field::before {
+  animation: dt-construct-scale-hold 620ms;
+}
+@keyframes dt-construct-scale-hold { from, to { --tick: rgb(241 234 219 / .5); } }
+.dt-stage[data-theme="construct"][data-kind="single"][data-phase="over"][data-bell="end"][data-bell-clock="main"] .dt-deco-over::after {
+  content: "";
+  animation: dt-fade-in 300ms var(--ease-out) 320ms backwards;
+}
 
 /* ---- the stage's number: counted from the progress bar, so it is its true place in the order ---- */
 
@@ -219,6 +348,10 @@
 .dt-stage[data-theme="construct"][data-pro-seat="left"][data-side="con"] .dt-seg[data-state="current"]::before {
   right: auto;
   left: calc(-100cqw / 24);
+}
+/* It rises with the stage's name. */
+.dt-stage[data-theme="construct"].is-entering .dt-seg[data-state="current"]::before {
+  animation: dt-rise 420ms var(--ease-out) backwards;
 }
 
 /* ---- type ---- */
@@ -267,10 +400,10 @@
 
 .dt-stage[data-theme="construct"] .dt-half {
   --half-ground: transparent;   /* the ground shows between the two dials */
-  --dial-y: 52cqh;          /* a half's digits' centre line (stage.css) */
+  --dial-y: 52cqh;          /* a half's digits' centre line: a copy of stage.css's .dt-half .dt-clock top: 52% */
   --hub-r: 10cqh;
   --construct-r: 74cqh;
-  --construct-sweep: calc(var(--remain, 1) * 180deg);
+  --construct-sweep: calc(var(--secs, 0) / max(var(--secs-total, 1), 1) * 180deg);
   box-shadow: none;
   /* stage.css's transitions as well as the dial's: filter and --dim here, and --remain too once the side is out. */
   transition: filter 520ms var(--ease-out), --dim 520ms var(--ease-out), --construct-r 520ms var(--ease-spring);
@@ -279,24 +412,29 @@
   transition: filter 520ms var(--ease-out), --dim 520ms var(--ease-out), --remain 520ms var(--ease-out),
     --construct-r 520ms var(--ease-spring);
 }
-@supports (width: round(nearest, 1px, 1px)) {
-  .dt-stage[data-theme="construct"] .dt-half { --construct-sweep: round(nearest, calc(var(--remain, 1) * 180deg), .5deg); }
-}
 .dt-stage[data-theme="construct"] .dt-half[data-active] { --construct-r: 98cqh; }
 .dt-stage[data-theme="construct"] .dt-halves[data-idle] .dt-half { --construct-r: 86cqh; }   /* clear of the larger idle digits */
 .dt-stage[data-theme="construct"] .dt-team { left: calc(100cqw / 12); right: calc(100cqw / 12); }
-.dt-stage[data-theme="construct"] .dt-half-field { inset: 0; height: auto; clip-path: none; }
+/* Each dial is drawn on a sheet the stage's width, anchored at its seat's edge, which the half only clips: as the
+   columns spring the sheet keeps its size, so the dial is not drawn again for every width the half passes through. */
+.dt-stage[data-theme="construct"] .dt-half-field { inset: 0 auto 0 0; width: 100cqw; height: auto; clip-path: none; }
+.dt-stage[data-theme="construct"] .dt-half:last-child .dt-half-field { left: auto; right: 0; }
 /* A side whose time is up says so in the heading's weight, not stage.css's light fallback. */
 .dt-stage[data-theme="construct"] .dt-half[data-locked] .dt-state { font-weight: 700; letter-spacing: .2em; opacity: 1; }
 
 /* ---- cards ---- */
 
-/* The title card: each side's dial, full, at its seat. */
+/* The title card: each side's dial, full, at its seat; the two swell in from the seats as the card comes. */
 .dt-stage[data-theme="construct"][data-mode="title"] .dt-deco {
+  --construct-disc: 52cqh;
   background:
-    radial-gradient(circle 52cqh at var(--pro-x) 50%, var(--pro) calc(100% - 1px), transparent 100%),
-    radial-gradient(circle 52cqh at var(--con-x) 50%, var(--con) calc(100% - 1px), transparent 100%);
+    radial-gradient(circle var(--construct-disc) at var(--pro-x) 50%, var(--pro) calc(100% - 1px), transparent 100%),
+    radial-gradient(circle var(--construct-disc) at var(--con-x) 50%, var(--con) calc(100% - 1px), transparent 100%);
 }
+.dt-stage[data-theme="construct"][data-mode="title"].is-entering .dt-deco {
+  animation: dt-construct-disc 560ms var(--ease-out) backwards;
+}
+@keyframes dt-construct-disc { from { --construct-disc: var(--dial-out); } }
 
 /* The end card: both dials have run down to their hubs, one at each side's seat. */
 .dt-stage[data-theme="construct"][data-mode="end"] .dt-deco {
