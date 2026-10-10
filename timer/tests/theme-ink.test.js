@@ -377,8 +377,16 @@
   });
 
   // Spec §1.5: the speaking side shows in every state. When the time runs out the ink runs out at the seat: a short
-  // dry stub of the side's colour stays at its edge, clear of the digits (the red seal alone would read as 正方's).
+  // dry stub of the side's colour stays at its edge, clear of the digit row (the red seal alone would read as 正方's),
+  // and at 16:9 clear of the overtime "+" too, which hangs outside the digits' box (stage.css). On a stage squarer than
+  // about 1.42:1 the "+" of +M:SS reaches into the stub when the speaking seat is on the left: there it is drawn above
+  // it.
   DT.test('theme ink: in overtime a dry stub of the speaking side\'s ink stays at its seat', () => {
+    // What the stub keeps clear of: the digits' box, and the sign's once it has its "+".
+    const glyphs = clock => {
+      const d = clock.querySelector('.dt-digits').getBoundingClientRect(), g = clock.querySelector('.dt-sign').getBoundingClientRect();
+      return g.width ? { left: Math.min(d.left, g.left), right: Math.max(d.right, g.right) } : d;
+    };
     [[OPENING, 'left', 'left', '--pro'], [OPENING, 'right', 'right', '--pro'], [REBUTTAL, 'left', 'right', '--con'], [REBUTTAL, 'right', 'left', '--con']].forEach(([name, seat, from, color]) => {
       [179, 187].forEach(secs => {
         const { stage, root } = mountInk(singleAt(name, secs, seat));
@@ -390,11 +398,29 @@
         assert.equal(resolve(field, '--ink-stroke'), resolve(root, color), where);
         const onScreen = from === 'left' ? tipX(field, from) - box.left : box.right - tipX(field, from);
         assert.ok(onScreen >= 0.05 * S && onScreen <= 0.1 * S, where + ': stub ' + onScreen);
-        const d = root.querySelector('.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect();
+        const d = glyphs(root.querySelector('.dt-clock[data-clock="main"]'));
         const clear = from === 'left' ? d.left - tipX(field, from) : tipX(field, from) - d.right;
-        assert.ok(clear > 0.1 * S, where + ': clear of the digits by ' + clear);
+        assert.ok(clear > 0.09 * S, where + ': clear of the digits and their sign by ' + clear);
         stage.destroy();
       });
+    });
+    // 5:4, the speaking seat on the left: the "+" is drawn above the field. A hit test lists the boxes at a point in the
+    // order they paint, top first; the field takes no pointer events (stage.css), so it is given them for the test.
+    [[OPENING, 'left'], [REBUTTAL, 'right']].forEach(([name, seat]) => {
+      const { stage, root } = mountInk(singleAt(name, 187, seat), 1280, 1024);
+      root.classList.remove('is-entering');
+      const where = name + ' / ' + seat + ' at 1280x1024';
+      const field = root.querySelector('.dt-field'), sign = root.querySelector('.dt-clock[data-clock="main"] .dt-sign');
+      assert.equal(sign.textContent, '+', where);
+      scrollTo(0, Math.max(0, sign.getBoundingClientRect().top + scrollY - innerHeight / 2));
+      const g = sign.getBoundingClientRect();
+      field.style.pointerEvents = 'auto';
+      const at = document.elementsFromPoint((g.left + g.right) / 2, (g.top + g.bottom) / 2);
+      scrollTo(0, 0);
+      const over = at.findIndex(el => el.classList.contains('dt-sign')), under = at.indexOf(field);
+      assert.ok(under >= 0, where + ': the sign lies on the field');
+      assert.ok(over >= 0 && over < under, where + ': the sign is drawn above the field (' + over + ' vs ' + under + ')');
+      stage.destroy();
     });
   });
 
@@ -504,13 +530,18 @@
   });
 
   // I3: a half's field keeps one size, the speaking column's (58cqw and its tail off screen), and is scaled with its
-  // column on the divider's own spring, so a switch draws no filtered stroke again.
+  // column on the divider's own spring, so a switch draws no filtered stroke again. Its layer is declared for its fade
+  // too: declared for transform alone, it is rasterized again whenever its opacity leaves 1 or comes back to it.
   DT.test('theme ink: the half strokes keep their size through a switch and are scaled with their columns', () => {
     let s = E.floor(session('自由辩论'), 'pro', T0);
     const { stage, root } = mountInk(E.view(s, T0 + 10000));
     settle(root);
     const S = root.getBoundingClientRect().width;
     const fields = () => Array.from(root.querySelectorAll('.dt-half')).map(h => [h, h.querySelector('.dt-half-field')]);
+    fields().forEach(([h, f]) => {
+      const layer = getComputedStyle(f).willChange;
+      assert.ok(/transform/.test(layer) && /opacity/.test(layer), h.dataset.side + ': will-change ' + layer);
+    });
     const check = when => fields().forEach(([h, f]) => {
       assert.near(f.offsetWidth, 0.61 * S, 1.5, when + ' ' + h.dataset.side + ': one size');
       assert.near(scaleOf(f), h.getBoundingClientRect().width / (0.58 * S), 0.01, when + ' ' + h.dataset.side + ': scaled with its column');
@@ -582,6 +613,29 @@
     assert.equal(px(getComputedStyle(field).opacity), 0);
     assert.equal(px(getComputedStyle(pro).getPropertyValue('--remain')), 0, 'its time goes once it is gone');
     stage.destroy();
+  });
+
+  // A half out of time puts 时间到 (已放弃) where its digits were, at the clock's centre: ink hangs a half's 「暂停」 21cqh
+  // lower, under the stroke, and the locked half takes its word back up (ink.css). Only the word's own animations are
+  // finished: a running colon's breath is a loop, and a loop cannot be finished.
+  DT.test('theme ink: a locked half\'s word stands where its digits were', () => {
+    ['left', 'right'].forEach(seat => [[960, 540], [1024, 768]].forEach(([w, h]) => [['out', '时间到'], ['yield', '已放弃']].forEach(([how, word]) => {
+      let s = session('自由辩论', seat), t;
+      if (how === 'out') { s = E.toggle(s, T0); t = T0 + 241000; s = E.tick(s, t).session; }
+      else { s = E.floor(s, 'pro', T0); t = T0 + 30000; s = E.yieldTime(s, t); }
+      const { stage, root } = mountInk(E.view(s, t), w, h);
+      root.classList.remove('is-entering');
+      const where = seat + ' ' + w + 'x' + h + ' ' + how;
+      const pro = root.querySelector('.dt-half[data-side="pro"]');
+      assert.ok(pro.hasAttribute('data-locked'), where);
+      const clock = pro.querySelector('.dt-clock'), state = clock.querySelector('.dt-state');
+      assert.equal(state.textContent, word, where);
+      state.getAnimations().forEach(a => a.finish());
+      const c = clock.getBoundingClientRect(), r = state.getBoundingClientRect();
+      assert.near((r.left + r.right) / 2, (c.left + c.right) / 2, 1, where + ': across');
+      assert.near((r.top + r.bottom) / 2, (c.top + c.bottom) / 2, 1, where + ': down');
+      stage.destroy();
+    })));
   });
 
   // I6: the bell is ink blooming in the paper behind the digits: a frayed tide line that spreads and fades, drawn once
