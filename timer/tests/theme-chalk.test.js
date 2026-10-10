@@ -37,14 +37,41 @@
     probe.remove();
     return c;
   }
-  // A length variable resolved in the element's own box.
-  function length(el, varName) {
+  // A length resolved in the element's own box (an inset of a clip-path, say).
+  function lengthIn(el, value) {
     const probe = document.createElement('i');
-    probe.style.cssText = 'position:absolute;left:0;top:0;height:1px;width:var(' + varName + ')';
+    probe.style.cssText = 'position:absolute;left:0;top:0;height:1px;width:' + value;
     el.appendChild(probe);
     const w = probe.getBoundingClientRect().width;
     probe.remove();
     return w;
+  }
+  // A comma-separated CSS list split at its top level (a background or mask list).
+  function lists(v) {
+    const out = [];
+    let depth = 0, cur = '';
+    for (const c of v) {
+      if (c === '(') depth++;
+      if (c === ')') depth--;
+      if (c === ',' && !depth) { out.push(cur.trim()); cur = ''; } else cur += c;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
+  // The four values of an inset() clip, as written.
+  function insetOf(clip) {
+    const m = /^inset\((.*)\)$/.exec(clip);
+    assert.ok(m, 'an inset clip: ' + clip);
+    const parts = [];
+    let depth = 0, cur = '';
+    for (const c of m[1].trim()) {
+      if (c === '(') depth++;
+      else if (c === ')') depth--;
+      if (/\s/.test(c) && depth === 0) { if (cur) parts.push(cur); cur = ''; } else cur += c;
+    }
+    if (cur) parts.push(cur);
+    const top = parts[0], right = parts[1] || top, bottom = parts[2] || top, left = parts[3] || right;
+    return [top, right, bottom, left];
   }
   // Any CSS colour (color-mix gives oklab or srgb) as the sRGB a canvas paints for it, with its alpha.
   const mixer = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
@@ -135,8 +162,12 @@
     assert.ok(g > r && g > b, 'green: ' + [r, g, b]);
     const L = lum(getComputedStyle(root).backgroundColor);
     assert.ok(L > 0.015 && L < 0.06, 'dark, but a board and not black: ' + L);
-    const back = getComputedStyle(root.querySelector('.dt-backdrop')).backgroundImage;
-    assert.ok(/feTurbulence/.test(back), 'chalk dust from noise');
+    // The light is the backdrop's own; the dust is drawn over it by its pseudo-elements (stage.css reaches --backdrop
+    // through var(), and an image reached that way is drawn again on every step of the clock).
+    const backdrop = root.querySelector('.dt-backdrop');
+    const back = getComputedStyle(backdrop).backgroundImage;
+    const dust = pseudo(backdrop, '::before').backgroundImage + ' ' + pseudo(backdrop, '::after').backgroundImage;
+    assert.ok(/feTurbulence/.test(dust), 'chalk dust from noise');
     assert.ok(/radial-gradient/.test(back), 'a board lit unevenly');
     stage.destroy();
   });
@@ -318,7 +349,10 @@
       assert.ok(/svg/.test(cs.backgroundImage) && /path/.test(cs.backgroundImage), where + ': a drawn tick');
       const sw = /stroke-width='([\d.]+)'/.exec(cs.backgroundImage);
       assert.ok(sw && Number(sw[1]) >= 15, where + ': a heavy stroke: ' + (sw && sw[1]));
-      assert.ok(/radial-gradient/.test(cs.backgroundImage), where + ': on a wiped patch');
+      const patch = pseudo(root.querySelector('.dt-deco-over'), '::after');
+      assert.ok(shown(patch) && /radial-gradient/.test(patch.backgroundImage), where + ': on a wiped patch');
+      const o = root.querySelector('.dt-deco-over').getBoundingClientRect(), tr = tick.getBoundingClientRect();
+      assert.near(o.left + px(patch.left) + px(patch.width) / 2, tr.left + tr.width / 2, 1, where + ': the patch under the tick');
       assert.ok(/#dt-chalk-stroke/.test(cs.filter), where + ': in chalk');
       const t = tick.getBoundingClientRect(), f = root.querySelector('.dt-field').getBoundingClientRect();
       assert.ok(t.top >= f.top && t.bottom <= f.bottom, where + ': on the field');
@@ -353,9 +387,13 @@
       assert.ok(px(line.width) < 0.02 * root.getBoundingClientRect().width, seat + ': a line: ' + line.width);
       assert.ok(/#dt-chalk-stroke/.test(line.filter), seat + ': in chalk');
       assert.equal(getComputedStyle(root.querySelector('.dt-half + .dt-half')).boxShadow, 'none', 'no hairline besides');
-      const dense = length(con.querySelector('.dt-half-field'), '--hatch-pitch');
-      const sparse = length(pro.querySelector('.dt-half-field'), '--hatch-pitch');
-      assert.ok(dense > 0 && dense < 0.7 * sparse, seat + ': ' + dense + ' vs ' + sparse);
+      // Denser: the speaker's half shows the strokes between its strokes (::after, half a pitch on); the waiting half
+      // shows only its first set, in its lighter hand.
+      const between = h => pseudo(h.querySelector('.dt-half-field'), '::after');
+      assert.equal(between(con).opacity, '1', seat + ': the speaker hatches between its strokes');
+      assert.equal(between(pro).opacity, '0', seat + ': the waiting side does not');
+      assert.ok(/deg, rgba\(0, 0, 0, 0\) 0px/.test(between(con).backgroundImage), seat + ': half a stroke apart: ' + between(con).backgroundImage);
+      assert.ok(Number(pseudo(pro.querySelector('.dt-half-field'), '::before').opacity) < 0.8, seat + ': a lighter hand');
       // The board shows through both halves; the waiting half is not greyed.
       [pro, con].forEach(h => assert.equal(getComputedStyle(h).backgroundColor, 'rgba(0, 0, 0, 0)', seat + ' ' + h.dataset.side));
       assert.equal(getComputedStyle(pro).filter, 'none', seat + ': the waiting half keeps its board');
@@ -397,7 +435,8 @@
   // Overtime: the digits turn yellow chalk and a teacher's loop of yellow chalk rings them.
   DT.test('theme chalk: in overtime the digits are yellow chalk, circled on the board', () => {
     const calm = mountBoard(singleAt(OPENING, 60));
-    assert.ok(!shown(pseudo(calm.root.querySelector('.dt-deco-over'), '::after')), 'no loop before time is up');
+    const before = pseudo(calm.root.querySelector('.dt-deco-over'), '::after');
+    assert.ok(!shown(before) || !/M820 58/.test(before.backgroundImage), 'no loop before time is up');
     calm.stage.destroy();
     const { stage, root } = mountBoard(singleAt(OPENING, 187));
     assert.equal(root.dataset.phase, 'over');
@@ -406,11 +445,16 @@
     const loop = pseudo(root.querySelector('.dt-deco-over'), '::after');
     assert.ok(shown(loop));
     assert.ok(/svg/.test(loop.backgroundImage) && /#dt-chalk-stroke/.test(loop.filter), 'a chalk drawing');
+    assert.equal(loop.translate, 'none', 'placed by left and top: a layer at a fraction of a pixel loses its grain');
     const o = root.querySelector('.dt-deco-over').getBoundingClientRect(), d = digits.getBoundingClientRect();
-    const l = { left: o.left + px(loop.left) - px(loop.width) / 2, top: o.top + px(loop.top) - px(loop.height) / 2 };
+    const l = { left: o.left + px(loop.left), top: o.top + px(loop.top) };
     l.right = l.left + px(loop.width); l.bottom = l.top + px(loop.height);
     assert.ok(l.left < d.left && l.right > d.right && l.top < d.top + 0.2 * d.height && l.bottom > d.bottom - 0.2 * d.height,
       'round the digits: ' + JSON.stringify(l) + ' ' + JSON.stringify(d));
+    // stage.css hangs the + left of the digits: the loop rings it too, centred on the time with its sign.
+    const sign = root.querySelector('.dt-clock[data-clock="main"] .dt-digits .dt-sign').getBoundingClientRect();
+    assert.ok(sign.width > 0 && l.left < sign.left - 0.02 * px(loop.width), 'round the sign: ' + l.left + ' vs ' + sign.left);
+    assert.near(sign.left - l.left, l.right - d.right, 0.04 * px(loop.width), 'centred on the time with its sign');
     stage.destroy();
   });
 
@@ -424,6 +468,16 @@
     const big = filt(1920, 1080), small = filt(240, 135);
     assert.ok(big !== small, big + ' vs ' + small);
     assert.ok(/#dt-chalk-stroke/.test(small), small);
+    // A thumbnail's board has the dust but not the fine speck, which at that size would only be snow.
+    const speck = (w, h) => {
+      const { stage, root } = mountBoard(singleAt(OPENING, 60), w, h);
+      const b = root.querySelector('.dt-backdrop');
+      const out = [shown(pseudo(b, '::before')), shown(pseudo(b, '::after'))];
+      stage.destroy();
+      return out;
+    };
+    assert.deepEqual(speck(1920, 1080), [true, true], 'the projector: dust and speck');
+    assert.deepEqual(speck(240, 135), [true, false], 'a thumbnail: dust only');
   });
 
   // The title card: each motion is marked by a patch of its side's hatching, and the side labels over the team
@@ -437,6 +491,283 @@
       const label = pseudo(root.querySelector('.dt-teams span[data-side="' + side + '"]'), '::before');
       assert.equal(label.color, resolve(root, '--' + side), side);
       assert.ok(contrast(label.color, getComputedStyle(root).backgroundColor) >= 4.5, side + ' label reads');
+    });
+    stage.destroy();
+  });
+  // ---- motion (design/chalk-final.md) ----
+
+  // A stage mounted and left in its entrance (is-entering), for the entrance's rules.
+  function mountEntering(view, w, h) {
+    const box = document.getElementById('sandbox');
+    box.innerHTML = '<div class="dt-stage-host" style="width:' + (w || 960) + 'px;height:' + (h || 540) + 'px"></div>';
+    const stage = R.mount(box.firstChild);
+    stage.update(view);
+    return { stage, root: box.querySelector('.dt-stage') };
+  }
+  // Every element of the stage with its two pseudo-elements: [element, pseudo, computed style, label].
+  function everyBox(root) {
+    const out = [];
+    root.querySelectorAll('*').forEach(el => [null, '::before', '::after'].forEach(p => {
+      out.push([el, p, getComputedStyle(el, p), (typeof el.className === 'string' ? el.className : el.tagName) + (p || '')]);
+    }));
+    return out;
+  }
+
+  // CH7: render.js writes --used (or --remain) on every step of the clock. Chromium takes an image as new, and paints
+  // its box again with any filter on it, on every style recalculation when the url() reaches the declaration through
+  // var(), and on a pseudo-element when one background or mask list holds a url() image and a gradient together.
+  DT.test('theme chalk: no image reaches a rule through a variable or shares a list with a gradient', () => {
+    let seen = 0;
+    Array.from(document.styleSheets).forEach(sh => {
+      let rules;
+      try { rules = sh.cssRules; } catch (e) { return; }
+      Array.from(rules).forEach(function walk(r) {
+        if (r.cssRules) Array.from(r.cssRules).forEach(walk);
+        if (!r.style || !/data-theme="chalk"/.test(r.selectorText || '')) return;
+        seen++;
+        for (let i = 0; i < r.style.length; i++) {
+          const name = r.style[i], v = r.style.getPropertyValue(name);
+          if (!/url\(\s*["']?data:/.test(v)) continue;
+          assert.ok(name.indexOf('--') !== 0, r.selectorText + ': ' + name + ' holds an image');
+          assert.ok(!/var\(/.test(v), r.selectorText + ' ' + name + ': an image beside a var()');
+        }
+      });
+    });
+    assert.ok(seen > 20, 'read the theme\'s rules: ' + seen);
+    [singleAt(OPENING, 60), singleAt(OPENING, 187), dualAt(30)].forEach(view => {
+      const { stage, root } = mountBoard(view);
+      everyBox(root).forEach(([, , cs, where]) => ['backgroundImage', 'maskImage', 'webkitMaskImage'].forEach(prop => {
+        const items = lists(cs[prop] || 'none').filter(x => x !== 'none');
+        const urls = items.filter(x => /^url\(/.test(x)).length;
+        assert.ok(urls === 0 || urls === items.length, where + ' ' + prop + ': ' + items.map(x => x.slice(0, 28)).join(' | '));
+      }));
+      stage.destroy();
+    });
+  });
+
+  // CH7: what a chalk filter draws is drawn once. A layer that carries its own filter and is marked for transforms has
+  // the compositor run the filter again on every frame; one of its own at a fraction of a pixel is resampled, which
+  // washes the grain out. So: never will-change: transform on a filtered box, and a filtered box with a layer of its
+  // own (will-change: opacity) has no translate. The hatching is such a layer, and the field that clips it has none.
+  DT.test('theme chalk: what a chalk filter draws is a layer drawn once, never moved by a transform of its own', () => {
+    [singleAt(OPENING, 60), singleAt(OPENING, 187), dualAt(30)].forEach(view => {
+      const { stage, root } = mountBoard(view);
+      everyBox(root).forEach(([, , cs, where]) => {
+        if (!/#dt-chalk-/.test(cs.filter)) return;
+        assert.ok(!/transform|translate|scale|rotate/.test(cs.willChange), where + ': will-change ' + cs.willChange);
+        if (/opacity/.test(cs.willChange)) assert.equal(cs.translate, 'none', where + ': on whole pixels');
+      });
+      const field = root.querySelector(root.dataset.kind === 'dual' ? '.dt-half-field' : '.dt-field');
+      assert.ok(/opacity/.test(pseudo(field, '::before').willChange), 'the hatching is a layer of its own');
+      assert.equal(getComputedStyle(field).filter, 'none', 'the clipped box carries no filter');
+      assert.equal(getComputedStyle(field).willChange, 'auto', 'the clipped box is not a layer');
+      stage.destroy();
+    });
+  });
+
+  // CH3: a new stage is hatched in along the strokes from its seat, by a ragged edge on the lines' parents (the haze
+  // and the eraser's dust come in under the same edge), not swept by stage.css's straight edge across them. The
+  // keyframes have no `to`; at rest the field is back on its wipe.
+  DT.test('theme chalk: a new stage is hatched in along the strokes, then rests on the wipe', () => {
+    SEATINGS.forEach(([name, seat]) => {
+      const where = name + ' / ' + seat;
+      const { stage, root } = mountEntering(singleAt(name, 10, seat));
+      assert.ok(root.classList.contains('is-entering'), where);
+      const field = root.querySelector('.dt-field');
+      assert.equal(getComputedStyle(field).animationName, 'dt-chalk-in', where);
+      assert.ok(/^polygon\(/.test(getComputedStyle(field).clipPath), where + ': ' + getComputedStyle(field).clipPath.slice(0, 40));
+      assert.ok(lists(getComputedStyle(field).clipPath.replace(/^polygon\(|\)$/g, '')).length >= 10, where + ': a ragged edge');
+      ['.dt-deco', '.dt-deco-over'].forEach(sel => {
+        const cs = getComputedStyle(root.querySelector(sel));
+        assert.equal(cs.animationName, 'dt-chalk-in', where + ' ' + sel);
+        assert.ok(/^polygon\(/.test(cs.clipPath), where + ' ' + sel + ' under the same edge');
+      });
+      // It starts at 0; with no `to` frame it ends on the live value, 1 (registered, not inherited): the stage at rest,
+      // which is also what a still ([data-still] stands it 10 s in) and reduced motion (no animation) show.
+      assert.equal(Number(getComputedStyle(field).getPropertyValue('--chalk-in')), 0, where + ': from the seat');
+      field.getAnimations().forEach(a => a.finish());
+      assert.equal(Number(getComputedStyle(field).getPropertyValue('--chalk-in')), 1, where + ': ends at rest');
+      root.classList.remove('is-entering');
+      assert.ok(/^inset\(/.test(getComputedStyle(field).clipPath), where + ': at rest, the wipe');
+      assert.equal(getComputedStyle(root.querySelector('.dt-deco')).clipPath, 'none', where + ': the haze unclipped');
+      stage.destroy();
+    });
+    // A free debate: each half from its own seat edge.
+    const { stage, root } = mountEntering(dualAt(30));
+    root.querySelectorAll('.dt-half-field').forEach(f => {
+      assert.equal(getComputedStyle(f).animationName, 'dt-chalk-in', 'a half');
+      assert.ok(/^polygon\(/.test(getComputedStyle(f).clipPath), 'a half: ' + getComputedStyle(f).clipPath.slice(0, 40));
+    });
+    stage.destroy();
+  });
+
+  // CH10: the warn bell. The eraser reaches the tick as the bell rings (engine.js) and takes it toward the seat in one
+  // stroke; going back to calm puts it back at once. The patch under it is cut at the wipe, so what is left of it lies
+  // over lines the eraser has not reached and no chalk comes back as it goes.
+  DT.test('theme chalk: at the warn bell the eraser takes the tick, and its patch goes only where the eraser has been', () => {
+    [['left', 'left'], ['right', 'right']].forEach(([seat, from]) => {
+      const calm = mountBoard(singleAt(OPENING, 60, seat));
+      const c = getComputedStyle(calm.root.querySelector('.dt-warnline'));
+      assert.ok(!/clip-path/.test(c.transitionProperty), seat + ': undo puts the tick back at once: ' + c.transitionProperty);
+      calm.stage.destroy();
+      const { stage, root } = mountBoard(singleAt(OPENING, 152, seat));   // 28 s left
+      assert.equal(root.dataset.phase, 'warn', seat);
+      const w = getComputedStyle(root.querySelector('.dt-warnline'));
+      assert.ok(/clip-path/.test(w.transitionProperty) && px(w.transitionDuration) >= 0.3, seat + ': taken in a stroke: ' + w.transitionProperty);
+      const v = insetOf(w.clipPath);
+      assert.ok(px(from === 'left' ? v[1] : v[3]) >= 100, seat + ': gone toward the seat: ' + w.clipPath);
+      const over = root.querySelector('.dt-deco-over'), o = over.getBoundingClientRect();
+      const patch = pseudo(over, '::after');
+      assert.ok(shown(patch), seat + ': the patch');
+      assert.equal(patch.filter, 'none', seat + ': no filter, so cutting it each step is cheap');
+      const left = o.left + px(patch.left), right = left + px(patch.width);
+      const used = parseFloat(root.style.getPropertyValue('--used')), W = o.width;
+      const edge = from === 'left' ? o.left + (1 - used) * W : o.left + used * W;
+      const cut = insetOf(patch.clipPath);
+      const visible = from === 'left' ? right - lengthIn(over, cut[1]) : left + lengthIn(over, cut[3]);
+      assert.ok(edge > left && edge < right, seat + ': the edge is over the patch');
+      assert.near(visible, edge, 2, seat + ': cut at the wipe');
+      stage.destroy();
+    });
+  });
+
+  // CH6: a bell rings in chalk, and chalk marks do not grow. The warn bell underlines the number (a stroke drawn left
+  // to right, under the digits, then dust); a single stage's end and a free-debate side out of time have no ring.
+  DT.test('theme chalk: a bell is a chalk mark that does not grow', () => {
+    const { stage, root } = mountBoard(singleAt(OPENING, 150.5));
+    stage.pulse({ type: 'warn', clock: 'main' });
+    const clock = root.querySelector('.dt-clock[data-clock="main"]');
+    const ring = clock.querySelector('.dt-ring');
+    assert.ok(ring, 'a ring');
+    const cs = getComputedStyle(ring);
+    assert.equal(cs.animationName, 'dt-chalk-underline');
+    assert.equal(cs.borderTopWidth, '0px', 'no border');
+    assert.ok(px(cs.height) < px(cs.width) / 5, 'a line, not a ring: ' + cs.width + ' × ' + cs.height);
+    const frames = ring.getAnimations().filter(a => a.animationName === 'dt-chalk-underline')[0].effect.getKeyframes();
+    assert.ok(frames.every(k => !('scale' in k) && !('transform' in k) && !('width' in k)), 'it does not grow');
+    const stroke = pseudo(ring, '::before');
+    assert.ok(/#dt-chalk-stroke/.test(stroke.filter) && /opacity/.test(stroke.willChange), 'chalk, drawn once');
+    const r = ring.getBoundingClientRect(), d = clock.querySelector('.dt-digits').getBoundingClientRect();
+    assert.ok(r.top > d.bottom - 0.2 * d.height && r.left > d.left - 4 && r.right < d.right + 4, 'under the digits');
+    stage.destroy();
+    // A break's end bell underlines its time too, and its second bell strikes a second line under the first.
+    const brk = mountBoard(E.view(E.goto(E.createSession(F(), MATCH, T0, { theme: 'chalk' }), idx('评委打分'), T0), T0));
+    assert.equal(brk.root.dataset.kind, 'break');
+    const bclock = brk.root.querySelector('.dt-clock[data-clock="main"]');
+    const ends = [1, 2].map(n => {
+      const r = document.createElement('i');
+      r.className = 'dt-ring'; r.dataset.type = 'end'; r.dataset.nth = String(n);
+      bclock.appendChild(r);
+      return getComputedStyle(r);
+    });
+    ends.forEach(c => assert.ok(c.display !== 'none' && c.animationName === 'dt-chalk-underline', 'a break\'s end is underlined'));
+    assert.ok(px(ends[1].marginTop) > px(ends[0].marginTop), 'the second stroke below the first');
+    brk.stage.destroy();
+    // A single stage's end: no ring (the eraser's pass and the loop answer it); a half's end: no ring (时间到 does).
+    const end = mountBoard(singleAt(OPENING, 179.9));
+    end.stage.pulse({ type: 'end', clock: 'main' });
+    end.root.querySelectorAll('.dt-clock[data-clock="main"] .dt-ring').forEach(x => assert.equal(getComputedStyle(x).display, 'none', 'no end ring'));
+    end.stage.destroy();
+    const d2 = mountBoard(dualAt(30));
+    d2.stage.pulse({ type: 'end', clock: 'pro' });
+    const hr = d2.root.querySelector('.dt-half[data-side="pro"] .dt-ring');
+    assert.ok(hr && getComputedStyle(hr).display === 'none', 'no ring for a side out of time');
+    d2.stage.destroy();
+  });
+
+  // CH4: time up. On the first bell the eraser's last pass lets the heavier haze in from the far side (the running
+  // haze holds ahead of it); on the second the loop is drawn by a sweeping mask on its parent, the loop itself drawn
+  // once. All keyed on data-bell, so a stage opened in overtime, a still and reduced motion show the end state.
+  DT.test('theme chalk: time up is the eraser\'s last pass and the loop drawn on the second bell', () => {
+    [['left', 'l'], ['right', 'r']].forEach(([seat, dir]) => {
+      const { stage, root } = mountBoard(singleAt(OPENING, 179.9, seat));
+      stage.pulse({ type: 'end', clock: 'main' });
+      stage.update(singleAt(OPENING, 180.2, seat));
+      assert.equal(root.dataset.phase, 'over', seat);
+      assert.equal(root.dataset.bell, 'end', seat);
+      const deco = root.querySelector('.dt-deco'), over = root.querySelector('.dt-deco-over');
+      assert.equal(pseudo(deco, '::before').animationName, 'dt-chalk-pass-' + dir, seat + ': the heavier haze behind the eraser');
+      const rest = pseudo(deco, '::after');
+      assert.ok(shown(rest) && rest.animationName === 'dt-chalk-rest-' + dir, seat + ': the running haze ahead of it');
+      const oc = getComputedStyle(over);
+      assert.ok(/conic-gradient/.test(oc.maskImage || oc.webkitMaskImage), seat + ': a sweep uncovers the loop');
+      assert.equal(oc.animationName, 'dt-chalk-draw', seat);
+      assert.near(px(oc.animationDelay), 0.32, 0.001, seat + ': on the second bell');
+      const loop = pseudo(over, '::after');
+      assert.equal(loop.animationName, 'none', seat + ': the loop itself is not animated');
+      assert.ok(/opacity/.test(loop.willChange), seat + ': a layer of its own, filtered once');
+      root.removeAttribute('data-bell'); root.removeAttribute('data-bell-clock');
+      assert.ok(!shown(pseudo(deco, '::after')), seat + ': gone with the bell');
+      assert.ok(/^none$/.test(getComputedStyle(over).maskImage) || getComputedStyle(over).maskImage === '', seat + ': no mask at rest');
+      stage.destroy();
+    });
+  });
+
+  // On a 4:3 stage the loop cannot move left by half the sign: it moves as far as the stage allows and stays on it.
+  DT.test('theme chalk: on a 4:3 stage the overtime loop stays on the board', () => {
+    const { stage, root } = mountBoard(singleAt(OPENING, 187), 1024, 768);
+    const loop = pseudo(root.querySelector('.dt-deco-over'), '::after');
+    const o = root.querySelector('.dt-deco-over').getBoundingClientRect(), box = root.getBoundingClientRect();
+    const l = o.left + px(loop.left), r = l + px(loop.width);
+    assert.ok(l >= box.left - 0.012 * box.height && r <= box.right, 'on the stage: ' + l + '–' + r);
+    stage.destroy();
+  });
+
+  // CH9: 时间到 / 已放弃 is written in chalk where the digits stood (stage.css fades it in after they go). Painted with
+  // its clock: a layer of its own at a fraction of a pixel (it is centred by translate) would lose the grain.
+  DT.test('theme chalk: a side out of time has 时间到 written in chalk', () => {
+    let s = E.floor(session('自由辩论'), 'pro', T0);
+    s = E.floor(s, 'con', T0 + 20000);
+    s = E.tick(s, T0 + 262000).session;   // 反方 runs out
+    const { stage, root } = mountBoard(E.view(s, T0 + 262000));
+    const locked = root.querySelector('.dt-half[data-locked]');
+    assert.ok(locked, 'a side out of time');
+    const st = getComputedStyle(locked.querySelector('.dt-state'));
+    assert.ok(/#dt-chalk-write/.test(st.filter), st.filter);
+    assert.equal(st.willChange, 'auto', 'no layer of its own');
+    stage.destroy();
+  });
+
+  // CH1 / CH2: a switch only fades two sets of the same strokes (520 ms, with the columns' spring). Each set is a layer
+  // of its own in a box that never changes: the widest column with its overhang, held at the half's seat edge.
+  DT.test('theme chalk: a switch fades two sets of strokes that stand still as the halves spring', () => {
+    const idle = E.view(session('自由辩论'), T0);
+    ['left', 'right'].forEach(seat => {
+      const boxes = {};
+      // 正方 holds the floor, then 反方.
+      [E.view(E.floor(session('自由辩论', seat), 'pro', T0), T0 + 10000), dualAt(30, seat)].forEach(view => {
+        const { stage, root } = mountBoard(view);
+        const W = root.getBoundingClientRect().width;
+        root.querySelectorAll('.dt-half').forEach(h => {
+          const f = h.querySelector('.dt-half-field'), r = f.getBoundingClientRect(), hb = h.getBoundingClientRect();
+          (boxes[h.dataset.side] = boxes[h.dataset.side] || []).push([r.left, r.right]);
+          assert.near(r.width, 0.62 * W, 2, seat + ' ' + h.dataset.side + ': the widest column\'s box');
+          const first = h === h.parentNode.firstElementChild;
+          assert.near(first ? r.left : r.right, first ? hb.left - 0.02 * W : hb.right + 0.02 * W, 2, seat + ': held at the seat edge');
+          ['::before', '::after'].forEach(w => {
+            const cs = pseudo(f, w);
+            assert.ok(/opacity/.test(cs.willChange), w + ': a layer of its own');
+            assert.equal(cs.transitionProperty, 'opacity', w);
+            assert.near(px(cs.transitionDuration), 0.52, 0.001, w);
+          });
+          const active = h.hasAttribute('data-active');
+          assert.equal(pseudo(f, '::after').opacity, active ? '1' : '0', seat + ' ' + h.dataset.side);
+          const light = h.dataset.side === 'pro' ? 0.63 : 0.62;
+          assert.near(Number(pseudo(f, '::before').opacity), active ? 1 : light, 0.001, seat + ' ' + h.dataset.side + ': the lighter hand');
+        });
+        stage.destroy();
+      });
+      ['pro', 'con'].forEach(side => {
+        assert.near(boxes[side][0][0], boxes[side][1][0], 0.5, seat + ' ' + side + ': the box does not move');
+        assert.near(boxes[side][0][1], boxes[side][1][1], 0.5, seat + ' ' + side);
+      });
+    });
+    // Before the first floor: both halves show the first set, and the second lightly.
+    const { stage, root } = mountBoard(idle);
+    assert.ok(root.querySelector('.dt-halves').hasAttribute('data-idle'), 'idle');
+    root.querySelectorAll('.dt-half-field').forEach(f => {
+      assert.equal(pseudo(f, '::before').opacity, '1');
+      assert.near(Number(pseudo(f, '::after').opacity), 0.4, 0.001);
     });
     stage.destroy();
   });

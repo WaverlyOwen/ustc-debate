@@ -1,7 +1,27 @@
 /* @theme id=chalk name=黑板 desc=教室黑板上的粉笔排线，时间用掉就被板擦擦去，适合暗场投影 tone=dark order=3 */
 /* 黑板: university debates are often held in a classroom. The floor is chalk hatching across the board from the speaking
    side's seat, wiped off toward that seat as the time is used; the stage name is written in 楷体 as a teacher writes
-   on the board (spec §2.3). The chalk filters are in themes/chalk.js. */
+   on the board (spec §2.3). The chalk filters are in themes/chalk.js.
+
+   Every moment is something done at the board. A new stage is hatched in from the seat, along the strokes. The warn
+   bell: the eraser takes the tick, and the number is underlined in yellow chalk. Time up: the eraser's last pass over
+   the band, then the teacher's loop drawn round the number. Free debate: the speaker's hand lays strokes between the
+   strokes, the other side's grow faint; a side out of time has 时间到 written where its number was. Nothing grows.
+
+   How it stays cheap. render.js writes --used (and in free debate --remain) on every step of the clock; both are
+   inherited, so every element here has its style worked out again many times a second.
+   - Chromium takes an image as new, and paints its box again (filters and all), on every recalculation when the
+     url() reaches the declaration through var(), and, on a pseudo-element, when a background or mask list holds a
+     url() image and a gradient together. So the images are written out in the rules that draw them (stage.css
+     reaches --backdrop through var(), so the board's dust is drawn by .dt-backdrop's own ::before and ::after), and
+     in a list with images a plain band or a fade is an SVG image, not a gradient.
+   - Whatever a chalk filter draws is a layer of its own, marked will-change: opacity (never transform: a layer that
+     carries its own filter and is marked for transforms has it run again by the compositor on every frame), and set
+     by left/top, never translate (a layer of its own at a fraction of a pixel is resampled, which washes out the
+     grain). Only its parent is clipped, masked or moved, by the clock or by a moment, so the filter is drawn once. */
+@property --chalk-in { syntax: "<number>"; inherits: false; initial-value: 1; }       /* a stage hatched in: 0 → 1 */
+@property --chalk-draw { syntax: "<angle>"; inherits: false; initial-value: 360deg; }  /* the overtime loop drawn */
+
 [data-theme="chalk"] {
   --pro: #F08F84;           /* red chalk, as it lands on a board: soft, a little pink */
   --pro-deep: var(--ground);
@@ -17,31 +37,21 @@
      against it (spec §1.5). Written out as hex, the form the contrast check reads. */
   --pro-hatch: #A57066;
   --con-hatch: #5F869B;
-  --pro-faint: #745C52;     /* the waiting side's lighter hand in free debate: red 40%, blue 36% */
+  /* The waiting side's lighter hand in free debate: red 40%, blue 36%. It is drawn as the hatch colour at --pro-light /
+     --con-light over the board, which comes to the same colour (40/64, 36/58), so the hand lightens by opacity and no
+     changing colour ever goes into the chalk filter. */
+  --pro-faint: #745C52;
   --con-faint: #486972;
+  --pro-light: .63;
+  --con-light: .62;
   --pro-angle: 48deg;       /* 正方 hatches one way, 反方 the other: the sides differ by more than hue */
   --con-angle: -48deg;
   --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
   --font-title: "KaiTi", "楷体", "STKaiti", "Kaiti SC", "KaiTi_GB2312", serif;
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
-  /* The board: lighter where the room's lights fall, and rubbed all over with the dust of old chalk (feTurbulence):
-     broad clouds and the long arcs of the eraser in one tile, sized in cqh so a thumbnail shows the same board,
-     smaller; and a fine speckle in another, drawn pixel for pixel, since scaled it turns into a woven mesh. On a
-     thumbnail the speckle would only be snow, so it is left out there. */
-  --board-dust: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='900' height='900'><filter id='d' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.0016' numOctaves='3' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .86  0 0 0 0 .9  0 0 0 0 .86  .4 0 0 0 -.16' result='haze'/><feTurbulence type='fractalNoise' baseFrequency='.0016 .009' numOctaves='3' seed='8' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .88  0 0 0 0 .92  0 0 0 0 .88  .7 0 0 0 -.38' result='wipe'/><feMerge><feMergeNode in='haze'/><feMergeNode in='wipe'/></feMerge></filter><rect width='100%25' height='100%25' filter='url(%23d)'/></svg>") 0 0 / 90cqh 90cqh;
-  --board-speck: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='s' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='1' seed='1' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .9  0 0 0 0 .92  0 0 0 0 .9  3 0 0 0 -1.74'/></filter><rect width='100%25' height='100%25' filter='url(%23s)'/></svg>") 0 0 / 300px 300px;
-  --board-light: radial-gradient(120% 100% at 50% 38%, #2B4A3C, #213A30 55%, #172A22);
-  --backdrop: var(--board-speck), var(--board-dust), var(--board-light);
-  /* Up-and-down streaks of an eraser, as a mask for what is left of the wiped chalk. */
-  --wiped: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='w' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.02 .0035' numOctaves='2' seed='6' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1.8 0 0 0 -.5'/></filter><rect width='100%25' height='100%25' filter='url(%23w)'/></svg>") 0 0 / 44cqh 44cqh;
-  /* Where a hand's hatching starts and stops: each stroke a little longer or shorter than the next. A vertical
-     ramp plus noise that varies only across the board, cut hard: a mask for the lines' upper ends (flipped for the
-     lower ones). */
-  --ends-top: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='40'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></linearGradient><filter id='f' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.045 .0001' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1' result='n'/><feComposite in='SourceGraphic' in2='n' operator='arithmetic' k2='1' k3='1.8' k4='-1.35'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  20 0 0 0 0'/></filter><rect width='100%25' height='100%25' fill='url(%23g)' filter='url(%23f)'/></svg>");
-  --ends-bottom: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='40'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-color='%23fff'/><stop offset='1' stop-color='%23000'/></linearGradient><filter id='f' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.045 .0001' numOctaves='2' seed='13' stitchTiles='stitch'/><feColorMatrix values='1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1' result='n'/><feComposite in='SourceGraphic' in2='n' operator='arithmetic' k2='1' k3='1.8' k4='-1.35'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  20 0 0 0 0'/></filter><rect width='100%25' height='100%25' fill='url(%23g)' filter='url(%23f)'/></svg>");
-  --ends: var(--ends-top) 0 0 / 40cqh 4cqh repeat-x, var(--ends-bottom) 0 100% / 40cqh 4cqh repeat-x,
-    linear-gradient(#000, #000) 0 50% / 100% calc(100% - 8cqh) no-repeat;
-  --fade-y: linear-gradient(transparent, #000 5cqh calc(100% - 5cqh), transparent);   /* dust thins out above and below */
+  /* The board: lighter where the room's lights fall. Its chalk dust is drawn over this by .dt-backdrop::before and
+     ::after (see "the board"). */
+  --backdrop: radial-gradient(120% 100% at 50% 38%, #2B4A3C, #213A30 55%, #172A22);
   --text-field: var(--ground);   /* the hatching stays below the head, so all text above it sits on the board */
   --text-deep: var(--ground);
   --hatch-top: 30cqh;            /* the hatched part of the board, between the head and the bottom bar */
@@ -49,6 +59,7 @@
   --hatch-line: .6cqh;           /* one stroke of chalk, and the distance between strokes */
   --hatch-pitch: 1.8cqh;
   --chalk-stub: 6cqw;            /* the last strokes at the seat that the eraser misses (see below) */
+  --chalk-wipe: cubic-bezier(.45, .05, .35, 1);   /* one pass of the eraser */
 }
 
 .dt-stage[data-theme="chalk"] {
@@ -58,6 +69,10 @@
   --chalk-stroke: url(#dt-chalk-stroke-xl);
   --chalk-grain: url(#dt-chalk-grain-xl);
   --chalk-write: url(#dt-chalk-write-xl);
+  /* How far the overtime loop sits left of the digits' centre: stage.css hangs the + to their left (with its margin
+     .614 of their size), so the loop moves by half of that and rings +0:07 as a whole; on a stage too narrow to move
+     it that far (4:3) it moves only until its left end reaches the edge. */
+  --chalk-loop-shift: clamp(0px, 50cqw - 63cqh, min(38cqh, 30cqw) * .307);
 }
 .dt-stage[data-theme="chalk"][data-side="pro"] { --side-color: var(--pro-hatch); --side-chalk: var(--pro); --hatch-angle: var(--pro-angle); }
 .dt-stage[data-theme="chalk"][data-side="con"] { --side-color: var(--con-hatch); --side-chalk: var(--con); --hatch-angle: var(--con-angle); }
@@ -76,32 +91,51 @@
 @container (max-width: 520px) {
   .dt-stage[data-theme="chalk"] {
     --chalk-stroke: url(#dt-chalk-stroke-s); --chalk-grain: url(#dt-chalk-grain-s); --chalk-write: url(#dt-chalk-write-s);
-    --backdrop: var(--board-dust), var(--board-light);
   }
+}
+
+/* ---- the board ---- */
+
+/* Rubbed all over with the dust of old chalk (feTurbulence): broad clouds and the long arcs of the eraser in one tile
+   (::before), sized in cqh so a thumbnail shows the same board, smaller; and a fine speck (::after), drawn pixel for
+   pixel, since scaled it turns into a woven mesh. */
+.dt-stage[data-theme="chalk"] .dt-backdrop::before,
+.dt-stage[data-theme="chalk"] .dt-backdrop::after { content: ""; position: absolute; inset: 0; }
+.dt-stage[data-theme="chalk"] .dt-backdrop::before { background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='900' height='900'><filter id='d' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.0016' numOctaves='3' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .86  0 0 0 0 .9  0 0 0 0 .86  .4 0 0 0 -.16' result='haze'/><feTurbulence type='fractalNoise' baseFrequency='.0016 .009' numOctaves='3' seed='8' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .88  0 0 0 0 .92  0 0 0 0 .88  .7 0 0 0 -.38' result='wipe'/><feMerge><feMergeNode in='haze'/><feMergeNode in='wipe'/></feMerge></filter><rect width='100%25' height='100%25' filter='url(%23d)'/></svg>") 0 0 / 90cqh 90cqh; }
+.dt-stage[data-theme="chalk"] .dt-backdrop::after { background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='s' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='1' seed='1' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .9  0 0 0 0 .92  0 0 0 0 .9  3 0 0 0 -1.74'/></filter><rect width='100%25' height='100%25' filter='url(%23s)'/></svg>") 0 0 / 300px 300px; }
+@container (max-width: 520px) {
+  .dt-stage[data-theme="chalk"] .dt-backdrop::after { content: none; }   /* on a thumbnail the speck would only be snow */
 }
 
 /* ---- the hatching ---- */
 
-/* The lines are a layer of their own that never changes, so the chalk filter is drawn once; the field around them
-   is only cut back. It runs a little past the field so the filter's shaken edge is not a straight cut. */
+/* The lines are a layer of their own that never changes, so the chalk filter is drawn once; the field around them is
+   only cut back, and the compositor does that. They run a little past the field so the filter's shaken edge is not a
+   straight cut. Where a hand's hatching starts and stops each stroke is a little longer or shorter than the next: the
+   mask's upper and lower ends (a vertical ramp plus noise that varies only across the board, cut hard), and a solid
+   band between them. */
 .dt-stage[data-theme="chalk"] .dt-field,
 .dt-stage[data-theme="chalk"] .dt-half-field { background: none; }
 .dt-stage[data-theme="chalk"] .dt-field::before,
-.dt-stage[data-theme="chalk"] .dt-half-field::before {
+.dt-stage[data-theme="chalk"] .dt-half-field::before,
+.dt-stage[data-theme="chalk"] .dt-half-field::after {
   content: "";
   position: absolute;
   inset: 0 -2cqw;
   background: repeating-linear-gradient(var(--hatch-angle), var(--side-color) 0 var(--hatch-line),
     transparent var(--hatch-line) var(--hatch-pitch));
   filter: var(--chalk-stroke);
-  -webkit-mask: var(--ends);
-  mask: var(--ends);
+  -webkit-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='40'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></linearGradient><filter id='f' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.045 .0001' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1' result='n'/><feComposite in='SourceGraphic' in2='n' operator='arithmetic' k2='1' k3='1.8' k4='-1.35'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  20 0 0 0 0'/></filter><rect width='100%25' height='100%25' fill='url(%23g)' filter='url(%23f)'/></svg>") 0 0 / 40cqh 4cqh repeat-x, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='40'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-color='%23fff'/><stop offset='1' stop-color='%23000'/></linearGradient><filter id='f' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.045 .0001' numOctaves='2' seed='13' stitchTiles='stitch'/><feColorMatrix values='1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1' result='n'/><feComposite in='SourceGraphic' in2='n' operator='arithmetic' k2='1' k3='1.8' k4='-1.35'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  20 0 0 0 0'/></filter><rect width='100%25' height='100%25' fill='url(%23g)' filter='url(%23f)'/></svg>") 0 100% / 40cqh 4cqh repeat-x,
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' height='100%25'/></svg>") 0 50% / 100% calc(100% - 8cqh) no-repeat;
+  mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='40'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-color='%23000'/><stop offset='1' stop-color='%23fff'/></linearGradient><filter id='f' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.045 .0001' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1' result='n'/><feComposite in='SourceGraphic' in2='n' operator='arithmetic' k2='1' k3='1.8' k4='-1.35'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  20 0 0 0 0'/></filter><rect width='100%25' height='100%25' fill='url(%23g)' filter='url(%23f)'/></svg>") 0 0 / 40cqh 4cqh repeat-x, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='40'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-color='%23fff'/><stop offset='1' stop-color='%23000'/></linearGradient><filter id='f' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.045 .0001' numOctaves='2' seed='13' stitchTiles='stitch'/><feColorMatrix values='1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1' result='n'/><feComposite in='SourceGraphic' in2='n' operator='arithmetic' k2='1' k3='1.8' k4='-1.35'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  20 0 0 0 0'/></filter><rect width='100%25' height='100%25' fill='url(%23g)' filter='url(%23f)'/></svg>") 0 100% / 40cqh 4cqh repeat-x,
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' height='100%25'/></svg>") 0 50% / 100% calc(100% - 8cqh) no-repeat;
+  will-change: opacity;
 }
 /* [data-mode] ranks these with stage.css's per-seat clip-path rules, which they replace: the same wipe toward the
    seat, but open above and below, where the lines end unevenly as a hand hatches. The eraser never gets the last
    strokes at the seat: a stub of --chalk-stub stays there as the time runs out and through overtime, clear of the
    digits, so the room still sees whose floor it is (spec §1.5). The wipe stops at it, so nothing jumps back in
-   when overtime begins. */
+   when overtime begins; the end bell then brings the eraser's last pass (see "time up"). */
 .dt-stage[data-theme="chalk"][data-mode] .dt-field {
   top: var(--hatch-top);
   bottom: auto;
@@ -114,8 +148,10 @@
 }
 
 /* The board never comes quite clean: over the hatched part, a haze of the speaking side's chalk in the eraser's
-   streaks. It shows where the lines have been wiped, and with the stub says through overtime whose floor it is. */
-.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"] .dt-deco::before {
+   up-and-down streaks, thinning out above and below. It shows where the lines have been wiped, and with the stub says
+   through overtime whose floor it is. (::after is the end bell's, below.) */
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"] .dt-deco::before,
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"][data-bell="end"][data-bell-clock="main"] .dt-deco::after {
   content: "";
   position: absolute;
   left: 0;
@@ -123,17 +159,19 @@
   top: var(--hatch-top);
   height: calc(var(--hatch-bottom) - var(--hatch-top));
   background-color: color-mix(in srgb, var(--side-chalk) 14%, transparent);
-  -webkit-mask: var(--wiped), var(--fade-y);
+  -webkit-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='w' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.02 .0035' numOctaves='2' seed='6' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1.8 0 0 0 -.5'/></filter><rect width='100%25' height='100%25' filter='url(%23w)'/></svg>") 0 0 / 44cqh 44cqh, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 100' preserveAspectRatio='none'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-opacity='0'/><stop offset='0.0862'/><stop offset='0.9138'/><stop offset='1' stop-opacity='0'/></linearGradient><rect width='10' height='100' fill='url(%23g)'/></svg>") 0 0 / 100% 100%;
   -webkit-mask-composite: source-in;
-  mask: var(--wiped), var(--fade-y);
+  mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='w' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.02 .0035' numOctaves='2' seed='6' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1.8 0 0 0 -.5'/></filter><rect width='100%25' height='100%25' filter='url(%23w)'/></svg>") 0 0 / 44cqh 44cqh, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 100' preserveAspectRatio='none'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-opacity='0'/><stop offset='0.0862'/><stop offset='0.9138'/><stop offset='1' stop-opacity='0'/></linearGradient><rect width='10' height='100' fill='url(%23g)'/></svg>") 0 0 / 100% 100%;
   mask-composite: intersect;
 }
 /* In overtime all of the band but the stub is wiped, and the haze is heavier: the eraser has been over all of it. */
 .dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco::before {
   background-color: color-mix(in srgb, var(--side-chalk) 30%, transparent);
+  clip-path: inset(0);   /* the end bell's pass moves this edge */
 }
 
-/* The eraser's dust along the edge of the wipe, softening where the lines were cut off. */
+/* The eraser's dust along the edge of the wipe, softening where the lines were cut off. A layer of its own: it moves
+   a little on every step, over lines that do not. */
 .dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"] .dt-deco-over::before {
   --smear: 7cqw;
   content: "";
@@ -143,10 +181,11 @@
   left: calc(max((1 - var(--used)) * 100%, var(--chalk-stub)) - var(--smear) / 2);
   width: var(--smear);
   background-color: color-mix(in srgb, var(--side-chalk) 34%, transparent);
-  -webkit-mask: var(--wiped), linear-gradient(to right, transparent, #000 45% 55%, transparent), var(--fade-y);
+  -webkit-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='w' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.02 .0035' numOctaves='2' seed='6' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1.8 0 0 0 -.5'/></filter><rect width='100%25' height='100%25' filter='url(%23w)'/></svg>") 0 0 / 44cqh 44cqh, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 10' preserveAspectRatio='none'><linearGradient id='g'><stop offset='0' stop-opacity='0'/><stop offset='.45'/><stop offset='.55'/><stop offset='1' stop-opacity='0'/></linearGradient><rect width='100' height='10' fill='url(%23g)'/></svg>") 0 0 / 100% 100%, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 100' preserveAspectRatio='none'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-opacity='0'/><stop offset='0.0806'/><stop offset='0.9194'/><stop offset='1' stop-opacity='0'/></linearGradient><rect width='10' height='100' fill='url(%23g)'/></svg>") 0 0 / 100% 100%;
   -webkit-mask-composite: source-in;
-  mask: var(--wiped), linear-gradient(to right, transparent, #000 45% 55%, transparent), var(--fade-y);
+  mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='w' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.02 .0035' numOctaves='2' seed='6' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1.8 0 0 0 -.5'/></filter><rect width='100%25' height='100%25' filter='url(%23w)'/></svg>") 0 0 / 44cqh 44cqh, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 10' preserveAspectRatio='none'><linearGradient id='g'><stop offset='0' stop-opacity='0'/><stop offset='.45'/><stop offset='.55'/><stop offset='1' stop-opacity='0'/></linearGradient><rect width='100' height='10' fill='url(%23g)'/></svg>") 0 0 / 100% 100%, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 100' preserveAspectRatio='none'><linearGradient id='g' x2='0' y2='1'><stop offset='0' stop-opacity='0'/><stop offset='0.0806'/><stop offset='0.9194'/><stop offset='1' stop-opacity='0'/></linearGradient><rect width='10' height='100' fill='url(%23g)'/></svg>") 0 0 / 100% 100%;
   mask-composite: intersect;
+  will-change: transform;   /* no filter of its own, so a transform layer is safe */
 }
 .dt-stage[data-theme="chalk"][data-pro-seat="right"][data-side="pro"] .dt-deco-over::before,
 .dt-stage[data-theme="chalk"][data-pro-seat="left"][data-side="con"] .dt-deco-over::before {
@@ -163,8 +202,8 @@
 /* The attribute selectors only rank this above stage.css's per-seat clips, which it removes. */
 .dt-stage[data-theme="chalk"][data-kind][data-pro-seat][data-side] .dt-clock .dt-digits:not(.dt-digits-on) { clip-path: none; }
 
-/* The board and the digits each get a layer of their own: the board's noise tile is then drawn once, not again under
-   every frame's change of the digits. */
+/* The board and the digits each get a layer of their own: the board's noise tiles are then drawn once, not again
+   under every change of the digits. Neither carries a filter itself (see the note at the top). */
 .dt-stage[data-theme="chalk"] .dt-backdrop,
 .dt-stage[data-theme="chalk"] .dt-clock { will-change: transform; }
 
@@ -181,11 +220,16 @@
 .dt-stage[data-theme="chalk"] .dt-speaker { font-family: var(--font-title); font-size: 3.1cqh; letter-spacing: .1em; }
 .dt-stage[data-theme="chalk"] .dt-top { font-family: var(--font-title); font-size: 2.3cqh; letter-spacing: .04em; }
 .dt-stage[data-theme="chalk"] .dt-team { filter: var(--chalk-write); }
+/* A side out of time: 时间到 / 已放弃 is written in chalk where its digits stood. stage.css fades it in (an opacity
+   animation, which gives it a layer of its own for the fade, so the filter is drawn once). No will-change: it is
+   centred by translate(-50%, -50%), and a layer of its own at a fraction of a pixel is resampled, which washes out
+   the chalk's grain; painted with its clock, it keeps it. */
+.dt-stage[data-theme="chalk"] .dt-half[data-locked] .dt-state { filter: var(--chalk-write); }
 
 /* ---- the warn bell point: a tick in yellow chalk on the hatching, below the digits ---- */
 
-/* A heavy tick in a patch of board wiped clear of the hatching, so the chalk's broken edge cannot lose it among the
-   lines from the back of the room. */
+/* A heavy tick in a patch of board wiped clear of the hatching (.dt-deco-over::after, below), so the chalk's broken
+   edge cannot lose it among the lines from the back of the room. The tick is a layer of its own. */
 .dt-stage[data-theme="chalk"] .dt-warnline {
   top: calc(var(--hatch-bottom) - 12.5cqh);
   bottom: auto;
@@ -193,66 +237,187 @@
   width: 11cqh;
   height: 11cqh;
   margin-left: -5.5cqh;
-  background:
-    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M16 52 C24 58 31 68 39 81 C51 58 66 35 86 16' fill='none' stroke='%23F0D477' stroke-width='17' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / contain no-repeat,
-    radial-gradient(closest-side, var(--ground) 62%, transparent);
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M16 52 C24 58 31 68 39 81 C51 58 66 35 86 16' fill='none' stroke='%23F0D477' stroke-width='17' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / contain no-repeat;
   -webkit-mask-image: none;
   mask-image: none;
   filter: var(--chalk-stroke);
+  clip-path: inset(-20%);   /* clear of the filter's rough edge; the bell moves it (below) */
+  will-change: opacity;
 }
 .dt-stage[data-theme="chalk"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
 .dt-stage[data-theme="chalk"][data-pro-seat="left"][data-side="con"] .dt-warnline {
   left: clamp(5.5cqh, calc((1 - var(--warn-at)) * 100%), calc(100% - 5.5cqh));
 }
+/* The patch under the tick: board colour with the chalk's grain (a cached noise mask, no filter), over the hatching
+   and the eraser's dust, under the tick. The eraser takes it as its edge passes, step by step like the field (cheap:
+   an unfiltered gradient, and clamped, so its value changes only while the edge crosses it). So at the bell its far
+   half is already gone, and its seat half, over lines the eraser has not reached, goes only as the eraser reaches
+   them: no chalk comes back. */
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"]:not([data-phase="over"]):has(> .dt-warnline:not([hidden])) .dt-deco-over::after {
+  --tick-left: calc(clamp(5.5cqh, var(--warn-at) * 100cqw, 100cqw - 5.5cqh) - 5.5cqh);
+  content: "";
+  position: absolute;
+  top: calc(var(--hatch-bottom) - 12.5cqh);
+  left: var(--tick-left);
+  width: 11cqh;
+  height: 11cqh;
+  background: radial-gradient(closest-side, var(--ground) 62%, transparent);
+  -webkit-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='t' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='1' seed='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  5 0 0 0 -1.6'/></filter><rect width='100%25' height='100%25' filter='url(%23t)'/></svg>") 0 0 / 256px 256px;
+  mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='t' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='1' seed='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  5 0 0 0 -1.6'/></filter><rect width='100%25' height='100%25' filter='url(%23t)'/></svg>") 0 0 / 256px 256px;
+  clip-path: inset(-1px clamp(-1px, 11cqh - (1 - var(--used)) * 100cqw + var(--tick-left), 11cqh + 1px) -1px -1px);
+}
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-pro-seat="right"][data-side="pro"]:not([data-phase="over"]):has(> .dt-warnline:not([hidden])) .dt-deco-over::after,
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-pro-seat="left"][data-side="con"]:not([data-phase="over"]):has(> .dt-warnline:not([hidden])) .dt-deco-over::after {
+  --tick-left: calc(clamp(5.5cqh, (1 - var(--warn-at)) * 100cqw, 100cqw - 5.5cqh) - 5.5cqh);
+  clip-path: inset(-1px -1px -1px clamp(-1px, var(--used) * 100cqw - var(--tick-left), 11cqh + 1px));
+}
+/* The warn bell: the eraser reaches the tick (engine.js) and takes it, from the far side toward the seat, in one
+   stroke. Declared on the bell's side only, so going back to calm (undo) puts the tick back at once. */
+.dt-stage[data-theme="chalk"]:not([data-phase="calm"]) .dt-warnline {
+  opacity: 1;
+  clip-path: inset(-20% 120% -20% -20%);
+  transition: clip-path 420ms var(--chalk-wipe);
+}
+.dt-stage[data-theme="chalk"][data-pro-seat="right"][data-side="pro"]:not([data-phase="calm"]) .dt-warnline,
+.dt-stage[data-theme="chalk"][data-pro-seat="left"][data-side="con"]:not([data-phase="calm"]) .dt-warnline {
+  clip-path: inset(-20% -20% -20% 120%);
+}
 
-/* ---- overtime: the digits turn yellow chalk (stage.css), and a teacher's loop rings them ---- */
+/* ---- the bells: marks in yellow chalk, drawn and left to fade, never scaled ---- */
 
+/* A bell's ring (stage.css: in the clock that rang, under its digits) is a chalk mark here. The warn bell (and a
+   break's end) underlines the number: a quick stroke left to right (260 ms), left a moment, then thinning away as
+   dust by 1100 ms; the gold colon stays as the lasting sign. The stroke is a layer of its own, filtered once; only its
+   box is clipped and faded. A break's second bell strikes a second line under the first. */
+.dt-stage[data-theme="chalk"] .dt-ring {
+  --chalk-ul: calc(var(--bell-w, 30) * 1cqw);
+  top: calc(50% + (var(--bell-dy, 0) + var(--bell-h, 30) / 2) * 1cqh + 1.2cqh);
+  width: calc(var(--chalk-ul) * .92);
+  height: 3.4cqh;
+  margin: 0 0 0 calc(var(--chalk-ul) * -.46);
+  border: 0;
+  border-radius: 0;
+  opacity: 1;
+  animation: dt-chalk-underline 1100ms linear forwards;
+}
+.dt-stage[data-theme="chalk"] .dt-ring[data-nth="2"] { margin-top: 1.8cqh; }
+.dt-stage[data-theme="chalk"] .dt-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 60' preserveAspectRatio='none'><path d='M8 40 C180 33 420 27 640 25 C800 24 920 22 992 18' fill='none' stroke='%23F0D477' stroke-width='15' stroke-linecap='round'/></svg>") center / 100% 100% no-repeat;
+  filter: var(--chalk-stroke);
+  will-change: opacity;
+}
+/* A single stage's end is the eraser's pass and the loop (below); a free-debate side out of time is 时间到 written in
+   its digits' place. Neither has a ring (render.js removes these after 1500 ms). */
+.dt-stage[data-theme="chalk"][data-kind="single"] .dt-clock[data-clock="main"] > .dt-ring[data-type="end"],
+.dt-stage[data-theme="chalk"] .dt-half .dt-ring[data-type="end"] { display: none; }
+
+/* ---- time up (single stage): the eraser's last pass, then a teacher's loop round the number ---- */
+
+/* The first bell: the eraser goes over the whole band once more, from the far side to the seat (600 ms), and leaves
+   the heavier overtime haze behind it: the 30% haze is let in under its edge, and over what it has not reached yet a
+   14% one (.dt-deco::after, only while the stage says the end bell rang) keeps the running look. Keyed on the bell,
+   so a stage opened in overtime simply shows it, and a still has none of it. */
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"][data-bell="end"][data-bell-clock="main"] .dt-deco::before {
+  animation: dt-chalk-pass-l 600ms var(--chalk-wipe);
+}
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"][data-bell="end"][data-bell-clock="main"] .dt-deco::after {
+  clip-path: inset(0 100% 0 0);
+  animation: dt-chalk-rest-l 600ms var(--chalk-wipe);
+}
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"][data-bell="end"][data-bell-clock="main"][data-pro-seat="right"][data-side="pro"] .dt-deco::before,
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"][data-bell="end"][data-bell-clock="main"][data-pro-seat="left"][data-side="con"] .dt-deco::before {
+  animation-name: dt-chalk-pass-r;
+}
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"][data-bell="end"][data-bell-clock="main"][data-pro-seat="right"][data-side="pro"] .dt-deco::after,
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"][data-bell="end"][data-bell-clock="main"][data-pro-seat="left"][data-side="con"] .dt-deco::after {
+  clip-path: inset(0 0 0 100%);
+  animation-name: dt-chalk-rest-r;
+}
+
+/* The loop rings the time, sign and all (see --chalk-loop-shift). A layer of its own, drawn once. */
 .dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::after {
   content: "";
   position: absolute;
-  left: 50%;
-  top: var(--clock-y);
+  left: calc(50% - 64cqh - var(--chalk-loop-shift));
+  top: calc(var(--clock-y) - 25cqh);
   width: 128cqh;
   height: 50cqh;
-  translate: -50% -50%;
   background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 400' preserveAspectRatio='none'><path d='M820 58 C640 12 250 22 116 96 C-6 162 30 302 244 348 C470 396 812 380 924 298 C1004 236 956 112 776 64 C700 44 606 38 560 42' fill='none' stroke='%23F0D477' stroke-width='9' stroke-linecap='round'/></svg>") center / 100% 100% no-repeat;
   filter: var(--chalk-stroke);
+  will-change: opacity;
+}
+/* The second bell: the teacher draws the loop, anticlockwise as the stroke runs, from just right of the top where it
+   ends over its own start (so the overlap closes it last), 780 ms from 320 ms. The mask that uncovers it is its
+   parent's (on the loop itself it would run the filter again on every frame): all of .dt-deco-over, less the part of
+   the loop's box the sweep has not reached. The box's top is --clock-y (59%) less half its height. */
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"][data-bell="end"][data-bell-clock="main"] .dt-deco-over {
+  -webkit-mask: linear-gradient(#000 0 0),
+    conic-gradient(from 21deg at 50% 51%, #000 0 calc(360deg - var(--chalk-draw)), transparent 0)
+      calc(50cqw - 64cqh - var(--chalk-loop-shift)) 34cqh / 128cqh 50cqh no-repeat;
+  -webkit-mask-composite: source-out;
+  mask: linear-gradient(#000 0 0),
+    conic-gradient(from 21deg at 50% 51%, #000 0 calc(360deg - var(--chalk-draw)), transparent 0)
+      calc(50cqw - 64cqh - var(--chalk-loop-shift)) 34cqh / 128cqh 50cqh no-repeat;
+  mask-composite: subtract;
+  animation: dt-chalk-draw 780ms cubic-bezier(.4, 0, .3, 1) 320ms backwards;
 }
 
 /* ---- free debate: a chalk line parts the board; the speaking side hatches denser ---- */
 
+/* Each half's hatching is two sets of the same strokes, 2.6cqh apart, the second half a pitch on: the speaker's hand
+   has laid both (every 1.3cqh, the dense look), the waiting side's only the first, in its lighter hand (--side-light);
+   before the first floor both halves show the first set and a light second one (the weight of one set at 1.9cqh). A
+   switch only fades the two sets (520 ms, with the columns' spring): no stroke moves, none is drawn again. Both sit in
+   a box that never changes: as wide as the speaking column with its overhang (58cqw + 2 × 2cqw), held at the half's
+   seat edge and cut by the half itself, so the spring moves only the half's edge over them. */
 .dt-stage[data-theme="chalk"] .dt-half {
   --half-ground: transparent;   /* the board runs under both halves */
   --side-hatch: var(--pro-hatch);
   --side-faint: var(--pro-faint);
+  --side-light: var(--pro-light);
   --side-color: var(--side-hatch);
   --hatch-angle: var(--pro-angle);
-  --hatch-pitch: 1.9cqh;
+  --hatch-pitch: 2.6cqh;
   --dual-top: 26cqh;            /* below the teams and the stage name */
   box-shadow: none;
 }
 .dt-stage[data-theme="chalk"] .dt-half[data-side="con"] {
   --side-hatch: var(--con-hatch);
   --side-faint: var(--con-faint);
+  --side-light: var(--con-light);
   --hatch-angle: var(--con-angle);
 }
-.dt-stage[data-theme="chalk"] .dt-half[data-active] { --hatch-pitch: 1.3cqh; }
 .dt-stage[data-theme="chalk"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) {
-  --side-color: var(--side-faint);
-  --hatch-pitch: 2.8cqh;
+  --side-color: var(--side-faint);   /* what the digits stand on (the contrast checks read it); the sets draw it */
   filter: none;
 }
 /* Each half's hatching is wiped from the top down as its time goes; the lines left standing keep their place. */
 .dt-stage[data-theme="chalk"] .dt-half-field {
-  inset: auto 0 calc(100cqh - var(--hatch-bottom));
+  inset: auto auto calc(100cqh - var(--hatch-bottom)) -2cqw;
+  width: calc(58cqw + 4cqw);
   height: calc(var(--remain, 1) * (var(--hatch-bottom) - var(--dual-top)));
   clip-path: inset(0 0 -3cqh);
 }
-.dt-stage[data-theme="chalk"] .dt-half-field::before {
-  top: auto;
-  bottom: 0;
+.dt-stage[data-theme="chalk"] .dt-half:last-child .dt-half-field { left: auto; right: -2cqw; }
+.dt-stage[data-theme="chalk"] .dt-half-field::before,
+.dt-stage[data-theme="chalk"] .dt-half-field::after {
+  inset: auto 0 0;
   height: calc(var(--hatch-bottom) - var(--dual-top));
+  background: repeating-linear-gradient(var(--hatch-angle), var(--side-hatch) 0 var(--hatch-line),
+    transparent var(--hatch-line) var(--hatch-pitch));
+  transition: opacity 520ms var(--ease-out);
 }
+.dt-stage[data-theme="chalk"] .dt-half-field::after {
+  background: repeating-linear-gradient(var(--hatch-angle), transparent 0 calc(var(--hatch-pitch) / 2),
+    var(--side-hatch) calc(var(--hatch-pitch) / 2) calc(var(--hatch-pitch) / 2 + var(--hatch-line)),
+    transparent calc(var(--hatch-pitch) / 2 + var(--hatch-line)) var(--hatch-pitch));
+}
+.dt-stage[data-theme="chalk"] .dt-halves[data-idle] .dt-half-field::after { opacity: .4; }
+.dt-stage[data-theme="chalk"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-half-field::before { opacity: var(--side-light); }
+.dt-stage[data-theme="chalk"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) .dt-half-field::after { opacity: 0; }
 .dt-stage[data-theme="chalk"] .dt-half .dt-clock { top: calc((var(--dual-top) + var(--hatch-bottom)) / 2); }
 .dt-stage[data-theme="chalk"] .dt-half:last-child::after {
   content: "";
@@ -264,6 +429,7 @@
   width: 3cqh;
   background: linear-gradient(to right, transparent 1.2cqh, rgb(238 240 230 / .8) 1.2cqh 1.7cqh, transparent 1.7cqh);
   filter: var(--chalk-stroke);
+  will-change: opacity;   /* it rides the columns' spring: a layer drawn once, moved */
 }
 .dt-stage[data-theme="chalk"] .dt-half .dt-team::before { opacity: 1; }
 .dt-stage[data-theme="chalk"] .dt-half[data-side="pro"] .dt-team::before { color: var(--pro); }
@@ -303,5 +469,137 @@
 .dt-stage[data-theme="chalk"] .dt-motion,
 .dt-stage[data-theme="chalk"] .dt-teams { filter: var(--chalk-write); }
 
-/* The bells ring in yellow chalk. */
-.dt-stage[data-theme="chalk"] .dt-ring { filter: var(--chalk-stroke); }
+/* ---- a new stage: the hatching is laid in from the seat, along the strokes ---- */
+
+/* Not the shared sweep's straight edge across the strokes: the edge of the new hatching runs along them, as a hand
+   moves along the board laying stroke after stroke, out from the speaking side's seat (560 ms, the shared sweep's
+   time and curve). It leans a little ahead at the top (--chalk-slope is the strokes' run per unit of drop, ±.9004,
+   less or more by .25), so the strokes at the edge are always being drawn down from their upper ends, and it is a
+   little ragged. --chalk-front is where it crosses the middle of the band; it starts and ends 40cqh off the stage so
+   the leaning edge clears it. The field keeps its own wipe as the far bound, so a stage entered part way is hatched
+   only up to it. The haze, the eraser's dust and the tick's patch (and in overtime the loop) come in under the same
+   edge; the tick comes in with stage.css's warn line. It is all clip-path on the lines' parents, so the lines are
+   drawn once. The keyframes have no `to`: --chalk-in's live value is 1, the stage at rest. */
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"].is-entering :is(.dt-field, .dt-deco, .dt-deco-over) {
+  --chalk-front: calc(-40cqh + (100cqw + 80cqh) * var(--chalk-in));
+  --chalk-slope: .6504;
+  animation: dt-chalk-in 560ms var(--ease-out);
+}
+.dt-stage[data-theme="chalk"][data-side="con"].is-entering :is(.dt-field, .dt-deco, .dt-deco-over) { --chalk-slope: -1.1504; }
+.dt-stage[data-theme="chalk"][data-pro-seat="right"][data-side="pro"].is-entering :is(.dt-field, .dt-deco, .dt-deco-over),
+.dt-stage[data-theme="chalk"][data-pro-seat="left"][data-side="con"].is-entering :is(.dt-field, .dt-deco, .dt-deco-over) {
+  --chalk-front: calc(100cqw + 40cqh - (100cqw + 80cqh) * var(--chalk-in));
+}
+.dt-stage[data-theme="chalk"][data-pro-seat="right"][data-side="pro"].is-entering :is(.dt-field, .dt-deco, .dt-deco-over) { --chalk-slope: 1.1504; }
+.dt-stage[data-theme="chalk"][data-pro-seat="left"][data-side="con"].is-entering :is(.dt-field, .dt-deco, .dt-deco-over) { --chalk-slope: -.6504; }
+/* The field, up to the edge of the wipe (--chalk-edge); its box is the band, 58cqh, its middle at 29cqh. */
+.dt-stage[data-theme="chalk"][data-mode][data-pro-seat][data-side].is-entering .dt-field {
+  --chalk-edge: max((1 - var(--used)) * 100%, var(--chalk-stub));
+  clip-path: polygon(-3cqw -3cqh,
+    min(var(--chalk-front) + var(--chalk-slope) * -32cqh, var(--chalk-edge)) -3cqh,
+    min(var(--chalk-front) + var(--chalk-slope) * -24cqh + 1.2cqh, var(--chalk-edge)) 5cqh,
+    min(var(--chalk-front) + var(--chalk-slope) * -16cqh - .8cqh, var(--chalk-edge)) 13cqh,
+    min(var(--chalk-front) + var(--chalk-slope) * -8cqh + .7cqh, var(--chalk-edge)) 21cqh,
+    min(var(--chalk-front) - 1.1cqh, var(--chalk-edge)) 29cqh,
+    min(var(--chalk-front) + var(--chalk-slope) * 8cqh + .5cqh, var(--chalk-edge)) 37cqh,
+    min(var(--chalk-front) + var(--chalk-slope) * 16cqh - .7cqh, var(--chalk-edge)) 45cqh,
+    min(var(--chalk-front) + var(--chalk-slope) * 24cqh + 1.1cqh, var(--chalk-edge)) 53cqh,
+    min(var(--chalk-front) + var(--chalk-slope) * 32cqh, var(--chalk-edge)) 61cqh,
+    -3cqw 61cqh);
+}
+.dt-stage[data-theme="chalk"][data-mode][data-pro-seat="right"][data-side="pro"].is-entering .dt-field,
+.dt-stage[data-theme="chalk"][data-mode][data-pro-seat="left"][data-side="con"].is-entering .dt-field {
+  --chalk-edge: min(var(--used) * 100%, 100% - var(--chalk-stub));
+  clip-path: polygon(calc(100% + 3cqw) -3cqh,
+    max(var(--chalk-front) + var(--chalk-slope) * -32cqh, var(--chalk-edge)) -3cqh,
+    max(var(--chalk-front) + var(--chalk-slope) * -24cqh + 1.2cqh, var(--chalk-edge)) 5cqh,
+    max(var(--chalk-front) + var(--chalk-slope) * -16cqh - .8cqh, var(--chalk-edge)) 13cqh,
+    max(var(--chalk-front) + var(--chalk-slope) * -8cqh + .7cqh, var(--chalk-edge)) 21cqh,
+    max(var(--chalk-front) - 1.1cqh, var(--chalk-edge)) 29cqh,
+    max(var(--chalk-front) + var(--chalk-slope) * 8cqh + .5cqh, var(--chalk-edge)) 37cqh,
+    max(var(--chalk-front) + var(--chalk-slope) * 16cqh - .7cqh, var(--chalk-edge)) 45cqh,
+    max(var(--chalk-front) + var(--chalk-slope) * 24cqh + 1.1cqh, var(--chalk-edge)) 53cqh,
+    max(var(--chalk-front) + var(--chalk-slope) * 32cqh, var(--chalk-edge)) 61cqh,
+    calc(100% + 3cqw) 61cqh);
+}
+/* The haze under the field and the dust over it: the same edge, through the whole height of the stage. */
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"].is-entering :is(.dt-deco, .dt-deco-over) {
+  clip-path: polygon(-1cqw 0,
+    calc(var(--chalk-front) + var(--chalk-slope) * -32cqh) 0,
+    calc(var(--chalk-front) + var(--chalk-slope) * -32cqh) calc(var(--hatch-top) - 3cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * -24cqh + 1.2cqh) calc(var(--hatch-top) + 5cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * -16cqh - .8cqh) calc(var(--hatch-top) + 13cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * -8cqh + .7cqh) calc(var(--hatch-top) + 21cqh),
+    calc(var(--chalk-front) - 1.1cqh) calc(var(--hatch-top) + 29cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 8cqh + .5cqh) calc(var(--hatch-top) + 37cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 16cqh - .7cqh) calc(var(--hatch-top) + 45cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 24cqh + 1.1cqh) calc(var(--hatch-top) + 53cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 32cqh) calc(var(--hatch-top) + 61cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 32cqh) 100%,
+    -1cqw 100%);
+}
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-pro-seat="right"][data-side="pro"].is-entering :is(.dt-deco, .dt-deco-over),
+.dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-pro-seat="left"][data-side="con"].is-entering :is(.dt-deco, .dt-deco-over) {
+  clip-path: polygon(calc(100% + 1cqw) 0,
+    calc(var(--chalk-front) + var(--chalk-slope) * -32cqh) 0,
+    calc(var(--chalk-front) + var(--chalk-slope) * -32cqh) calc(var(--hatch-top) - 3cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * -24cqh + 1.2cqh) calc(var(--hatch-top) + 5cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * -16cqh - .8cqh) calc(var(--hatch-top) + 13cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * -8cqh + .7cqh) calc(var(--hatch-top) + 21cqh),
+    calc(var(--chalk-front) - 1.1cqh) calc(var(--hatch-top) + 29cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 8cqh + .5cqh) calc(var(--hatch-top) + 37cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 16cqh - .7cqh) calc(var(--hatch-top) + 45cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 24cqh + 1.1cqh) calc(var(--hatch-top) + 53cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 32cqh) calc(var(--hatch-top) + 61cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 32cqh) 100%,
+    calc(100% + 1cqw) 100%);
+}
+/* A free debate: each half is hatched in from its own seat edge the same way. The box is 62cqw, held 2cqw out past
+   the seat edge; its height is the time left (the lines stand on its floor), so the rows are measured from the floor. */
+.dt-stage[data-theme="chalk"][data-mode].is-entering .dt-half > .dt-half-field {
+  --chalk-front: calc(-40cqh + (62cqw + 80cqh) * var(--chalk-in));
+  animation: dt-chalk-in 560ms var(--ease-out);
+  clip-path: polygon(-1cqw 0,
+    calc(var(--chalk-front) + var(--chalk-slope) * -34cqh) max(0px, 100% - 65cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * -25cqh + 1.2cqh) max(0px, 100% - 56cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * -16cqh - .8cqh) max(0px, 100% - 47cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * -7cqh + .7cqh) max(0px, 100% - 38cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 2cqh - 1.1cqh) max(0px, 100% - 29cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 11cqh + .5cqh) max(0px, 100% - 20cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 20cqh - .7cqh) max(0px, 100% - 11cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 29cqh + 1.1cqh) max(0px, 100% - 2cqh),
+    calc(var(--chalk-front) + var(--chalk-slope) * 34cqh) calc(100% + 3cqh),
+    -1cqw calc(100% + 3cqh));
+}
+.dt-stage[data-theme="chalk"][data-mode].is-entering .dt-half:last-child > .dt-half-field {
+  clip-path: polygon(calc(100% + 1cqw) 0,
+    calc(100% - var(--chalk-front) + var(--chalk-slope) * -34cqh) max(0px, 100% - 65cqh),
+    calc(100% - var(--chalk-front) + var(--chalk-slope) * -25cqh + 1.2cqh) max(0px, 100% - 56cqh),
+    calc(100% - var(--chalk-front) + var(--chalk-slope) * -16cqh - .8cqh) max(0px, 100% - 47cqh),
+    calc(100% - var(--chalk-front) + var(--chalk-slope) * -7cqh + .7cqh) max(0px, 100% - 38cqh),
+    calc(100% - var(--chalk-front) + var(--chalk-slope) * 2cqh - 1.1cqh) max(0px, 100% - 29cqh),
+    calc(100% - var(--chalk-front) + var(--chalk-slope) * 11cqh + .5cqh) max(0px, 100% - 20cqh),
+    calc(100% - var(--chalk-front) + var(--chalk-slope) * 20cqh - .7cqh) max(0px, 100% - 11cqh),
+    calc(100% - var(--chalk-front) + var(--chalk-slope) * 29cqh + 1.1cqh) max(0px, 100% - 2cqh),
+    calc(100% - var(--chalk-front) + var(--chalk-slope) * 34cqh) calc(100% + 3cqh),
+    calc(100% + 1cqw) calc(100% + 3cqh));
+}
+.dt-stage[data-theme="chalk"].is-entering .dt-half:first-child[data-side="pro"] > .dt-half-field { --chalk-slope: .6504; }
+.dt-stage[data-theme="chalk"].is-entering .dt-half:first-child[data-side="con"] > .dt-half-field { --chalk-slope: -1.1504; }
+.dt-stage[data-theme="chalk"].is-entering .dt-half:last-child[data-side="pro"] > .dt-half-field { --chalk-slope: 1.1504; }
+.dt-stage[data-theme="chalk"].is-entering .dt-half:last-child[data-side="con"] > .dt-half-field { --chalk-slope: -.6504; }
+
+/* One-shots end on the live value (no `to` frame, or a ring that is gone at its end), so a still ([data-still]) shows
+   them landed. */
+@keyframes dt-chalk-in { from { --chalk-in: 0; } }
+@keyframes dt-chalk-draw { from { --chalk-draw: 0deg; } }
+@keyframes dt-chalk-pass-l { from { clip-path: inset(0 0 0 100%); } }
+@keyframes dt-chalk-pass-r { from { clip-path: inset(0 100% 0 0); } }
+@keyframes dt-chalk-rest-l { from { clip-path: inset(0); } }
+@keyframes dt-chalk-rest-r { from { clip-path: inset(0); } }
+@keyframes dt-chalk-underline {
+  0% { clip-path: inset(-60% 102% -60% -2%); animation-timing-function: cubic-bezier(.3, .6, .4, 1); }
+  24% { clip-path: inset(-60% -2% -60% -2%); opacity: 1; }
+  58% { clip-path: inset(-60% -2% -60% -2%); opacity: 1; animation-timing-function: ease-in; }
+  100% { clip-path: inset(-60% -2% -60% -2%); opacity: 0; }
+}
