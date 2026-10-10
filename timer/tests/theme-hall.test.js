@@ -17,7 +17,10 @@
   const root = () => document.querySelector('.dt-stage');
   const deco = () => root().querySelector('.dt-deco');
   const held = name => getComputedStyle(deco()).getPropertyValue(name).trim();
-  const outgoing = () => getComputedStyle(deco(), '::before');
+  const outgoing = () => getComputedStyle(deco(), '::before');   // the held field under the new one
+  const bare = () => getComputedStyle(deco(), '::after');         // the held field where no new field comes
+  const fade = pseudo => root().getAnimations({ subtree: true })
+    .find(a => a.animationName === 'dt-hall-outgoing' && a.effect.pseudoElement === pseudo);
   function resolve(el, varName) {
     const probe = document.createElement('i');
     probe.style.color = 'var(' + varName + ')';
@@ -42,6 +45,15 @@
     r.classList.remove('is-entering');
     held('--hall-was-r');
     r.getAnimations().forEach(a => a.finish());
+  }
+  // The left and right insets of a computed clip-path: inset(), as shares of the stage's width (1 or more: nothing shows).
+  function sides(clip) {
+    const m = /^inset\(([^)]*)\)$/.exec(clip);
+    assert.ok(m, 'an inset(): ' + clip);
+    const v = m[1].trim().split(/\s+/);
+    const right = v[1] || v[0], left = v[3] || right;
+    const share = x => /%$/.test(x) ? parseFloat(x) / 100 : parseFloat(x) / root().getBoundingClientRect().width;
+    return { left: share(left), right: share(right) };
   }
   // The stages whose field sweeps in from the right-hand seat, across the left-aligned name.
   const far = (seat, side) => (seat === 'left' && side === 'con') || (seat === 'right' && side === 'pro');
@@ -86,13 +98,98 @@
     assert.equal(outgoing().animationName, 'dt-hall-outgoing');
     assert.equal(outgoing().animationFillMode, 'backwards', 'it holds nothing once it has faded');
     assert.equal(getComputedStyle(root()).backgroundColor, PRO_DEEP, 'the ground eases from 朱·沉');
+    // It keeps the field's light from above, and the bottom bar eases with the ground.
+    const light = getComputedStyle(root().querySelector('.dt-field')).backgroundImage;
+    assert.equal(outgoing().backgroundImage, light, 'the same light from above');
+    assert.equal(bare().backgroundImage, light, 'on both parts');
+    const probe = document.createElement('i');
+    probe.style.backgroundImage = 'linear-gradient(to top, color-mix(in oklab, ' + PRO_DEEP + ' 55%, transparent), transparent)';
+    root().appendChild(probe);
+    assert.equal(getComputedStyle(root().querySelector('.dt-bottom'), '::before').backgroundImage, getComputedStyle(probe).backgroundImage,
+      'the bottom bar eases with the ground');
+    probe.remove();
+    // The con field comes in full, so all of the held field is under it, and nothing of it is left bare.
+    const u = sides(outgoing().clipPath), b = sides(bare().clipPath);
+    assert.ok(Math.abs(u.left) < 1e-3 && Math.abs(u.right - 0.4) < 1e-3, 'under the new field: all of it, ' + outgoing().clipPath);
+    assert.ok(b.left + b.right >= 1 - 1e-3, 'nothing bare: ' + bare().clipPath);
+    // Under the new field it is solid until pushed over, ease-in: still .87 at 280 ms, gone at 560 ms.
+    assert.equal(outgoing().animationTimingFunction, 'cubic-bezier(0.55, 0, 1, 0.45)', 'into a stage: ease-in');
+    const under = fade('::before');
+    assert.ok(under, 'the held field fades');
+    under.pause();
+    under.currentTime = 280;
+    assert.near(parseFloat(outgoing().opacity), 0.865, 0.02, 'still solid at 280 ms');
+    under.currentTime = 560;
+    assert.equal(parseFloat(outgoing().opacity), 0, 'gone at 560 ms');
+    under.play();
     root().classList.remove('is-entering');
     assert.equal(outgoing().display, 'none');
+    assert.equal(bare().display, 'none');
     assert.equal(parseFloat(held('--hall-was-r')), 0, 'the hold stops with the class: the live con field');
     assert.equal(held('--hall-was-field'), CON);
     settle();
     assert.equal(getComputedStyle(root()).backgroundColor, resolve(root(), '--side-deep'), 'then the con deep ground');
     h.destroy();
+  });
+
+  // Into a break (as into a card or a dual stage) no field comes over the held one: all of it dims with the room.
+  DT.test('theme hall: into a break the held field dims with the room', () => {
+    const h = R.mount(host());
+    let [s, at] = used(session('left'), OPENING, 0.4, T0);
+    h.update(E.view(s, at));
+    settle();
+    s = E.goto(s, idx('评委打分'), at + 1000);
+    h.update(E.view(s, at + 1000));
+    assert.ok(root().classList.contains('is-entering'));
+    const u = sides(outgoing().clipPath), b = sides(bare().clipPath);
+    assert.ok(u.left + u.right >= 1 - 1e-3, 'nothing under a new field: ' + outgoing().clipPath);
+    assert.ok(Math.abs(b.left) < 1e-3 && Math.abs(b.right - 0.4) < 1e-3, 'all of it bare: ' + bare().clipPath);
+    assert.equal(bare().display, 'block');
+    assert.equal(bare().animationName, 'dt-hall-outgoing');
+    assert.equal(bare().animationTimingFunction, 'cubic-bezier(0.2, 0.8, 0.2, 1)', 'ease-out, with the room');
+    assert.equal(bare().animationFillMode, 'backwards');
+    h.destroy();
+  });
+
+  // Back to a single stage that has used time (Z, ← or a goto) from a full field: the new field sweeps only up to its
+  // edge. Under it the held field waits to be pushed over (ease-in); past that edge nothing will cover it, so it dims
+  // with the room (ease-out) rather than hold solid and drop. Back to a stage run into overtime no field comes at all.
+  DT.test('theme hall: back to a used or overtime stage, the held field past the new field\'s edge dims with the room', () => {
+    [['left', 0.4], ['right', 0.4], ['left', 1.05]].forEach(([seat, share]) => {
+      const where = seat + ' / ' + share;
+      const h = R.mount(host());
+      const frame = v => { h.update(v); held('--hall-was-r'); };
+      let [s, at] = used(session(seat), OPENING, share, T0);
+      frame(E.view(s, at));
+      s = E.goto(s, idx(CROSS), at + 1000);   // con, not started: its field full
+      frame(E.view(s, at + 1000));
+      settle();
+      s = E.goto(s, idx(OPENING), at + 2000);   // back
+      frame(E.view(s, at + 2000));
+      const r = root(), now = Math.min(1, share);
+      assert.ok(r.classList.contains('is-entering') && r.dataset.side === 'pro', where);
+      assert.near(parseFloat(r.style.getPropertyValue('--used')), now, 0.001, where + ': the stage kept its time');
+      assert.equal(held('--hall-was-field'), CON, where + ': the full con field held');
+      // Pro's field lies at pro's seat; the held con field is all of the stage.
+      const u = sides(outgoing().clipPath), b = sides(bare().clipPath);
+      const want = seat === 'left' ? [{ left: 0, right: now }, { left: 1 - now, right: 0 }] : [{ left: now, right: 0 }, { left: 0, right: 1 - now }];
+      if (now < 1) {
+        assert.ok(Math.abs(u.left - want[0].left) < 1e-3 && Math.abs(u.right - want[0].right) < 1e-3, where + ': under it, ' + outgoing().clipPath);
+      } else {
+        assert.ok(u.left + u.right >= 1 - 1e-3, where + ': no new field, nothing under it: ' + outgoing().clipPath);
+      }
+      assert.ok(Math.abs(b.left - want[1].left) < 1e-3 && Math.abs(b.right - want[1].right) < 1e-3, where + ': bare, ' + bare().clipPath);
+      assert.equal(outgoing().animationTimingFunction, 'cubic-bezier(0.55, 0, 1, 0.45)', where + ': under it, ease-in');
+      assert.equal(bare().animationName, 'dt-hall-outgoing', where);
+      assert.equal(bare().animationTimingFunction, 'cubic-bezier(0.2, 0.8, 0.2, 1)', where + ': bare, ease-out');
+      assert.equal(bare().animationFillMode, 'backwards', where);
+      // At 280 ms the part under the new field still holds; the bare part has mostly gone with the room.
+      const a = fade('::before'), c = fade('::after');
+      [a, c].forEach(x => { x.pause(); x.currentTime = 280; });
+      assert.ok(parseFloat(outgoing().opacity) > 0.8, where + ': under it, ' + outgoing().opacity);
+      assert.ok(parseFloat(bare().opacity) < 0.3, where + ': bare, ' + bare().opacity);
+      h.destroy();
+    });
   });
 
   // Each update is followed by a frame (its styles computed), as on screen; without one a stage's hold never starts.

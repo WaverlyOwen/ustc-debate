@@ -18,7 +18,8 @@
 /* Light falls from above onto the field, so a projected flat colour still reads as a room. */
 .dt-stage[data-theme="hall"] .dt-field,
 .dt-stage[data-theme="hall"] .dt-half-field,
-.dt-stage[data-theme="hall"] .dt-deco::before {
+.dt-stage[data-theme="hall"] .dt-deco::before,
+.dt-stage[data-theme="hall"] .dt-deco::after {
   background-image: linear-gradient(to bottom, rgb(255 255 255 / .07), transparent 40%, rgb(0 0 0 / .16));
 }
 
@@ -34,10 +35,10 @@
 
 /* ---- A new stage: the incoming side's light pushes the outgoing side's back to its seat (spec §5.5) ----
    The room does not go dark between two stages. While a stage enters, the field it replaces stays where it was,
-   under the new field (.dt-deco::before: the same colour, clip and light from above), and fades out, and the deep
-   ground eases from the old side's to the new side's. render.js calls enter(), whose replay() flushes the styles,
-   before it writes the new stage, so these transitions start from the stage that was on screen. This assumes the
-   shared full-screen field (stage.css .dt-field); a theme with another field drops the block. */
+   under the new field (.dt-deco::before and ::after: the same colour, clip and light from above), and fades out, and
+   the deep ground eases from the old side's to the new side's. render.js calls enter(), whose replay() flushes the
+   styles, before it writes the new stage, so these transitions start from the stage that was on screen. This assumes
+   the shared full-screen field (stage.css .dt-field); a theme with another field drops the block. */
 @property --hall-deep { syntax: "<color>"; inherits: true; initial-value: #2A2D33; }   /* 黛: the room before a match */
 @property --hall-was-field { syntax: "<color>"; inherits: true; initial-value: transparent; }
 @property --hall-was-l { syntax: "<number>"; inherits: true; initial-value: 0; }
@@ -54,37 +55,62 @@
   --hall-was-field: var(--side-color);
   --hall-was-l: 0;
   --hall-was-r: 1;
+  /* The new stage's field as it is now (not registered, never held): its insets from the left and the right (1: no
+     field), and the insets of the part of the stage it leaves bare (0 0: all of it). */
+  --hall-now-l: 0;
+  --hall-now-r: 1;
+  --hall-now-cl: 0;
+  --hall-now-cr: 0;
   /* Removing .is-entering would leave a running hold going (the initial `all 0s` still matches it), and the next
      stage would get the one before; `none` stops it at replay()'s flush. */
   transition: none;
 }
-.dt-stage[data-theme="hall"][data-kind="single"] .dt-deco { --hall-was-r: var(--used); }
+.dt-stage[data-theme="hall"][data-kind="single"] .dt-deco {
+  --hall-was-r: var(--used);
+  --hall-now-r: var(--used);
+  --hall-now-cl: calc(1 - var(--used));
+}
 .dt-stage[data-theme="hall"][data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-deco,
 .dt-stage[data-theme="hall"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-deco {
   --hall-was-l: var(--used);
   --hall-was-r: 0;
+  --hall-now-l: var(--used);
+  --hall-now-r: 0;
+  --hall-now-cl: 0;
+  --hall-now-cr: calc(1 - var(--used));
 }
 /* step-end: the old field holds through the entrance and lands on the new values once it has faded. */
 .dt-stage[data-theme="hall"].is-entering .dt-deco {
   transition: --hall-was-field 1000ms step-end, --hall-was-l 1000ms step-end, --hall-was-r 1000ms step-end;
 }
-.dt-stage[data-theme="hall"] .dt-deco::before {
+.dt-stage[data-theme="hall"] .dt-deco::before,
+.dt-stage[data-theme="hall"] .dt-deco::after {
   content: "";
   position: absolute;
   inset: 0;
   display: none;
   opacity: 0;
   background-color: var(--hall-was-field);   /* not the shorthand: it keeps the light from above */
-  clip-path: inset(0 calc(var(--hall-was-r) * 100%) 0 calc(var(--hall-was-l) * 100%));
 }
-/* Solid until the new field has pushed over it (still .87 at 280 ms), gone at 560 ms. */
+/* The old field in two parts, each its clip intersected with the new field's or with what that leaves bare. Under the
+   new field (::before) it stays solid until the field has pushed over it (still .87 at 280 ms) and is gone at 560 ms. */
+.dt-stage[data-theme="hall"] .dt-deco::before {
+  clip-path: inset(0 calc(max(var(--hall-was-r), var(--hall-now-r)) * 100%) 0
+    calc(max(var(--hall-was-l), var(--hall-now-l)) * 100%));
+}
+/* Where no field comes over it (::after: all of it into a card, a break or a dual stage; past the new field's edge
+   on a return to a single stage that has used time) it dims with the room, rather than hold solid and then drop. */
+.dt-stage[data-theme="hall"] .dt-deco::after {
+  clip-path: inset(0 calc(max(var(--hall-was-r), var(--hall-now-cr)) * 100%) 0
+    calc(max(var(--hall-was-l), var(--hall-now-cl)) * 100%));
+}
 .dt-stage[data-theme="hall"].is-entering:not([data-still]) .dt-deco::before {
   display: block;
   animation: dt-hall-outgoing 560ms cubic-bezier(.55, 0, 1, .45) backwards;
 }
-/* Into a card, a break or a dual stage no field comes over it: it dims with the room. */
-.dt-stage[data-theme="hall"].is-entering:not([data-kind="single"]) .dt-deco::before {
-  animation-timing-function: var(--ease-out);
+.dt-stage[data-theme="hall"].is-entering:not([data-still]) .dt-deco::after {
+  display: block;
+  animation: dt-hall-outgoing 560ms var(--ease-out) backwards;
 }
 /* No `to` frame: it ends on its own opacity, 0. */
 @keyframes dt-hall-outgoing { from { opacity: 1; } }

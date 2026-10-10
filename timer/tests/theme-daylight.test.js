@@ -27,6 +27,15 @@
     const end = at + F().stages[idx(name)].secs * 1000 * share;
     return [E.toggle(s, end), end];
   }
+  // The left and right insets of a computed clip-path: inset(), as shares of the stage's width (1 or more: nothing shows).
+  function sides(clip) {
+    const m = /^inset\(([^)]*)\)$/.exec(clip);
+    assert.ok(m, 'an inset(): ' + clip);
+    const v = m[1].trim().split(/\s+/);
+    const right = v[1] || v[0], left = v[3] || right;
+    const share = x => /%$/.test(x) ? parseFloat(x) / 100 : parseFloat(x) / root().getBoundingClientRect().width;
+    return { left: share(left), right: share(right) };
+  }
   // The entrance over, and every transition run out (the colons breathe for ever, so animations are left alone).
   function settle() {
     root().classList.remove('is-entering');
@@ -145,10 +154,31 @@
     const r = ring.getBoundingClientRect(), field = root().querySelector('.dt-field').getBoundingClientRect();
     assert.near(r.top, field.top, 1, 'the ring is the band');
     assert.near(r.height, field.height, 1);
-    const head = root().querySelector('.dt-head').getBoundingClientRect();
-    const reach = 8 * root().getBoundingClientRect().height / 100;   // the end bell's
-    assert.ok(r.top - reach > head.bottom, 'the farthest line stays below the head');
     h.destroy();
+    // The end bell's lines reach farthest; the long two-line name comes lowest. The top line, at the end of its run
+    // (its keyframe, whatever --daylight-reach is), stays below the name.
+    const longName = '正方一辩开篇立论，并就本方的定义、判准与论证义务作出完整的陈述和说明';
+    const longF = Object.assign({}, F(), { stages: F().stages.map((st, i) => i === idx(OPENING) ? Object.assign({}, st, { name: longName }) : st) });
+    [F(), longF].forEach(format => {
+      const e = R.mount(host());
+      const s = E.createSession(format, MATCH, T0, { theme: 'daylight' });
+      e.update(E.view(E.toggle(E.goto(s, idx(OPENING), T0), T0), T0 + 179900));
+      settle();
+      const where = format === longF ? 'the long name' : 'the name';
+      const head = root().querySelector('.dt-head').getBoundingClientRect();
+      if (format === longF) {
+        assert.equal(root().dataset.long, 'true', where);
+        assert.ok(head.height > 2 * parseFloat(css(root().querySelector('.dt-title'), 'fontSize')), where + ': on two lines');
+      }
+      e.pulse({ type: 'end', clock: 'main' });
+      const end = root().querySelector('.dt-ring[data-type="end"]');
+      end.getAnimations({ subtree: true }).filter(a => a.effect.pseudoElement === '::before').forEach(a => a.finish());
+      const line = getComputedStyle(end, '::before');
+      const ty = new DOMMatrix(line.transform).f, top = end.getBoundingClientRect().top - parseFloat(line.height) / 2 + ty;
+      assert.ok(ty < 0, where + ': the top line has travelled up: ' + ty);
+      assert.ok(top > head.bottom, where + ': the farthest line (' + top + ') stays below the head (' + head.bottom + ')');
+      e.destroy();
+    });
     const b = R.mount(host());
     b.update(E.view(E.toggle(E.goto(session(), idx('评委打分'), T0), T0), T0 + 29000));
     root().classList.remove('is-entering');
@@ -213,6 +243,43 @@
     assert.equal(held('--daylight-was-band'), CON, 'the con stage just left');
     assert.near(parseFloat(held('--daylight-was-l')), 0.25, 0.001);
     g.destroy();
+  });
+
+  // Back to a single stage that has used time (Z, ← or a goto) from a full band: only the part the new band will sweep
+  // over is held; past its edge the track's own crossfade shows at once, so no ink digits stand on the old band.
+  DT.test('theme daylight: back to a used stage, only the band the new one sweeps over is held', () => {
+    ['left', 'right'].forEach(seat => {
+      const h = R.mount(host());
+      const frame = v => { h.update(v); held('--daylight-was-r'); };
+      let [s, at] = used(session(seat), OPENING, 0.4, T0);
+      frame(E.view(s, at));
+      s = E.goto(s, idx(CROSS), at + 1000);   // con, not started: its band full
+      frame(E.view(s, at + 1000));
+      settle();
+      s = E.goto(s, idx(OPENING), at + 2000);   // back: 40% of it used
+      frame(E.view(s, at + 2000));
+      const r = root();
+      assert.ok(r.classList.contains('is-entering') && r.dataset.side === 'pro', seat);
+      assert.near(parseFloat(r.style.getPropertyValue('--used')), 0.4, 0.001, seat + ': the stage kept its time');
+      assert.equal(held('--daylight-was-band'), CON, seat + ': the full con band held');
+      const old = getComputedStyle(deco(), '::before'), u = sides(old.clipPath);
+      const want = seat === 'left' ? { left: 0, right: 0.4 } : { left: 0.4, right: 0 };
+      assert.ok(Math.abs(u.left - want.left) < 1e-3 && Math.abs(u.right - want.right) < 1e-3, seat + ': only under the new band, ' + old.clipPath);
+      assert.equal(old.display, 'block');
+      assert.equal(old.animationName, 'dt-daylight-outgoing');
+      h.destroy();
+    });
+    // Into a break no band comes: all of the held band goes out with the track.
+    const h = R.mount(host());
+    let [s, at] = used(session('left'), OPENING, 0.4, T0);
+    h.update(E.view(s, at));
+    settle();
+    s = E.goto(s, idx('评委打分'), at + 1000);
+    h.update(E.view(s, at + 1000));
+    const old = getComputedStyle(deco(), '::before'), u = sides(old.clipPath);
+    assert.ok(Math.abs(u.left) < 1e-3 && Math.abs(u.right - 0.4) < 1e-3, 'into a break, all of it: ' + old.clipPath);
+    assert.equal(old.animationTimingFunction, 'cubic-bezier(0.2, 0.8, 0.2, 1)');
+    h.destroy();
   });
 
   DT.test('theme daylight: 暂停 is ink, below the band on a single stage and below the track in a free debate', () => {

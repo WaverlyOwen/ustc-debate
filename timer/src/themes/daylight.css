@@ -71,17 +71,22 @@
   --daylight-was-band: var(--side-color);
   --daylight-was-l: 0;
   --daylight-was-r: 1;
+  --daylight-now-l: 0;   /* the new stage's band as it is now (not registered, never held); 1 on the right: none */
+  --daylight-now-r: 1;
   transition: background-color 300ms ease;
 }
 .dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"] .dt-deco {
   background-color: var(--side-deep);
   --daylight-was-r: var(--used);
+  --daylight-now-r: var(--used);
 }
 /* The same clip as the band (stage.css .dt-field). */
 .dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-deco,
 .dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-deco {
   --daylight-was-l: var(--used);
   --daylight-was-r: 0;
+  --daylight-now-l: var(--used);
+  --daylight-now-r: 0;
 }
 .dt-stage[data-theme="daylight"].is-entering .dt-deco {
   transition: background-color 300ms ease,
@@ -95,6 +100,12 @@
   opacity: 0;
   background-color: var(--daylight-was-band);
   clip-path: inset(0 calc(var(--daylight-was-r) * 100%) 0 calc(var(--daylight-was-l) * 100%));
+}
+/* Into a single stage only the part the new band will sweep over is held: past its edge (a return to a stage that has
+   used time) the track's own crossfade shows at once, and no ink digits stand on the old band. */
+.dt-stage[data-theme="daylight"][data-mode="stage"][data-kind="single"] .dt-deco::before {
+  clip-path: inset(0 calc(max(var(--daylight-was-r), var(--daylight-now-r)) * 100%) 0
+    calc(max(var(--daylight-was-l), var(--daylight-now-l)) * 100%));
 }
 /* Solid until the new band has swept over it, gone at 560 ms (as hall's outgoing field). */
 .dt-stage[data-theme="daylight"].is-entering:not([data-still]) .dt-deco::before {
