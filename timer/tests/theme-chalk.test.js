@@ -246,8 +246,9 @@
   });
 
   // The eraser misses the last stroke or two at the seat: a stub of the speaking side's hatching stays there as the
-  // time runs out and through overtime, clear of the digits, so the room still sees whose floor it is (spec §1.5).
-  // The eraser stops at the stub before the time is up, so nothing jumps back in when overtime begins.
+  // time runs out and through overtime, clear of the digit row, so the room still sees whose floor it is (spec §1.5).
+  // The row is the digits with the + that stage.css hangs outside their box. The eraser stops at the stub before the
+  // time is up, so nothing jumps back in when overtime begins.
   DT.test('theme chalk: in overtime a stub of the speaker\'s hatching stays at the seat, clear of the digits', () => {
     SEATINGS.forEach(([name, seat, from]) => {
       const probe = mountBoard(singleAt(name, 60, seat));
@@ -265,9 +266,11 @@
         const inner = from === 'left' ? vis.right : vis.left;
         assert.near(from === 'left' ? vis.left : vis.right, seatEdge, 1, where + ': at the seat');
         assert.near(Math.abs(inner - seatEdge), 0.06 * W, 2, where + ': a stub of 6cqw');
-        const d = root.querySelector('.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect();
+        const digits = root.querySelector('.dt-clock[data-clock="main"] .dt-digits');
+        const g = digits.getBoundingClientRect(), s = digits.querySelector('.dt-sign').getBoundingClientRect();
+        const d = { left: Math.min(g.left, s.left), right: Math.max(g.right, s.right) };
         assert.ok(from === 'left' ? inner + 0.02 * W < d.left : inner - 0.02 * W > d.right,
-          where + ': clear of the digits: ' + inner + ' vs ' + d.left + '–' + d.right);
+          where + ': clear of the digit row: ' + inner + ' vs ' + d.left + '–' + d.right);
         // The eraser's dust lies along the stub's edge, not off the screen.
         const dust = pseudo(root.querySelector('.dt-deco-over'), '::before');
         assert.near(box.left + px(dust.left) + px(dust.width) / 2, inner, 0.02 * W, where + ': eraser dust at the stub');
@@ -456,6 +459,29 @@
     assert.ok(sign.width > 0 && l.left < sign.left - 0.02 * px(loop.width), 'round the sign: ' + l.left + ' vs ' + sign.left);
     assert.near(sign.left - l.left, l.right - d.right, 0.04 * px(loop.width), 'centred on the time with its sign');
     stage.destroy();
+  });
+
+  // From +10:00 the time is wider, and on a stage wider than 3:2 the loop grows with it. The loop is an ellipse, so
+  // its box has to clear the time by more than the corners need: a box clearing it by 3.6% of its width at each end
+  // ran through the + and the foot of the last 1 (at +0:07 it clears by 11.7%). The + is at mid-height, where the
+  // ellipse is widest; the 1's foot is at a corner, so the right end needs more. The left end stays on the board.
+  DT.test('theme chalk: from +10:00 the loop grows on a wide stage to ring the wider time, and stays on the board', () => {
+    [[1366, 768], [1440, 900]].forEach(([w, h]) => {
+      const { stage, root } = mountBoard(singleAt(OPENING, 601 + 180), w, h);   // +10:01
+      const where = w + 'x' + h;
+      const clock = root.querySelector('.dt-clock[data-clock="main"]');
+      assert.ok(root.dataset.phase === 'over' && clock.hasAttribute('data-long'), where + ': two-digit minutes of overtime');
+      const loop = pseudo(root.querySelector('.dt-deco-over'), '::after');
+      const o = root.querySelector('.dt-deco-over').getBoundingClientRect(), box = root.getBoundingClientRect();
+      const l = o.left + px(loop.left), lw = px(loop.width), r = l + lw;
+      const d = clock.querySelector('.dt-digits').getBoundingClientRect();
+      const sign = clock.querySelector('.dt-digits .dt-sign').getBoundingClientRect();
+      assert.ok(sign.width > 0 && sign.right <= d.left, where + ': the + hangs left of the digits');
+      assert.ok(l < sign.left - 0.05 * lw, where + ': round the sign: ' + l + ' vs ' + sign.left + ' (' + lw + ' wide)');
+      assert.ok(r > d.right + 0.1 * lw, where + ': round the last digit: ' + r + ' vs ' + d.right + ' (' + lw + ' wide)');
+      assert.ok(l >= box.left - 0.012 * box.height, where + ': on the board: ' + l);
+      stage.destroy();
+    });
   });
 
   DT.test('theme chalk: the chalk filters follow the stage size, so a thumbnail keeps its strokes', () => {
@@ -704,13 +730,17 @@
   });
 
   // On a 4:3 stage the loop cannot move left by half the sign: it moves as far as the stage allows and stays on it.
+  // From +10:00 the time fills the stage there, so the loop does not grow with it: it stays on the board.
   DT.test('theme chalk: on a 4:3 stage the overtime loop stays on the board', () => {
-    const { stage, root } = mountBoard(singleAt(OPENING, 187), 1024, 768);
-    const loop = pseudo(root.querySelector('.dt-deco-over'), '::after');
-    const o = root.querySelector('.dt-deco-over').getBoundingClientRect(), box = root.getBoundingClientRect();
-    const l = o.left + px(loop.left), r = l + px(loop.width);
-    assert.ok(l >= box.left - 0.012 * box.height && r <= box.right, 'on the stage: ' + l + '–' + r);
-    stage.destroy();
+    [[187, '+0:07'], [601 + 180, '+10:01']].forEach(([secs, when]) => {
+      const { stage, root } = mountBoard(singleAt(OPENING, secs), 1024, 768);
+      assert.equal(root.querySelector('.dt-clock[data-clock="main"]').textContent.slice(0, when.length), when);
+      const loop = pseudo(root.querySelector('.dt-deco-over'), '::after');
+      const o = root.querySelector('.dt-deco-over').getBoundingClientRect(), box = root.getBoundingClientRect();
+      const l = o.left + px(loop.left), r = l + px(loop.width);
+      assert.ok(l >= box.left - 0.012 * box.height && r <= box.right, when + ': on the stage: ' + l + '–' + r);
+      stage.destroy();
+    });
   });
 
   // CH9: 时间到 / 已放弃 is written in chalk where the digits stood (stage.css fades it in after they go). Painted with

@@ -2254,8 +2254,11 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 /* [data-mode] ranks these with stage.css's per-seat clip-path rules, which they replace: the same wipe toward the
    seat, but open above and below, where the lines end unevenly as a hand hatches. The eraser never gets the last
    strokes at the seat: a stub of --chalk-stub stays there as the time runs out and through overtime, clear of the
-   digits, so the room still sees whose floor it is (spec §1.5). The wipe stops at it, so nothing jumps back in
-   when overtime begins; the end bell then brings the eraser's last pass (see "time up"). */
+   digit row, so the room still sees whose floor it is (spec §1.5). On a stage squarer than about 1.42:1 with the
+   seat on the left, the + that stage.css hangs left of +M:SS reaches into it, drawn above it in yellow chalk over
+   its sparse strokes: it touches at 4:3 and overlaps by about 50px at 5:4 (1280x1024), and from +10:00, seated in
+   the row, still by about 35px. The wipe stops at it, so nothing jumps back in when overtime begins; the end bell
+   then brings the eraser's last pass (see "time up"). */
 .dt-stage[data-theme="chalk"][data-mode] .dt-field {
   top: var(--hatch-top);
   bottom: auto;
@@ -2457,7 +2460,7 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   animation-name: dt-chalk-rest-r;
 }
 
-/* The loop rings the time, sign and all (see --chalk-loop-shift). A layer of its own, drawn once. */
+/* On wide stages the loop rings the time with its sign (see --chalk-loop-shift). A layer of its own, drawn once. */
 .dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"] .dt-deco-over::after {
   content: "";
   position: absolute;
@@ -2468,6 +2471,21 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 400' preserveAspectRatio='none'><path d='M820 58 C640 12 250 22 116 96 C-6 162 30 302 244 348 C470 396 812 380 924 298 C1004 236 956 112 776 64 C700 44 606 38 560 42' fill='none' stroke='%23F0D477' stroke-width='9' stroke-linecap='round'/></svg>") center / 100% 100% no-repeat;
   filter: var(--chalk-stroke);
   will-change: opacity;
+}
+/* From +10:00 the time is about .55 of the digits' size wider, and a loop of 128cqh runs through the + and the last
+   1 (it is an ellipse: its box must clear the time by more than the corners need). On a stage wider than 3:2 it grows
+   by .4 of the digits' size at each end, its left end held at most 1cqh off the board as --chalk-loop-shift holds it;
+   below about 1.57:1 the hung + is then too near the edge for the loop to clear it. At 3:2 and squarer stage.css
+   seats the + in the row, and at 4:3 and 5:4 the time all but fills the stage, so the loop is left as it is. Only
+   data-long changes this, at +10:00, so the loop is drawn again once. The sweep that draws it (below) keeps the
+   narrower box: it runs on the end bell, at +0:00. */
+@container not (max-aspect-ratio: 3/2) {
+  .dt-stage[data-theme="chalk"][data-mode="stage"][data-kind="single"][data-phase="over"]:has(> .dt-clock[data-clock="main"][data-long]) .dt-deco-over::after {
+    --chalk-loop-r: calc(50cqw - var(--chalk-loop-shift) + 64cqh + min(38cqh, 30cqw) * .4);
+    --chalk-loop-l: max(-1cqh, var(--chalk-loop-r) - 128cqh - min(38cqh, 30cqw) * .8);
+    left: var(--chalk-loop-l);
+    width: calc(var(--chalk-loop-r) - var(--chalk-loop-l));
+  }
 }
 /* The second bell: the teacher draws the loop, anticlockwise as the stroke runs, from just right of the top where it
    ends over its own start (so the overlap closes it last), 780 ms from 320 ms. The mask that uncovers it is its
