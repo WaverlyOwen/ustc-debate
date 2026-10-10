@@ -252,7 +252,7 @@ python timer/tests/frames.py --theme ink --demo dual --skip 1200 --key KeyL  # �
 python timer/tests/frames.py --theme hall --skip 76500 --count 24 --step 60  # 提示铃（single 还剩 30 秒时）
 ```
 
-- 打开不冻结的 `?demo=<名字>&theme=<id>`，用 DevTools 的虚拟时间把页面时钟停住；`--skip` 把时钟拨快若干毫秒，`--key` 再按一个键，然后每隔 `--step` 毫秒（页面时间）截一帧，共 `--count` 帧，存到 `timer/tests/out/frames/<W>x<H>/<id>/<名字>[-<键>][-skip<毫秒>]/NNN.png`。装了 ffmpeg 时旁边还有 `sheet.png`：每行四帧、按时间顺序、最宽 2400px 的拼图，一眼看出一个时刻里各部件的先后。终端每帧一行：时间、`data-phase`、`data-side`、`data-kind`、是否还在入场、活动的动画数。
+- 打开不冻结的 `?demo=<名字>&theme=<id>`，用 DevTools 的虚拟时间把页面时钟停住；`--skip` 把时钟拨快若干毫秒，`--key` 再按一个键（逗号隔开可以连按几个，相隔 `--key-gap` 毫秒的页面时间，默认 400：放弃是 `KeyG,KeyG`），然后每隔 `--step` 毫秒（页面时间）截一帧，共 `--count` 帧，存到 `timer/tests/out/frames/<W>x<H>/<id>/<名字>[-<键>[+<键>…]][-skip<毫秒>]/NNN.png`。装了 ffmpeg 时旁边还有 `sheet.png`：每行四帧、按时间顺序、最宽 2400px 的拼图，一眼看出一个时刻里各部件的先后。终端每帧一行：时间、`data-phase`、`data-side`、`data-kind`、是否还在入场、活动的动画数。
 - 无头 Chromium 的 Web Animations 时间线不受虚拟时间管，所以脚本把时间线放慢到几乎停止，每帧之前把每个动画与过渡拨到它的虚拟年龄；有画师的主题先在真实时间里呈现一次画布，否则第一次虚拟时间下的截图约三次里卡一次。
 - **`--size` 是页面（投影）的大小**（`f28648b`）：录制时用 `Emulation.setDeviceMetricsOverride` 把页面设成 W×H。原先它设的是窗口，无头窗口自带的边框（`--no-sandbox` 时还有一条信息栏）占去 87px 以上，1024×768 实际录到约 1024×629–681 的页面，4:3 的判断偏乐观，出了真 4:3 舞台的「+」也照样在画面里。
 - **`--skip` 之后先落座**（`6dd472e`）：拨快之后、按键之前，把每个动画拨到它的年龄并让已结束的离场。原先页面加载时开始的过渡在 `--skip` 之后仍停在起点，紧接着录的换环节从一个永远不会出现的画面开始（底色已是新色，色场还没有）。

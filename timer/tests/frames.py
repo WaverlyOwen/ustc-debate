@@ -5,11 +5,13 @@ Usage:
     python timer/tests/frames.py --theme hall                                     # 入场：单方环节扫入
     python timer/tests/frames.py --theme ink --demo dual --skip 1200 --key KeyL   # 入场结束后，自由辩换边
     python timer/tests/frames.py --theme hall --skip 76500 --count 24 --step 60   # 提示铃的金环（single 还剩 30 秒时）
+    python timer/tests/frames.py --theme riso --demo dual --skip 1200 --key KeyG,KeyG   # 放弃（G G，两次相隔 --key-gap）
 
 The page opens as <html>?demo=<名字>&theme=<id> (not frozen) with its clock paused; --skip advances the clock that
-many milliseconds, --key then presses one key, and --count frames --step ms apart are saved to
-timer/tests/out/frames/<W>x<H>/<id>/<名字>[-<key>][-skip<ms>]/NNN.png, with sheet.png beside them when ffmpeg is
-installed. Each frame's line on stdout gives its time offset and the stage's data-phase, data-side, data-kind and
+many milliseconds, --key then presses one key (or several, comma-separated, --key-gap ms apart: the second press of
+R R / G G / Q Q must come between 250 and 1500 ms after the first), and --count frames --step ms apart are saved to
+timer/tests/out/frames/<W>x<H>/<id>/<名字>[-<key>[+<key>…]][-skip<ms>]/NNN.png, with sheet.png beside them when ffmpeg
+is installed. Each frame's line on stdout gives its time offset and the stage's data-phase, data-side, data-kind and
 whether it is still entering. A bell only shows when a capture step crosses its point (the engine drops a bell
 crossed more than 1.5 s ago), so stop --skip short of it.
 Exit 0 when every frame was written, 1 when something failed, 2 when no browser is found.
@@ -156,8 +158,14 @@ def record(cdp, url, args, out_dir, w, h):
         advance(cdp, 16)
         cdp.evaluate("window.__dtFrames.step()")
         cdp.evaluate("window.__dtFrames.mark()")   # what the key creates next counts from now, not from the load
-    if args.key:
-        d = dict(KEYS[args.key])
+    for i, key in enumerate(args.keys):
+        if i:
+            # A later key is pressed --key-gap ms of page time after the one before it, with a frame in between so
+            # the page sees the first press (a second press of G G or R R confirms the first).
+            cdp.evaluate("window.__dtFrames.step()")
+            advance(cdp, args.key_gap)
+            cdp.evaluate("window.__dtFrames.step()")
+        d = dict(KEYS[key])
         text = d.pop("text", None)
         down = dict(type="rawKeyDown") if text is None else dict(type="keyDown", text=text, unmodifiedText=text)
         cdp.send("Input.dispatchKeyEvent", dict(down, **d))
@@ -197,7 +205,8 @@ def main(argv=None):
     ap.add_argument("--demo", default="single", help="演示态，默认 single")
     ap.add_argument("--size", default="1280x720", help="页面（投影）大小，如 1366x768")
     ap.add_argument("--skip", type=int, default=0, help="先把页面时钟拨快这么多毫秒")
-    ap.add_argument("--key", default="", help="然后按这个键（物理键位），如 KeyL、Space、ArrowRight")
+    ap.add_argument("--key", default="", help="然后按这个键（物理键位），如 KeyL、Space、ArrowRight；逗号隔开可以连按几个，如 KeyG,KeyG")
+    ap.add_argument("--key-gap", type=int, default=400, help="连按几个键时两次之间隔多少毫秒（页面时间），默认 400")
     ap.add_argument("--count", type=int, default=16, help="截几帧")
     ap.add_argument("--step", type=int, default=50, help="帧间隔，毫秒")
     ap.add_argument("--html", default=str(HERE.parent / "debate-timer.html"))
@@ -208,10 +217,13 @@ def main(argv=None):
         print(f"看不懂尺寸「{args.size}」，要写成 1280x720 这样")
         return 1
     page = Path(args.html).resolve()
+    keys = args.keys = [k for k in args.key.split(",") if k]
+    bad_keys = [k for k in keys if k not in KEYS]
     problem = (f"没有这个主题：{args.theme}" if args.theme not in [t["id"] for t in build.themes_meta()]
                else f"没有这个演示态：{args.demo}" if args.demo not in DEMOS
-               else f"不认识的键：{args.key}。可用：" + "、".join(sorted(KEYS)) if args.key and args.key not in KEYS
-               else "--count 和 --step 要大于 0，--skip 不能是负数" if args.count < 1 or args.step < 1 or args.skip < 0
+               else f"不认识的键：{bad_keys[0]}。可用：" + "、".join(sorted(KEYS)) if bad_keys
+               else "--count 和 --step 要大于 0，--skip、--key-gap 不能是负数"
+               if args.count < 1 or args.step < 1 or args.skip < 0 or args.key_gap < 0
                else f"找不到 {page}。先运行 python timer/build.py" if not page.exists() else "")
     if problem:
         print(problem)
@@ -220,7 +232,7 @@ def main(argv=None):
     if not browser:
         print("找不到 Edge 或 Chrome。装一个 Chromium 内核浏览器后重试。")
         return 2
-    name = args.demo + (f"-{args.key}" if args.key else "") + (f"-skip{args.skip}" if args.skip else "")
+    name = args.demo + ("-" + "+".join(keys) if keys else "") + (f"-skip{args.skip}" if args.skip else "")
     out_dir = HERE / "out" / "frames" / f"{w}x{h}" / args.theme / name
     shutil.rmtree(out_dir, ignore_errors=True)
     out_dir.mkdir(parents=True)
