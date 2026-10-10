@@ -843,6 +843,29 @@
     t.done();
   });
 
+  // The late bell an undo rings belongs to the stage the undo goes back to: it rings after that stage is painted,
+  // or the stage change would clear it at once. A projector window hears the same order (it pulses before it
+  // updates, so a bell sent ahead of the state would go with the stage change there).
+  DT.test('ui: undoing a mistaken next rings the late bell on the stage it goes back to', () => {
+    const t = boot();
+    press('Space');
+    const first = DT.engine.currentStage(t.c.session());
+    t.clock.advance(first.secs * 1000 - 33000);   // 0:33 left
+    press('ArrowRight'); t.clock.advance(5000);   // the clock runs on through the mistake, past 0:30
+    const heard = [];
+    t.c.on('change', s => heard.push('change:' + s.cursor));
+    t.c.on('events', list => list.forEach(e => heard.push(e.type)));
+    press('KeyZ');
+    try {
+      const root = document.querySelector('.dt-stage');
+      assert.equal(DT.engine.currentStage(t.c.session()).id, first.id, 'back on the first stage');
+      assert.deepEqual(t.bells.log.played, ['ding']);
+      assert.equal(root.querySelectorAll('.dt-clock[data-clock="main"] .dt-ring').length, 1, 'its ring');
+      assert.equal(root.dataset.bell, 'warn');
+      assert.deepEqual(heard, ['change:0', 'warn'], 'the stage goes out first, then its bell');
+    } finally { t.done(); }
+  });
+
   DT.test('ui: nothing can be inserted on the end card', () => {
     const t = boot({ formatId: 'ustc-school-cup' });
     t.c.act('goto', t.c.session().timeline.length);

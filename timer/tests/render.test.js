@@ -187,6 +187,32 @@
     }
   });
 
+  // Its reduced-motion half: the stage, its own pseudo-elements (a theme's haze, a matte) and everything in it stand
+  // still. The test page cannot emulate the media query, so it reads the rule; a theme that leaves its own guard out
+  // (startrail's haze) relies on it.
+  DT.test('render: reduced motion stops the stage, its own pseudo-elements and everything in it', () => {
+    const hits = [];
+    Array.from(document.styleSheets).forEach(sh => {
+      let rules; try { rules = sh.cssRules; } catch (e) { return; }
+      Array.from(rules).forEach(r => {
+        if (!(r instanceof CSSMediaRule) || !/prefers-reduced-motion:\s*reduce/.test(r.conditionText)) return;
+        Array.from(r.cssRules).forEach(x => {
+          // Chromium writes ".dt-stage *::before" back as ".dt-stage ::before": the * goes back in before comparing.
+          const sels = (x.selectorText || '').split(',').map(s => s.trim().replace(/ ::/g, ' *::'));
+          if (!sels.includes('.dt-stage')) return;
+          hits.push(x);
+          ['.dt-stage::before', '.dt-stage::after', '.dt-stage *', '.dt-stage *::before', '.dt-stage *::after']
+            .forEach(w => assert.ok(sels.includes(w), 'covers ' + w + ': ' + x.selectorText));
+          assert.equal(x.style.getPropertyValue('animation-name'), 'none');
+          assert.equal(x.style.getPropertyPriority('animation-name'), 'important');
+          assert.equal(x.style.getPropertyValue('transition-duration'), '0s');
+          assert.equal(x.style.getPropertyPriority('transition-duration'), 'important');
+        });
+      });
+    });
+    assert.equal(hits.length, 1, 'the shared reduced-motion rule');
+  });
+
   DT.test('render: end card lists the record when given', () => {
     const h = R.mount(host());
     let s = E.toggle(session(0), T0); s = E.goto(s, 99, T0 + 190000);
@@ -420,21 +446,40 @@
     } finally { h.destroy(); }
   });
 
-  // The bell belongs to the stage that rang it: a stage change within the 1.5 s clears it, so the next stage's
-  // decorations do not play a bell that was not theirs.
-  DT.test('render: a new stage clears the bell the last one rang', () => {
+  // The bell belongs to the stage that rang it: a stage change within the 1.5 s clears it, takes away its rings and
+  // cancels an end bell's second ring, so the next stage's digits and decorations do not play a bell that was not
+  // theirs. The next single stage reuses the same main clock, where the rings were.
+  DT.test('render: a new stage clears the bell the last one rang', async () => {
     const h = R.mount(host());
-    let s = E.toggle(session(0), T0);
-    h.update(E.view(s, T0 + 150500));
     const root = document.querySelector('.dt-stage');
+    const rings = () => root.querySelectorAll('.dt-ring').length;
     try {
-      h.pulse({ type: 'warn', clock: 'main' });
-      assert.equal(root.dataset.bell, 'warn');
-      s = E.next(s, T0 + 150600);
-      h.update(E.view(s, T0 + 150600));
-      assert.ok(!root.hasAttribute('data-bell') && !root.hasAttribute('data-bell-clock'), 'cleared by the stage change');
-      h.update(E.view(s, T0 + 150700));   // and a plain repaint of the same stage leaves it cleared
-      assert.ok(!root.hasAttribute('data-bell'));
+      for (const [type, at] of [['end', 180050], ['warn', 150500]]) {
+        let s = E.toggle(session(0), T0);
+        h.update(E.view(s, T0 + at));
+        h.pulse({ type, clock: 'main' });   // the frame loops pulse before they paint
+        assert.equal(root.dataset.bell, type);
+        h.update(E.view(s, T0 + at + 50));
+        assert.equal(rings(), 1, type + ': a repaint of the same stage keeps its ring');
+        s = E.next(s, T0 + at + 100);
+        h.update(E.view(s, T0 + at + 100));
+        // A ring added later counts even if it has played out by the time it is looked for: the page's timeline can
+        // jump under the test runner.
+        const added = [];
+        const seen = new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(n => {
+          if (n.classList && n.classList.contains('dt-ring')) added.push(n.dataset.nth);
+        })));
+        seen.observe(root, { childList: true, subtree: true });
+        assert.ok(!root.hasAttribute('data-bell') && !root.hasAttribute('data-bell-clock'),
+          type + ': cleared by the stage change');
+        assert.equal(rings(), 0, type + ': its ring goes with it');
+        h.update(E.view(s, T0 + at + 200));   // and a plain repaint of the same stage leaves it cleared
+        assert.ok(!root.hasAttribute('data-bell'));
+        await wait(400);
+        seen.disconnect();
+        assert.equal(rings(), 0, type + ': none 400 ms on');
+        assert.deepEqual(added, [], type + ': no second ring on the new stage');
+      }
     } finally { h.destroy(); }
   });
 

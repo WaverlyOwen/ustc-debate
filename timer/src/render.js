@@ -187,7 +187,7 @@
     let destroyed = false;
     let lastKey = null, lastSeat = null, progressSig = null, recordSig = null;
     let segs = [];
-    let enterTimer = null, toastTimer = null, bellTimer = null;
+    let enterTimer = null, toastTimer = null, bellTimer = null, ringTimer = null;
     let lockSeen = null;    // the halves' locked state as last painted, and on which stage: {key, pro, con}
     const lockTimers = { pro: null, con: null };
     let theme = null;       // the theme on screen
@@ -448,7 +448,7 @@
       settle(kind === 'dual' ? v.clocks.map(c => [clocks[c.id], c]) : st ? [[clocks.main, active]] : []);
 
       const key = v.mode + '|' + (st ? st.id : '');
-      if (key !== lastKey) { lastKey = key; clearLocking(); clearBell(); enter(); }
+      if (key !== lastKey) { lastKey = key; clearLocking(); clearBell(); clearRings(); enter(); }
       if (seat !== lastSeat) {
         lastSeat = seat;
         seatOrder(els.halves, halves.pro.el, halves.con.el, seat);
@@ -574,12 +574,19 @@
     }
 
     // Which bell rang and on which clock, on the stage for RING_MS, for a theme's one-shot (a plate's edge flashing).
-    // A new stage clears it at once: a bell is the stage's that rang it, not the next one's.
+    // A new stage clears it at once, with the rings still playing and an end bell's second ring not yet drawn
+    // (clearRings): a bell is the stage's that rang it, not the next one's. A repaint of the same stage keeps them.
     function markBell(type, id) {
       attr(stage, 'data-bell', type);
       attr(stage, 'data-bell-clock', id);
       cancel(bellTimer);
       bellTimer = later(clearBell, RING_MS);
+    }
+
+    function clearRings() {
+      cancel(ringTimer);
+      ringTimer = null;
+      stage.querySelectorAll('.dt-ring').forEach(el => el.remove());
     }
 
     function clearBell() {
@@ -603,7 +610,10 @@
         ring(id, 'end', 1);
         // A free-debate side that runs out rings once, as the floor goes over at the same moment (spec §5.5); a single
         // stage's end rings twice, in step with the double bell.
-        if (id === 'main') later(() => ring(id, 'end', 2), RING_GAP_MS);
+        if (id === 'main') {
+          cancel(ringTimer);
+          ringTimer = later(() => { ringTimer = null; ring(id, 'end', 2); }, RING_GAP_MS);
+        }
       }
       // 'switch' needs nothing extra: the halves' own transition is the animation.
     }

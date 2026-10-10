@@ -500,14 +500,16 @@
       session = next;
       save(merged);
       bells.schedule(DT.engine.upcomingBells(session, now), now);
-      // A bell point the action itself crossed (time taken off a running clock, an undo) rings now.
+      if (session.lastFeedback) toast(session.lastFeedback.message, session.lastFeedback.code === 'locked');
+      emit('change', session);
+      paint(now);
+      // A bell point the action itself crossed (time taken off a running clock, an undo) rings now, on the stage the
+      // action landed on: after the paint here and after the state sent to the projector, or an undo that goes back a
+      // stage would clear its own bell with the stage change.
       if (session.lastRung) {
         session.lastRung.forEach(e => { if (e.sound) bells.play(e.sound); });
         pulse(session.lastRung);
       }
-      if (session.lastFeedback) toast(session.lastFeedback.message, session.lastFeedback.code === 'locked');
-      emit('change', session);
-      paint(now);
     }
 
     function toggleMute() {
