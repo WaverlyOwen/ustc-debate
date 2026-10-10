@@ -611,7 +611,8 @@
 @keyframes dt-sweep-r { from { clip-path: inset(0 0 0 100%); } }
 @keyframes dt-rise { from { opacity: 0; transform: translateY(1.1cqh); } }
 @keyframes dt-fade-in { from { opacity: 0; } }
-/* A theme's overtime mark lands on the second bell: animation: dt-stamp 300ms var(--ease-out) 320ms both. */
+/* A theme's overtime mark lands on the second bell: animation: dt-stamp 300ms var(--ease-out) 320ms backwards.
+   Fill backwards, not both: a held fill keeps the mark composited, and with it any filtered ancestor. */
 @keyframes dt-stamp { from { opacity: 0; scale: 1.12; } }
 @keyframes dt-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 @keyframes dt-colon-settle { from { opacity: var(--colon-from, var(--colon-rest, .55)); } }
@@ -626,14 +627,15 @@
    once; an animation stands 10 s in, so a one-shot is over (a ring gone, an entrance risen) and a loop is at its
    start (a breathe at full strength), however long the browser took to take the picture. This also keeps a headless
    browser from stalling a transition part way, as it does under a painter's canvas. */
-.dt-stage[data-still], .dt-stage[data-still] *, .dt-stage[data-still] *::before, .dt-stage[data-still] *::after {
+.dt-stage[data-still], .dt-stage[data-still]::before, .dt-stage[data-still]::after,
+.dt-stage[data-still] *, .dt-stage[data-still] *::before, .dt-stage[data-still] *::after {
   transition: none !important;
   animation-delay: -10s !important;
   animation-play-state: paused !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dt-stage, .dt-stage *, .dt-stage *::before, .dt-stage *::after {
+  .dt-stage, .dt-stage::before, .dt-stage::after, .dt-stage *, .dt-stage *::before, .dt-stage *::after {
     animation: none !important;
     transition: none !important;
   }

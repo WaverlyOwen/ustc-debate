@@ -8,7 +8,8 @@
   const ENTER_MS = 1100;       // the entrance class outlives the longest entrance animation (a theme's, up to 1000 ms)
   const TOAST_MS = 1500;
   const RING_MS = 1500;        // fallback removal when no animationend arrives (no stylesheet, animation off); also how
-                               // long the stage says which bell rang (data-bell)
+                               // long the stage says which bell rang (data-bell). Never below 1420: chroma's two-flash
+                               // end bell (cr-flash-twice) runs that long on data-bell
   const RING_GAP_MS = 320;     // the second ring of an end bell, in step with the double bell
   const RING_REACH = 1.65;     // the scale a ring grows to (stage.css); a half's ring may stop short of it
   const BUMP_MS = 240;
@@ -447,7 +448,7 @@
       settle(kind === 'dual' ? v.clocks.map(c => [clocks[c.id], c]) : st ? [[clocks.main, active]] : []);
 
       const key = v.mode + '|' + (st ? st.id : '');
-      if (key !== lastKey) { lastKey = key; clearLocking(); enter(); }
+      if (key !== lastKey) { lastKey = key; clearLocking(); clearBell(); enter(); }
       if (seat !== lastSeat) {
         lastSeat = seat;
         seatOrder(els.halves, halves.pro.el, halves.con.el, seat);
@@ -573,15 +574,19 @@
     }
 
     // Which bell rang and on which clock, on the stage for RING_MS, for a theme's one-shot (a plate's edge flashing).
+    // A new stage clears it at once: a bell is the stage's that rang it, not the next one's.
     function markBell(type, id) {
       attr(stage, 'data-bell', type);
       attr(stage, 'data-bell-clock', id);
       cancel(bellTimer);
-      bellTimer = later(() => {
-        bellTimer = null;
-        attr(stage, 'data-bell', false);
-        attr(stage, 'data-bell-clock', false);
-      }, RING_MS);
+      bellTimer = later(clearBell, RING_MS);
+    }
+
+    function clearBell() {
+      cancel(bellTimer);
+      bellTimer = null;
+      attr(stage, 'data-bell', false);
+      attr(stage, 'data-bell-clock', false);
     }
 
     function pulse(event) {

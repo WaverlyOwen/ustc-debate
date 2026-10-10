@@ -164,6 +164,10 @@
         assert.equal(getComputedStyle(root.querySelector(sel)).transitionDuration, '0s', sel);
       });
       assert.equal(getComputedStyle(root.querySelector('.dt-deco'), '::before').transitionDuration, '0s', 'pseudo-elements too');
+      ['::before', '::after'].forEach(ps => {   // the stage's own pseudo-elements (a theme's haze, a matte) stand still too
+        assert.equal(getComputedStyle(root, ps).transitionDuration, '0s', 'the stage ' + ps);
+        assert.equal(getComputedStyle(root, ps).animationPlayState, 'paused', 'the stage ' + ps);
+      });
       h.pulse({ type: 'warn', clock: 'pro' });
       const ring = root.querySelector('.dt-ring');
       assert.ok(ring, 'the ring is still added');
@@ -409,8 +413,28 @@
       assert.deepEqual([root.dataset.bell, root.dataset.bellClock], ['warn', 'main']);
       h.pulse({ type: 'count', clock: 'main' });
       assert.equal(root.dataset.bell, 'count', 'a count bell too, though it only bumps the digits');
-      await wait(1550);
+      await wait(1450);
+      assert.equal(root.dataset.bell, 'count', 'still there at 1.45 s: chroma\'s two-flash end bell runs 1420 ms on it');
+      await wait(100);
       assert.ok(!root.hasAttribute('data-bell') && !root.hasAttribute('data-bell-clock'), 'gone after 1.5 s');
+    } finally { h.destroy(); }
+  });
+
+  // The bell belongs to the stage that rang it: a stage change within the 1.5 s clears it, so the next stage's
+  // decorations do not play a bell that was not theirs.
+  DT.test('render: a new stage clears the bell the last one rang', () => {
+    const h = R.mount(host());
+    let s = E.toggle(session(0), T0);
+    h.update(E.view(s, T0 + 150500));
+    const root = document.querySelector('.dt-stage');
+    try {
+      h.pulse({ type: 'warn', clock: 'main' });
+      assert.equal(root.dataset.bell, 'warn');
+      s = E.next(s, T0 + 150600);
+      h.update(E.view(s, T0 + 150600));
+      assert.ok(!root.hasAttribute('data-bell') && !root.hasAttribute('data-bell-clock'), 'cleared by the stage change');
+      h.update(E.view(s, T0 + 150700));   // and a plain repaint of the same stage leaves it cleared
+      assert.ok(!root.hasAttribute('data-bell'));
     } finally { h.destroy(); }
   });
 
