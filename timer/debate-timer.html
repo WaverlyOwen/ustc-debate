@@ -4379,10 +4379,8 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
   --font-title: "DengXian", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
   --font-ui: "DengXian", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
-  /* The sky: deep indigo overhead, paling toward the horizon, where a town below it leaves a warm haze. */
-  --backdrop:
-    radial-gradient(70% 24% at 64% 100%, rgb(236 150 96 / .24), transparent),
-    linear-gradient(to bottom, #080C2A, #0E1438 38%, #18194A 70%, #2C2250 88%, #452C4E);
+  /* The sky: deep indigo overhead, paling toward the horizon. The haze over the horizon is drawn apart (below). */
+  --backdrop: linear-gradient(to bottom, #080C2A, #0E1438 38%, #18194A 70%, #2C2250 88%, #452C4E);
   --half-ground: transparent;   /* the painter's sky runs under both halves of free debate */
   --meter-y: 85cqh;             /* the line of the time left, between the digits and the bottom bar */
 }
@@ -4390,13 +4388,39 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 /* --side-color is the glow at its strongest over the sky: what the digits and the head can sit on (spec §1.5). */
 .dt-stage[data-theme="startrail"][data-side="pro"] { --side-color: #5E3053; --glow: var(--pro-glow); }
 .dt-stage[data-theme="startrail"][data-side="con"] { --side-color: #204C72; --glow: var(--con-glow); }
-/* While a side holds the floor, the haze over the horizon is its colour rather than the town's: even with the clock
-   run out and the nebula at its faintest, the bottom third of the room says whose floor it is. */
-.dt-stage[data-theme="startrail"][data-side="pro"],
-.dt-stage[data-theme="startrail"][data-side="con"] {
-  --backdrop:
-    radial-gradient(110% 36% at 50% 100%, rgb(var(--glow) / .3), transparent),
-    linear-gradient(to bottom, #080C2A, #0E1438 38%, #18194A 70%, #2C2250 88%, #452C4E);
+/* The haze over the horizon. A town below the sky leaves a warm one; while a side holds the floor it is that side's
+   colour instead, so even with the clock run out and the nebula at its faintest the bottom third of the room says
+   whose floor it is. Three layers that stay on the stage and cross-fade (opacity only, so the compositor does it)
+   when the floor or the stage changes hands, rather than one gradient that changes colour in a frame: the backdrop's
+   ::before (正方) and ::after (反方), and the stage's own ::after (the town), which comes after the backdrop and
+   before the canvas. Drawn in the order the old --backdrop drew them, so a still is the same. */
+.dt-stage[data-theme="startrail"] .dt-backdrop::before,
+.dt-stage[data-theme="startrail"] .dt-backdrop::after,
+.dt-stage[data-theme="startrail"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 520ms var(--ease-out);
+}
+.dt-stage[data-theme="startrail"] .dt-backdrop::before {
+  background: radial-gradient(110% 36% at 50% 100%, rgb(var(--pro-glow) / .3), transparent);
+}
+.dt-stage[data-theme="startrail"] .dt-backdrop::after {
+  background: radial-gradient(110% 36% at 50% 100%, rgb(var(--con-glow) / .3), transparent);
+}
+.dt-stage[data-theme="startrail"]::after {
+  z-index: 0;
+  background: radial-gradient(70% 24% at 64% 100%, rgb(236 150 96 / .24), transparent);
+}
+.dt-stage[data-theme="startrail"][data-side="pro"] .dt-backdrop::before,
+.dt-stage[data-theme="startrail"][data-side="con"] .dt-backdrop::after,
+.dt-stage[data-theme="startrail"]:not([data-side="pro"], [data-side="con"])::after { opacity: 1; }
+/* stage.css lands stills and stops motion on the stage's descendants; the stage's own ::after is not one of them. */
+.dt-stage[data-theme="startrail"][data-still]::after { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .dt-stage[data-theme="startrail"]::after { transition: none; }
 }
 .dt-stage[data-theme="startrail"] { --glow: 150 170 230; --glow-x: 0%; }
 /* The speaking side sits on the right: its glow and its line of time start from the right edge. */
@@ -4420,10 +4444,24 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 }
 /* It fades with the time left, but never out: at its faintest it still says whose floor it is (spec §1.5). */
 .dt-stage[data-theme="startrail"] .dt-field { opacity: calc(.55 + .45 * (1 - var(--used))); }
-/* Not taken back: the glow fades instead. inset(0) rather than none, so the entrance sweep still animates; [data-mode]
-   ranks this with stage.css's per-seat clip-path rules, which it replaces. */
+/* Not taken back: the glow fades instead. [data-mode] ranks this with stage.css's per-seat clip-path rules, which it
+   replaces. */
 .dt-stage[data-theme="startrail"][data-mode] .dt-field,
 .dt-stage[data-theme="startrail"] .dt-half-field { clip-path: inset(0); }
+
+/* ---- a new stage opens as an exposure does ---- */
+
+/* The nebula blooms out from its seat, rather than a straight edge wiping across a soft glow (the attributes rank this
+   above stage.css's per-seat sweeps, which it replaces); the sky's trails, drawn afresh for the new stage, fade in,
+   once the painter has had a frame to draw them (40 ms). Opacity and scale only, on layers the compositor already
+   holds. No `to` frame: each lands on its live value (the glow's fade, a locked half's none, the end card's dimmed
+   sky), and a still shows it landed. */
+.dt-stage[data-theme="startrail"] :is(.dt-field, .dt-half-field) { transform-origin: var(--glow-x) 56%; }
+.dt-stage[data-theme="startrail"][data-mode][data-side].is-entering :is(.dt-field, .dt-half-field) {
+  animation: dt-startrail-bloom 560ms var(--ease-out) backwards;
+}
+.dt-stage[data-theme="startrail"].is-entering .dt-canvas { animation: dt-fade-in 560ms var(--ease-out) 40ms backwards; }
+@keyframes dt-startrail-bloom { from { opacity: 0; scale: .8; } }
 
 /* ---- digits: starlight, with the faintest bloom ---- */
 
@@ -4463,6 +4501,7 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   background:
     radial-gradient(circle closest-side, #fff, rgb(var(--glow) / .7) 45%, transparent) 100% 50% / 2cqh 2cqh no-repeat,
     linear-gradient(to right, rgb(var(--glow) / .08), rgb(var(--glow) / .6) 70%, var(--ink)) 0 50% / 100% max(2px, .2cqh) no-repeat;
+  --st-line-from: -100%;
 }
 .dt-stage[data-theme="startrail"][data-mode="stage"][data-kind="single"][data-pro-seat="right"][data-side="pro"] .dt-deco::before,
 .dt-stage[data-theme="startrail"][data-mode="stage"][data-kind="single"][data-pro-seat="left"][data-side="con"] .dt-deco::before {
@@ -4471,7 +4510,14 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   background:
     radial-gradient(circle closest-side, #fff, rgb(var(--glow) / .7) 45%, transparent) 0 50% / 2cqh 2cqh no-repeat,
     linear-gradient(to left, rgb(var(--glow) / .08), rgb(var(--glow) / .6) 70%, var(--ink)) 0 50% / 100% max(2px, .2cqh) no-repeat;
+  --st-line-from: 100%;
 }
+/* With the glow, the line comes out of the seat head first, rather than standing at its full length from the first
+   frame: moved whole, so its head is not stretched. */
+.dt-stage[data-theme="startrail"].is-entering[data-mode="stage"][data-kind="single"] .dt-deco::before {
+  animation: dt-startrail-draw 560ms var(--ease-out) backwards;
+}
+@keyframes dt-startrail-draw { from { translate: var(--st-line-from) 0; } }
 
 /* The warn bell point: a four-pointed gold star on the line, where its head passes as the warn bell rings. */
 .dt-stage[data-theme="startrail"] .dt-warnline {
@@ -4504,7 +4550,8 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 /* ---- the meteor: crossing the warn point sends one shooting star over the digits (the warn bell's ring) ---- */
 
 /* Chosen by the bell that rang (render.js marks each ring), not by the phase: after a free-debate switch the phase is
-   the new speaker's, whatever rang. */
+   the new speaker's, whatever rang. Its path keeps above the digits' cap height, so being drawn under them (a ring is
+   inside its clock, under the digits) costs nothing; in a half, the half cuts it. */
 .dt-stage[data-theme="startrail"] .dt-ring[data-type="warn"] {
   width: 34cqh;
   height: .5cqh;
@@ -4521,6 +4568,26 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   to { opacity: 0; transform: translate(34cqh, -17cqh) rotate(12deg) scaleX(1); }
 }
 
+/* ---- the end bell: the digits' bloom flares (twice for a stage's end, once for a side run out) ---- */
+
+/* The ring's box (stage.css: round the glyphs, under them) lit as a soft gold glow that swells and dies, as a bright
+   star flares on film, instead of a hard circle. Gold as the digits turn; at its strongest the gold digits stay over
+   3:1 on it. Opacity and scale only. */
+.dt-stage[data-theme="startrail"] .dt-ring[data-type="end"] {
+  border: 0;
+  background: radial-gradient(closest-side, rgb(244 201 105 / .28), rgb(244 201 105 / .2) 45%, rgb(244 201 105 / .07) 78%,
+    transparent);
+  animation: dt-startrail-flare 1100ms ease-out forwards;
+}
+/* A side that runs out flares once and is dark again as its column has sprung and its nebula gone (520 ms), before
+   时间到 has settled over where its digits were. */
+.dt-stage[data-theme="startrail"] .dt-half .dt-ring[data-type="end"] { animation-duration: 600ms; }
+@keyframes dt-startrail-flare {
+  from { opacity: 0; scale: .9; }
+  16% { opacity: 1; }
+  to { opacity: 0; scale: min(1.45, var(--ring-to, 1.65)); }
+}
+
 /* ---- head and bars ---- */
 
 .dt-stage[data-theme="startrail"] .dt-title { font-weight: 400; letter-spacing: .1em; }
@@ -4535,12 +4602,25 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-stage[data-theme="startrail"] .dt-half[data-side="con"] { --glow: var(--con-glow); --field-ground: #204C72; }
 .dt-stage[data-theme="startrail"] .dt-half:first-child { --glow-x: 8%; }
 .dt-stage[data-theme="startrail"] .dt-half:last-child { --glow-x: 92%; }
+/* Each nebula is a fixed part of the sky, as the stars are: as wide as the speaking column (render.js ACTIVE_COL),
+   anchored at its seat and cut by its half. A change of floor moves only the cut; the glow neither stretches nor slides
+   its filaments, and is not painted again on each frame of the spring. It blooms from the seat's own edge, not from
+   its glow's centre a little inside it: the glow is strong at that edge, and scaled about a point inside the box the
+   box's edge would draw a straight line down the glow, a few pixels in from the screen's edge. */
 .dt-stage[data-theme="startrail"] .dt-half-field {
-  inset: 0;
+  inset: 0 auto 0 0;
+  width: 58cqw;
   height: auto;
   opacity: calc(.5 + .5 * var(--remain, 1));
+  transform-origin: 0 56%;
 }
+.dt-stage[data-theme="startrail"] .dt-half:last-child .dt-half-field { left: auto; right: 0; transform-origin: 100% 56%; }
 .dt-stage[data-theme="startrail"] .dt-half[data-locked] .dt-half-field { opacity: 0; }
+/* A side that runs out or yields lets its glow die with the spring rather than in one frame from its floor of .5. Only
+   once the entrance is over: a stage that opens with a side already out shows it so (stage.css). */
+.dt-stage[data-theme="startrail"]:not(.is-entering) .dt-half[data-locked] .dt-half-field {
+  transition: opacity 520ms var(--ease-out);
+}
 
 /* ---- cards: each motion is marked with a star of its side's colour ---- */
 
@@ -7279,6 +7359,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   const STEP_PX = 2;              // a trail is drawn on only once it has grown this many pixels: pieces shorter than a
                                   // pixel would each be antialiased on their own and add up dimmer than one stroke
   const POLE = { x: -0.07, y: -0.42 };   // the pole, off the upper corner, in stage widths and heights
+  const FEATHER = 0.1;            // the cards: the two half-skies cross over in a band this share of the width, mid-stage
 
   // Starlight from hot to cool, and each side's cast: 正方 warm, 反方 cold.
   const TEMPS = [[170, 198, 255], [212, 225, 255], [246, 246, 255], [255, 238, 212], [255, 210, 160]];
@@ -7352,8 +7433,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     const edgeOf = side => (side === 'pro') === (seat === 'left') ? 'left' : 'right';
     const used = c => !c ? 0 : 1 - c.fraction + Math.min(OVER, c.total > 0 ? c.overtime / c.total : 0);
     const pair = u => ['pro', 'con'].map(side => ({ edge: edgeOf(side), sky: side + '/half', cast: side, used: u, width: 0.5 }));
-    if (v.mode === 'title') return { key: 'title|' + seat, poles: pair(TITLE_USED) };
-    if (v.mode !== 'stage' || !v.stage) return { key: 'end|' + seat, poles: pair(1) };
+    if (v.mode === 'title') return { key: 'title|' + seat, card: true, poles: pair(TITLE_USED) };
+    if (v.mode !== 'stage' || !v.stage) return { key: 'end|' + seat, card: true, poles: pair(1) };
     const st = v.stage;
     if (st.type === 'dual') {
       const active = v.clocks.find(c => c.active) || null;
@@ -7376,9 +7457,14 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 
   function painter(canvas, ctx, flags) {
     const thumbnail = !!(flags && flags.thumbnail);
-    // drawn: the scene on the canvas, each pole's used share and column width, and the angle each of its trails has
-    // been drawn to. layers: in free debate, each side's whole sky on a canvas of its own (see frame).
-    let W = 0, H = 0, skies = {}, drawn = null, layers = [];
+    // A still (thumbnail, reduced motion, frozen demo) has no spring to follow: its columns stand where they land.
+    const still = !!(flags && (flags.thumbnail || flags.reducedMotion || flags.frozen));
+    // drawn: the scene on the canvas, each pole's used share, the angle each of its trails has been drawn to, and in
+    // free debate where the seam between the two skies stands (split, in canvas pixels) and where the columns end
+    // (target). layers: in free debate, each side's whole sky on a canvas of its own (see frame). moving: the columns
+    // may be moving, so the seam follows the divider; path: the divider's transition and where it set out (see
+    // divider).
+    let W = 0, H = 0, skies = {}, drawn = null, layers = [], moving = false, path = null;
 
     function skyOf(name) {
       const half = /\/half$/.test(name);
@@ -7386,8 +7472,13 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       return skies[name];
     }
 
-    // The stage canvas as a target: a pole that has only part of the stage is cut to its column.
-    const onStage = pole => ({ g: ctx, clip: pole.width < 1 ? pole : null });
+    // The stage canvas as a target, cut (in CSS pixels) to [x, x + w) when a clip is given; in free debate, to the
+    // pole's side of the seam as it stands (`split`, in canvas pixels).
+    const onStage = (x, w) => ({ g: ctx, clip: w === undefined ? null : { x, w } });
+    const toSeam = (pole, split) => {
+      const at = split * W / canvas.width;
+      return pole.edge === 'left' ? onStage(0, at) : onStage(at, W - at);
+    };
 
     // Draw a pole's trails on from the angle each has reached (`ends`, past its start) to `to`, skipping those that
     // have not yet grown by a step, onto each target, and note where each now ends. A pole beyond the right edge is
@@ -7405,7 +7496,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         c.save();
         if (clip) {
           c.beginPath();
-          c.rect(mirror ? W * (1 - clip.width) : 0, 0, W * clip.width, H);
+          c.rect(clip.x, 0, clip.w, H);
           c.clip();
         }
         c.lineCap = cap;
@@ -7445,22 +7536,43 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       return { canvas: c, g, off, clip: null, pending: 0 };
     }
 
-    // Where the two columns meet, in canvas pixels, for these column widths.
-    function splitAt(poles, widths) {
+    // Where the divider between free debate's two columns stands, in canvas pixels, while stage.css moves it to
+    // `target` (its spring as the floor changes hands, a shortened one when the floor is sent straight back, the
+    // columns settling as the stage mounts); null once nothing moves it. Taken from the columns' own transition rather
+    // than worked out from the clock: a new transition starts on the frame after the columns are written, and the
+    // projector learns of a change of floor later than the console does. How far along its eased path the divider is
+    // costs a style read; where the path set out from is read from the divider's box once, when the transition is first
+    // seen (a layout read), or on every frame for one first seen late in its run.
+    function divider(target) {
+      const halves = canvas.parentNode && canvas.parentNode.querySelector('.dt-halves');
+      const tr = halves ? halves.getAnimations().find(a => a.transitionProperty === 'grid-template-columns') : null;
+      const p = tr && tr.effect ? tr.effect.getComputedTiming().progress : null;
+      if (typeof p !== 'number') { path = null; return null; }
+      const box = () => parseFloat(getComputedStyle(halves).gridTemplateColumns) * canvas.width / W;
+      if (!path || path.tr !== tr) {
+        const at = box();
+        if (!isFinite(at)) { path = null; return null; }
+        path = { tr, from: p < 0.5 ? (at - target * p) / (1 - p) : null };
+        if (path.from === null) return Math.round(at);
+      }
+      const at = path.from === null ? box() : path.from + (target - path.from) * p;
+      return isFinite(at) ? Math.round(at) : null;
+    }
+
+    // Where the two columns meet once they have sprung, in canvas pixels.
+    function splitAt(poles) {
       const i = poles.findIndex(p => p.edge === 'left');
-      const leftWidth = i >= 0 ? widths[i] : 1 - widths[0];
+      const leftWidth = i >= 0 ? poles[i].width : 1 - poles[0].width;
       return Math.round(leftWidth * canvas.width);
     }
 
-    // The stage made from the layers: each side's pixels copied from its own canvas, over the columns' new widths.
-    // Only the strip the edge between them crossed changes hands (the rest of the stage already holds what the
-    // layers hold), so a change of floor costs a copy of that strip, however long the trails have grown.
-    function compose(poles, before) {
+    // The stage made from the layers: each side's pixels copied from its own canvas, either side of the seam at
+    // `split`. Only the strip the seam crossed since `was` changes hands (the rest of the stage already holds what the
+    // layers hold), so a frame of a change of floor costs a copy of that strip, however long the trails have grown.
+    function compose(poles, was, split) {
       const cw = canvas.width, ch = canvas.height;
-      const split = splitAt(poles, poles.map(p => p.width));
       let x0 = 0, x1 = cw;
-      if (before) {
-        const was = splitAt(poles, before);
+      if (was !== null) {
         x0 = Math.max(0, Math.min(was, split) - 2);
         x1 = Math.min(cw, Math.max(was, split) + 2);
       }
@@ -7482,6 +7594,44 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       ctx.restore();
     }
 
+    // The title and end cards: each side's half-sky drawn on the stage as it always was, cut at the middle; and the band
+    // about the middle drawn again on a canvas of each side's own, faded out toward the other side, the two added
+    // together over the band; so the two skies cross over instead of meeting in a seam, and outside the band the stage
+    // is what it was. A card's sky stands still, so this is done once, when it is painted afresh.
+    function blend(poles) {
+      const ratio = canvas.width / W;
+      const lo = Math.round((0.5 - FEATHER / 2) * canvas.width), hi = Math.round((0.5 + FEATHER / 2) * canvas.width);
+      const bands = poles.map((p, i) => {
+        const left = p.edge === 'left';
+        const band = document.createElement('canvas');
+        band.className = 'dt-canvas-layer';
+        band.width = hi - lo;
+        band.height = canvas.height;
+        const g = band.getContext('2d');
+        g.setTransform(ratio, 0, 0, ratio, -lo, 0);
+        arcs(p, drawn.ends[i], theta(p.used), 'round', [onStage(left ? 0 : W / 2, W / 2), { g, clip: { x: lo / ratio, w: (hi - lo) / ratio } }]);
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalCompositeOperation = 'destination-in';   // keep this side's sky only as far as the ramp lets it
+        const ramp = g.createLinearGradient(0, 0, band.width, 0);
+        ramp.addColorStop(0, left ? '#000' : 'rgb(0 0 0 / 0)');
+        ramp.addColorStop(1, left ? 'rgb(0 0 0 / 0)' : '#000');
+        g.fillStyle = ramp;
+        g.fillRect(0, 0, band.width, band.height);
+        drawn.used[i] = p.used;
+        return band;
+      });
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(lo, 0, hi - lo, canvas.height);
+      bands.forEach((band, i) => {
+        ctx.globalCompositeOperation = i ? 'lighter' : 'source-over';   // the two fades add up to the whole
+        ctx.drawImage(band, lo, 0);
+        band.width = 0;
+        band.height = 0;
+      });
+      ctx.restore();
+    }
+
     function dropLayers() {
       layers.forEach(L => { L.canvas.width = 0; L.canvas.height = 0; });
       layers = [];
@@ -7498,14 +7648,26 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         const fresh = !drawn || drawn.key !== sc.key || sc.poles.some((p, i) => p.used < drawn.used[i]);
         if (fresh) {
           ctx.clearRect(0, 0, W, H);
-          drawn = { key: sc.key, used: [], widths: [], ends: sc.poles.map(p => new Float64Array(skyOf(p.sky).stars.length)) };
+          drawn = { key: sc.key, used: [], split: null, target: null, ends: sc.poles.map(p => new Float64Array(skyOf(p.sky).stars.length)) };
           dropLayers();
           if (sc.dual) layers = sc.poles.map(layerFor);
+          if (sc.card) return blend(sc.poles);
         }
-        const moved = !!sc.dual && (fresh || sc.poles.some((p, i) => p.width !== drawn.widths[i]));
+        // In free debate, where the seam between the two skies stands this frame: under the divider. When the floor
+        // changes hands the columns spring and the seam goes with them, a frame at a time, instead of jumping to where
+        // they will end; the divider is read only from a change of floor (or a fresh sky) until it is at rest.
+        let split = null;
+        if (sc.dual) {
+          const target = splitAt(sc.poles);
+          if (fresh || target !== drawn.target) moving = !still;
+          const at = moving ? divider(target) : null;
+          if (at === null) moving = false;
+          split = at === null ? target : at;
+          drawn.target = target;
+        }
         sc.poles.forEach((p, i) => {
           if (!fresh && p.used === drawn.used[i]) return;
-          const targets = !sc.dual ? [onStage(p)] : moved ? [layers[i]] : [layers[i], onStage(p)];
+          const targets = !sc.dual ? [onStage()] : fresh ? [layers[i]] : [layers[i], toSeam(p, split)];
           arcs(p, drawn.ends[i], theta(p.used), fresh ? 'round' : 'butt', targets);
           drawn.used[i] = p.used;
           // A canvas that is never shown keeps what is drawn on it as a list of strokes until it is read; left alone,
@@ -7516,11 +7678,11 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
             layers[i].pending = 0;
           }
         });
-        if (moved) compose(sc.poles, fresh ? null : drawn.widths);
-        drawn.widths = sc.poles.map(p => p.width);
+        if (sc.dual && (fresh || split !== drawn.split)) compose(sc.poles, fresh ? null : drawn.split, split);
+        if (sc.dual) drawn.split = split;
       },
-      resize(w, h) { W = w; H = h; skies = {}; drawn = null; dropLayers(); },
-      destroy() { skies = {}; drawn = null; dropLayers(); },
+      resize(w, h) { W = w; H = h; skies = {}; drawn = null; moving = false; path = null; dropLayers(); },
+      destroy() { skies = {}; drawn = null; moving = false; path = null; dropLayers(); },
     };
   }
 

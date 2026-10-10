@@ -33,6 +33,12 @@
     return c;
   }
   const px = s => parseFloat(s);
+  // The page's CSS clock does not run here: the divider's transition is seated by hand. `settle` lands it (mounting
+  // springs the columns from 50/50: render.js measures the stage for the painter before it writes them); `seat` puts
+  // it `ms` in, as a frame that long after the change of floor would find it.
+  const halvesOf = root => root.querySelector('.dt-halves');
+  const settle = root => halvesOf(root).getAnimations().forEach(a => a.finish());
+  const seat = (root, ms) => halvesOf(root).getAnimations().forEach(a => { a.currentTime = ms; });
 
   // Every arc the painter strokes while `fn` runs: its centre, radius and the angle it turns through, and whether it
   // went onto the stage's canvas or onto one of free debate's per-side layers; and the stage canvas's clears and
@@ -40,7 +46,7 @@
   function spyArcs(fn) {
     const P = CanvasRenderingContext2D.prototype;
     const arc = P.arc, clear = P.clearRect, copy = P.drawImage;
-    const out = { arcs: [], clears: 0, copies: 0, stageArcs: 0 };
+    const out = { arcs: [], clears: 0, copies: 0, stageArcs: 0, strips: [] };
     const mine = c => c.classList.contains('dt-canvas') || c.classList.contains('dt-canvas-layer');
     P.arc = function (x, y, r, a, b, ccw) {
       if (mine(this.canvas)) out.arcs.push({ x, y, r, span: Math.abs(b - a), layer: this.canvas.classList.contains('dt-canvas-layer') });
@@ -52,7 +58,7 @@
       return clear.apply(this, arguments);
     };
     P.drawImage = function () {
-      if (this.canvas.classList.contains('dt-canvas')) out.copies++;
+      if (this.canvas.classList.contains('dt-canvas')) { out.copies++; out.strips.push(arguments.length === 9 ? { x: arguments[5], w: arguments[3] } : null); }
       return copy.apply(this, arguments);
     };
     try { fn(); } finally { P.arc = arc; P.clearRect = clear; P.drawImage = copy; }
@@ -269,10 +275,12 @@
     } finally { DT.clock.reset(); }
   });
 
-  // New spec §5.6: a frame under 8 ms. A change of floor moves the two columns; painting every trail again would cost
-  // more the longer the free debate has run. Each side's trails are kept on a canvas of their own, so only the strip
-  // the edge between the columns crossed is copied from them, and no trail is drawn on the stage again, early or late.
-  DT.test('theme startrail: a change of floor copies each side\'s sky from its own layer, not every trail again', () => {
+  // New spec §5.6: a frame under 8 ms. A change of floor springs the two columns over 520 ms; painting every trail
+  // again would cost more the longer the free debate has run. Each side's trails are kept on a canvas of their own,
+  // and the seam between the two skies goes with the columns frame by frame (audit ST4): each frame copies only the
+  // strip the seam crossed since the last, no trail is drawn on the stage again, early or late, and once the spring is
+  // over nothing is copied.
+  DT.test('theme startrail: a change of floor moves the seam with the columns, a strip at a time from each side\'s layer', () => {
     let now = 90000;
     DT.clock.set(() => now);
     const E2 = DT.engine;
@@ -283,19 +291,95 @@
         const at = T0 + late * 1000;
         let m;
         spyArcs(() => { m = mountSky(E2.view(s, at), 1920, 1080); });
+        settle(m.root);
+        now += 40;
+        m.stage.update(E2.view(s, at));
+        const cw = m.root.querySelector('.dt-canvas').width, move = (2 * 0.58 - 1) * cw;
         now += 40;
         const switched = E2.floor(s, 'pro', at);
-        const spy = spyArcs(() => m.stage.update(E2.view(switched, at)));
-        assert.equal(spy.stageArcs, 0, late + ' s: nothing drawn again on the stage');
-        assert.ok(spy.copies >= 1 && spy.copies <= 2, late + ' s: the strip the edge crossed is copied from the layers: ' + spy.copies);
-        assert.equal(spy.clears, 0, late + ' s: the rest of the stage stays as it is');
-        assert.ok(spy.arcs.every(a => a.layer), late + ' s: only the layers grow');
-        assert.ok(maxSpan(spy.arcs) < 0.05, late + ' s: by their growth: ' + maxSpan(spy.arcs));
+        const first = spyArcs(() => m.stage.update(E2.view(switched, at)));
+        assert.equal(first.stageArcs, 0, late + ' s: nothing drawn again on the stage');
+        assert.equal(first.clears, 0, late + ' s: the rest of the stage stays as it is');
+        // The columns' spring is at its start on the frame they are written, so the seam may not have moved yet.
+        assert.ok(first.copies <= 2, late + ' s: at most a strip from each layer: ' + first.copies);
+        const width = list => list.strips.reduce((a, st) => a + (st ? st.w : 0), 0);
+        assert.ok(width(first) < move / 3, late + ' s: the seam does not jump to where the columns will end: ' + width(first) + ' of ' + move);
+        let frames = 1, crossed = width(first);
+        for (let ms = 40; ms <= 600; ms += 40) {
+          now += 40;
+          seat(m.root, ms);
+          const spy = spyArcs(() => m.stage.update(E2.view(switched, at + ms)));
+          const where = late + ' s, +' + ms + ' ms';
+          assert.equal(spy.clears, 0, where + ': nothing is wiped');
+          assert.ok(spy.copies <= 2, where + ': a strip at most from each layer: ' + spy.copies);
+          assert.ok(maxSpan(spy.arcs) < 0.05, where + ': only the trails\' growth is drawn: ' + maxSpan(spy.arcs));
+          if (spy.copies) { frames++; crossed += width(spy); }
+        }
+        assert.ok(frames >= 8, late + ' s: the seam moves over the spring, a frame at a time: ' + frames + ' frames');
+        assert.ok(crossed >= move, late + ' s: all the way: ' + crossed + ' of ' + move);
         now += 40;
         const after = spyArcs(() => m.stage.update(E2.view(switched, at + 2000)));
         assert.ok(after.stageArcs > 20 && after.copies === 0, late + ' s: then the speaker\'s trails grow on the stage again');
         m.stage.destroy();
       });
+    } finally { DT.clock.reset(); }
+  });
+
+  // Audit ST4: the seam between the two skies is under the divider at every frame the painter draws, as the columns
+  // settle when the stage mounts, through the spring of a change of floor, and through the shortened spring of a floor
+  // sent straight back: the painter reads the divider while the columns move, rather than reckoning the spring from
+  // the clock (a new transition starts on the frame after the columns are written, and the projector learns of a
+  // change of floor later than the console does).
+  DT.test('theme startrail: the seam between the two skies stays under the divider through its spring', () => {
+    let now = 90000;
+    DT.clock.set(() => now);
+    const E2 = DT.engine;
+    // Where the seam stands after an update: the copy from the right-hand layer starts at it.
+    const seamAt = spy => { const xs = spy.strips.filter(Boolean).map(st => st.x); return xs.length ? Math.max.apply(null, xs) : null; };
+    try {
+      let s = E2.floor(session('自由辩论'), 'pro', T0);
+      s = E2.floor(s, 'con', T0 + 10000);   // con holds the floor; pro sits on the left
+      const at = T0 + 30000;
+      let m;
+      const mounted = spyArcs(() => { m = mountSky(E2.view(s, at), 1920, 1080); });
+      const halves = halvesOf(m.root);
+      const ratio = m.root.querySelector('.dt-canvas').width / m.root.getBoundingClientRect().width;
+      const css = () => parseFloat(getComputedStyle(halves).gridTemplateColumns);   // the left column, CSS px
+      let seam = seamAt(mounted) / ratio;
+      const check = where => assert.near(seam, css(), 2, where + ': the seam ' + seam.toFixed(1) + ' under the divider ' + css().toFixed(1));
+      const frame = (view, ms, where) => {
+        if (ms !== null) seat(m.root, ms);
+        now += 40;
+        const spy = spyArcs(() => m.stage.update(view));
+        if (seamAt(spy) !== null) seam = seamAt(spy) / ratio;
+        check(where);
+        return spy;
+      };
+      check('mounted');
+      frame(E2.view(s, at), 200, 'mounting, +200 ms');
+      frame(E2.view(s, at), 1000, 'mounted and settled');
+      assert.near(seam, 0.42 * 1920, 1, 'at rest where the columns end');
+      // Pro takes the floor; the columns spring over 520 ms, with their overshoot.
+      const s1 = E2.floor(s, 'pro', at);
+      frame(E2.view(s1, at), null, 'the change of floor');
+      let far = 0;
+      for (let ms = 40; ms <= 640; ms += 40) { frame(E2.view(s1, at + ms), ms, '+' + ms + ' ms'); far = Math.max(far, seam); }
+      assert.ok(far > 0.58 * 1920 + 5, 'past where the columns end, as the spring overshoots: ' + far.toFixed(1));
+      assert.near(seam, 0.58 * 1920, 1, 'and back at rest where they end');
+      // Con takes the floor again, and 120 ms into that spring pro takes it straight back: CSS runs the reversed
+      // transition shortened, and the seam goes with it.
+      const s2 = E2.floor(s1, 'con', at + 1000);
+      frame(E2.view(s2, at + 1000), null, 'con again');
+      seat(m.root, 120);
+      const s3 = E2.floor(s2, 'pro', at + 1120);
+      frame(E2.view(s3, at + 1120), null, 'sent straight back to pro');
+      const back = halves.getAnimations()[0];
+      const ms = back.effect.getTiming().duration;
+      assert.ok(ms > 100 && ms < 500, 'the reversed transition is shortened: ' + ms + ' ms');
+      for (let u = 40; u <= ms + 80; u += 40) frame(E2.view(s3, at + 1120 + u), u, 'back, +' + u + ' ms');
+      const rest = spyArcs(() => { now += 40; m.stage.update(E2.view(s3, at + 1120 + ms + 200)); });
+      assert.equal(rest.copies, 0, 'at rest nothing more is copied');
+      m.stage.destroy();
     } finally { DT.clock.reset(); }
   });
 
@@ -309,12 +393,19 @@
       s = E2.floor(s, 'con', T0 + 30000);
       const at = T0 + 60000;
       const m = mountSky(E2.view(s, at), 960, 540);
+      settle(m.root);
       now += 40;
       const switched = E2.floor(s, 'pro', at);
+      m.stage.update(E2.view(switched, at));
+      now += 600;   // the seam has gone with the columns' spring to where they end
+      settle(m.root);
       m.stage.update(E2.view(switched, at));
       const a = pixels(m.root);
       m.stage.destroy();
       const f = mountSky(E2.view(switched, at), 960, 540);
+      settle(f.root);
+      now += 40;
+      f.stage.update(E2.view(switched, at));
       const b = pixels(f.root);
       f.stage.destroy();
       let diff = 0;
@@ -375,25 +466,51 @@
   });
 
   // Even in overtime, with the glow at its floor, the bottom third of the room says whose floor it is: the haze over
-  // the horizon takes the speaking side's colour. A break keeps the town's warm haze.
+  // the horizon takes the speaking side's colour. A break keeps the town's warm haze. Three layers that stay on the
+  // stage, one lit at a time, so a change of floor or of stage cross-fades them instead of the haze changing in a frame.
+  const hazeLayers = root => [getComputedStyle(root.querySelector('.dt-backdrop'), '::before'),
+    getComputedStyle(root.querySelector('.dt-backdrop'), '::after'), getComputedStyle(root, '::after')];
   DT.test('theme startrail: the horizon haze is the speaking side\'s colour, the town\'s on a break', () => {
     const haze = view => {
       const { stage, root } = mountSky(view);
-      const img = getComputedStyle(root.querySelector('.dt-backdrop')).backgroundImage;
+      const layers = hazeLayers(root);
+      const out = {
+        lit: layers.filter(cs => cs.opacity === '1').map(cs => cs.backgroundImage),
+        dark: layers.filter(cs => cs.opacity === '0').length,
+        eased: layers.every(cs => cs.transitionProperty === 'opacity' && cs.transitionDuration === '0.52s'),
+        sky: getComputedStyle(root.querySelector('.dt-backdrop')).backgroundImage,
+      };
       stage.destroy();
-      return img.split('radial-gradient(')[1] || img;
+      return out;
     };
     const PRO = 'rgba(214, 90, 124, 0.3)', CON = 'rgba(58, 160, 200, 0.3)', TOWN = 'rgba(236, 150, 96, 0.24)';
-    [['left'], ['right']].forEach(([seat]) => {
-      let h = haze(singleAt(OPENING, 200, seat));
-      assert.ok(h.indexOf(PRO) >= 0, 'pro in overtime / ' + seat + ': ' + h);
-      h = haze(singleAt(REBUTTAL, 200, seat));
-      assert.ok(h.indexOf(CON) >= 0, 'con in overtime / ' + seat + ': ' + h);
-      h = haze(dualAt(30, seat));
-      assert.ok(h.indexOf(CON) >= 0, 'free debate, con holding the floor / ' + seat + ': ' + h);
+    const check = (view, colour, where) => {
+      const h = haze(view);
+      assert.ok(h.lit.length === 1 && h.dark === 2, where + ': one layer lit: ' + h.lit.join(' | '));
+      assert.ok(h.lit[0].indexOf(colour) >= 0, where + ': ' + h.lit[0]);
+      assert.ok(h.eased, where + ': the layers cross-fade over 520 ms');
+      assert.ok(!/radial-gradient/.test(h.sky), where + ': the sky itself carries no haze: ' + h.sky);
+    };
+    ['left', 'right'].forEach(seat => {
+      check(singleAt(OPENING, 200, seat), PRO, 'pro in overtime / ' + seat);
+      check(singleAt(REBUTTAL, 200, seat), CON, 'con in overtime / ' + seat);
+      check(dualAt(30, seat), CON, 'free debate, con holding the floor / ' + seat);
     });
-    const h = haze(singleAt('评委打分', 60));
-    assert.ok(h.indexOf(TOWN) >= 0, 'break: ' + h);
+    check(singleAt('评委打分', 60), TOWN, 'break');
+  });
+
+  DT.test('theme startrail: a change of floor cross-fades the haze instead of changing it in a frame', () => {
+    const E2 = DT.engine;
+    const s = E2.floor(session('自由辩论'), 'pro', T0);
+    const m = mountSky(E2.view(s, T0 + 5000));
+    const moving = () => m.root.getAnimations({ subtree: true }).filter(a => a.transitionProperty === 'opacity' &&
+      a.effect && /::(before|after)/.test(a.effect.pseudoElement || '') && a.effect.target.matches('.dt-backdrop, .dt-stage'));
+    assert.equal(moving().length, 0, 'nothing moves at mount');
+    m.stage.update(E2.view(E2.floor(s, 'con', T0 + 5000), T0 + 5000));
+    const fades = moving();
+    assert.equal(fades.length, 2, 'the outgoing side\'s haze fades out as the incoming side\'s fades in');
+    fades.forEach(a => assert.equal(a.effect.getTiming().duration, 520));
+    m.stage.destroy();
   });
 
   DT.test('theme startrail: the digits are starlight white with a faint glow, one layer on and off the glow', () => {
@@ -477,7 +594,7 @@
   // Spec §2.2: crossing the warn point sends one meteor over the digits (the renderer's warn ring, restyled); the
   // renderer sends no ring under reduced motion. The end bell's rings stay rings. The meteor is chosen by the bell that
   // rang, not by the phase: in free debate a side runs out while the new speaker's clock may read warn.
-  DT.test('theme startrail: the warn bell sends a meteor over the digits; the end bell keeps its ring', () => {
+  DT.test('theme startrail: the warn bell sends a meteor over the digits; the end bell flares under them', () => {
     const warn = mountSky(singleAt(OPENING, 152));
     assert.equal(warn.root.dataset.phase, 'warn');
     warn.stage.pulse({ type: 'warn', clock: 'main' });
@@ -487,17 +604,32 @@
     assert.equal(getComputedStyle(meteor).animationName, 'dt-startrail-meteor');
     const cs = getComputedStyle(meteor);
     assert.ok(px(cs.width) > 4 * px(cs.height), 'a streak: ' + cs.width + ' × ' + cs.height);
+    // The end bell, even in the warn phase, is the digits' bloom flaring: a soft gold glow under them, not a circle.
     warn.stage.pulse({ type: 'end', clock: 'main' });
-    assert.equal(getComputedStyle(warn.root.querySelector('.dt-ring[data-type="end"]')).animationName, 'dt-ring', 'an end bell in the warn phase is a ring');
+    const flare = getComputedStyle(warn.root.querySelector('.dt-ring[data-type="end"]'));
+    assert.equal(flare.animationName, 'dt-startrail-flare', 'an end bell in the warn phase flares');
+    assert.equal(flare.borderTopWidth, '0px', 'no hard circle');
+    assert.ok(/radial-gradient/.test(flare.backgroundImage), 'a soft glow: ' + flare.backgroundImage);
+    assert.equal(flare.zIndex, '-1', 'under the digits');
     warn.stage.destroy();
+    // A free-debate side that runs out flares once (render.js), shorter, so it is dark again as the column has sprung.
+    const dual = mountSky(dualAt(30));
+    dual.stage.pulse({ type: 'end', clock: 'con' });
+    const half = dual.root.querySelectorAll('.dt-half .dt-ring');
+    assert.equal(half.length, 1, 'one flare in the half');
+    assert.equal(getComputedStyle(half[0]).animationName, 'dt-startrail-flare');
+    assert.equal(getComputedStyle(half[0]).animationDuration, '0.6s', 'over with the spring');
+    dual.stage.destroy();
     const over = mountSky(singleAt(OPENING, 181));
     over.stage.pulse({ type: 'end', clock: 'main' });
-    assert.equal(getComputedStyle(over.root.querySelector('.dt-ring')).animationName, 'dt-ring');
+    assert.equal(getComputedStyle(over.root.querySelector('.dt-ring')).animationName, 'dt-startrail-flare');
     over.stage.destroy();
   });
 
+  // Read once the entrance is over: the glow blooms in from nothing (see the entrance test).
   DT.test('theme startrail: in free debate the sky shows through both halves, each with its own glow', () => {
     const { stage, root } = mountSky(dualAt(30));
+    root.classList.remove('is-entering');
     root.querySelectorAll('.dt-half').forEach(h => {
       assert.equal(getComputedStyle(h).backgroundColor, 'rgba(0, 0, 0, 0)', h.dataset.side);
       const f = getComputedStyle(h.querySelector('.dt-half-field'));
@@ -507,6 +639,7 @@
     stage.destroy();
     // Pro has 10 s left of its 4:00: its glow has faded but still says whose floor it is.
     const low = mountSky(E.view(E.tick(E.floor(session('自由辩论'), 'pro', T0), T0 + 230000).session, T0 + 230000));
+    low.root.classList.remove('is-entering');
     const lowPro = low.root.querySelector('.dt-half[data-side="pro"]');
     assert.ok(!lowPro.hasAttribute('data-locked'), 'pro still has time');
     const lowOpacity = px(getComputedStyle(lowPro.querySelector('.dt-half-field')).opacity);
@@ -518,6 +651,104 @@
     const pro = locked.root.querySelector('.dt-half[data-side="pro"]');
     assert.ok(pro.hasAttribute('data-locked'), 'pro is out of time');
     assert.equal(getComputedStyle(pro.querySelector('.dt-half-field')).opacity, '0', 'a side out of time has no glow');
+    // A stage that opens with a side already out shows it so: the glow does not fade once the entrance is over.
+    locked.root.classList.remove('is-entering');
+    assert.equal(getComputedStyle(pro.querySelector('.dt-half-field')).opacity, '0');
+    assert.equal(pro.querySelector('.dt-half-field').getAnimations().length, 0, 'nothing fades at mount');
     locked.stage.destroy();
+  });
+
+  // Audit ST9: a side that runs out (or yields) lets its glow die with the columns' spring, rather than dropping from
+  // its floor of .5 to nothing in one frame.
+  DT.test('theme startrail: a side that runs out lets its glow die with the spring', () => {
+    const s = E.floor(session('自由辩论'), 'pro', T0);
+    const before = E.tick(s, T0 + 239000).session;   // pro has a second of its 4:00 left
+    const m = mountSky(E.view(before, T0 + 239000));
+    m.root.classList.remove('is-entering');
+    const half = m.root.querySelector('.dt-half[data-side="pro"]'), field = half.querySelector('.dt-half-field');
+    assert.ok(!half.hasAttribute('data-locked') && px(getComputedStyle(field).opacity) >= 0.5, 'pro still glows');
+    m.stage.update(E.view(E.tick(before, T0 + 241000).session, T0 + 241000));
+    assert.ok(half.hasAttribute('data-locked'), 'pro is out of time');
+    const fade = field.getAnimations().find(a => a.transitionProperty === 'opacity');
+    assert.ok(fade, 'the glow fades');
+    assert.equal(fade.effect.getTiming().duration, 520, 'with the spring');
+    m.stage.destroy();
+  });
+
+  // Audit ST5: each side's nebula is as wide as the speaking column and anchored at its seat, whether its side is
+  // speaking, waiting or neither has started; the half cuts it. A change of floor moves only the cut, so the glow
+  // neither stretches nor slides its filaments with the spring.
+  DT.test('theme startrail: each side\'s nebula is a fixed part of the sky, cut by its half', () => {
+    [dualAt(10), dualAt(30), dualAt(30, 'right'), E.view(session('自由辩论'), T0)].forEach(view => {
+      const { stage, root } = mountSky(view);
+      root.classList.remove('is-entering');
+      const box = root.getBoundingClientRect();
+      const halves = root.querySelectorAll('.dt-half');
+      halves.forEach((h, i) => {
+        const r = h.querySelector('.dt-half-field').getBoundingClientRect();
+        const where = root.dataset.proSeat + ' seat, ' + h.dataset.side + (h.hasAttribute('data-active') ? ' speaking' : ' waiting');
+        assert.near(r.width, 0.58 * box.width, 1, where + ': as wide as the speaking column');
+        if (i === 0) assert.near(r.left, box.left, 1, where + ': from the left seat');
+        else assert.near(r.right, box.right, 1, where + ': from the right seat');
+      });
+      stage.destroy();
+    });
+  });
+
+  // Audit ST1, ST2, ST11: a new stage opens as an exposure. The nebula blooms out from its seat (no straight clip edge
+  // through a soft glow), the sky's trails fade in once the painter has drawn them, the line of time comes out of the
+  // seat; each lands on its live value, so a still shows it landed, and none of it runs once the entrance is over.
+  DT.test('theme startrail: a new stage opens as an exposure, and lands where it stands', () => {
+    const shot = (view, sel, pseudo) => {
+      const { stage, root } = mountSky(view);
+      const read = () => [].concat(sel).map(q => getComputedStyle(root.querySelector(q), q === '.dt-deco' ? '::before' : null));
+      const entering = read().map(cs => ({ name: cs.animationName, fill: cs.animationFillMode, delay: cs.animationDelay, origin: cs.transformOrigin }));
+      root.setAttribute('data-still', '');
+      const still = read().map(cs => ({ opacity: cs.opacity, scale: cs.scale, translate: cs.translate }));
+      root.removeAttribute('data-still');
+      root.classList.remove('is-entering');
+      const after = read().map(cs => cs.animationName);
+      stage.destroy();
+      return { entering, still, after };
+    };
+    const single = shot(singleAt(OPENING, 60), ['.dt-field', '.dt-canvas', '.dt-deco']);
+    assert.equal(single.entering[0].name, 'dt-startrail-bloom', 'the glow blooms');
+    assert.equal(single.entering[0].fill, 'backwards');
+    assert.ok(/^0px /.test(single.entering[0].origin), 'from its seat: ' + single.entering[0].origin);
+    assert.equal(single.entering[1].name, 'dt-fade-in', 'the sky fades in');
+    assert.equal(single.entering[1].delay, '0.04s', 'once the painter has drawn it');
+    assert.equal(single.entering[2].name, 'dt-startrail-draw', 'the line comes out of the seat');
+    assert.near(px(single.still[0].opacity), 0.55 + 0.45 * (1 - 60 / 180), 0.01, 'a still: the glow at its live strength');
+    assert.equal(single.still[0].scale, 'none');
+    assert.equal(single.still[1].opacity, '1');
+    assert.equal(single.still[2].translate, 'none');
+    assert.deepEqual(single.after, ['none', 'none', 'none'], 'nothing runs once the entrance is over');
+    const right = shot(singleAt(OPENING, 60, 'right'), '.dt-field');
+    assert.ok(/^960px /.test(right.entering[0].origin), 'the right seat: ' + right.entering[0].origin);
+    const dual = shot(dualAt(30), ['.dt-half:first-child .dt-half-field', '.dt-half:last-child .dt-half-field']);
+    assert.deepEqual(dual.entering.map(a => a.name), ['dt-startrail-bloom', 'dt-startrail-bloom'], 'each half from its own seat');
+    // From the seat's own edge: the glow is strong there, and a box scaled about a point inside it would draw its edge
+    // as a straight line down the glow.
+    assert.ok(/^0px /.test(dual.entering[0].origin), 'the left half from the left edge: ' + dual.entering[0].origin);
+    assert.near(px(dual.entering[1].origin), 0.58 * 960, 1, 'the right half from the right edge: ' + dual.entering[1].origin);
+    // The end card's sky fades in to its dimmed strength, never brighter first.
+    const end = shot(E.view(E.goto(session(OPENING), F().stages.length, T0), T0), '.dt-canvas');
+    assert.equal(end.entering[0].name, 'dt-fade-in');
+    assert.equal(end.still[0].opacity, '0.5');
+  });
+
+  // Audit ST6: on the title and end cards each side's half-sky leans to its colour, and the two cross over in a band
+  // about the middle instead of meeting in a seam.
+  DT.test('theme startrail: on the title and end cards the two half-skies cross over, with no seam', () => {
+    [E.view(session(OPENING), T0), E.view(E.goto(session(OPENING), -1, T0), T0), E.view(E.goto(session(OPENING), F().stages.length, T0), T0)].forEach(view => {
+      if (view.mode === 'stage') return;
+      const { stage, root } = mountSky(view, 1920, 1080);
+      const cold = [0.42, 0.44, 0.46, 0.48, 0.5, 0.52, 0.54, 0.56].map(x => { const [r, , b] = light(root, x, x + 0.02); return b / r; });
+      const steps = cold.slice(1).map((c, i) => Math.abs(c - cold[i]));
+      const total = Math.abs(cold[cold.length - 1] - cold[0]);
+      assert.ok(total > 0.1, view.mode + ': the two halves lean apart: ' + cold.map(c => c.toFixed(2)).join(' '));
+      assert.ok(Math.max.apply(null, steps) < 0.5 * total, view.mode + ': no one step takes the change: ' + cold.map(c => c.toFixed(2)).join(' '));
+      stage.destroy();
+    });
   });
 })();

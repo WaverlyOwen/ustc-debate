@@ -19,6 +19,7 @@
   const STEP_PX = 2;              // a trail is drawn on only once it has grown this many pixels: pieces shorter than a
                                   // pixel would each be antialiased on their own and add up dimmer than one stroke
   const POLE = { x: -0.07, y: -0.42 };   // the pole, off the upper corner, in stage widths and heights
+  const FEATHER = 0.1;            // the cards: the two half-skies cross over in a band this share of the width, mid-stage
 
   // Starlight from hot to cool, and each side's cast: 正方 warm, 反方 cold.
   const TEMPS = [[170, 198, 255], [212, 225, 255], [246, 246, 255], [255, 238, 212], [255, 210, 160]];
@@ -92,8 +93,8 @@
     const edgeOf = side => (side === 'pro') === (seat === 'left') ? 'left' : 'right';
     const used = c => !c ? 0 : 1 - c.fraction + Math.min(OVER, c.total > 0 ? c.overtime / c.total : 0);
     const pair = u => ['pro', 'con'].map(side => ({ edge: edgeOf(side), sky: side + '/half', cast: side, used: u, width: 0.5 }));
-    if (v.mode === 'title') return { key: 'title|' + seat, poles: pair(TITLE_USED) };
-    if (v.mode !== 'stage' || !v.stage) return { key: 'end|' + seat, poles: pair(1) };
+    if (v.mode === 'title') return { key: 'title|' + seat, card: true, poles: pair(TITLE_USED) };
+    if (v.mode !== 'stage' || !v.stage) return { key: 'end|' + seat, card: true, poles: pair(1) };
     const st = v.stage;
     if (st.type === 'dual') {
       const active = v.clocks.find(c => c.active) || null;
@@ -116,9 +117,14 @@
 
   function painter(canvas, ctx, flags) {
     const thumbnail = !!(flags && flags.thumbnail);
-    // drawn: the scene on the canvas, each pole's used share and column width, and the angle each of its trails has
-    // been drawn to. layers: in free debate, each side's whole sky on a canvas of its own (see frame).
-    let W = 0, H = 0, skies = {}, drawn = null, layers = [];
+    // A still (thumbnail, reduced motion, frozen demo) has no spring to follow: its columns stand where they land.
+    const still = !!(flags && (flags.thumbnail || flags.reducedMotion || flags.frozen));
+    // drawn: the scene on the canvas, each pole's used share, the angle each of its trails has been drawn to, and in
+    // free debate where the seam between the two skies stands (split, in canvas pixels) and where the columns end
+    // (target). layers: in free debate, each side's whole sky on a canvas of its own (see frame). moving: the columns
+    // may be moving, so the seam follows the divider; path: the divider's transition and where it set out (see
+    // divider).
+    let W = 0, H = 0, skies = {}, drawn = null, layers = [], moving = false, path = null;
 
     function skyOf(name) {
       const half = /\/half$/.test(name);
@@ -126,8 +132,13 @@
       return skies[name];
     }
 
-    // The stage canvas as a target: a pole that has only part of the stage is cut to its column.
-    const onStage = pole => ({ g: ctx, clip: pole.width < 1 ? pole : null });
+    // The stage canvas as a target, cut (in CSS pixels) to [x, x + w) when a clip is given; in free debate, to the
+    // pole's side of the seam as it stands (`split`, in canvas pixels).
+    const onStage = (x, w) => ({ g: ctx, clip: w === undefined ? null : { x, w } });
+    const toSeam = (pole, split) => {
+      const at = split * W / canvas.width;
+      return pole.edge === 'left' ? onStage(0, at) : onStage(at, W - at);
+    };
 
     // Draw a pole's trails on from the angle each has reached (`ends`, past its start) to `to`, skipping those that
     // have not yet grown by a step, onto each target, and note where each now ends. A pole beyond the right edge is
@@ -145,7 +156,7 @@
         c.save();
         if (clip) {
           c.beginPath();
-          c.rect(mirror ? W * (1 - clip.width) : 0, 0, W * clip.width, H);
+          c.rect(clip.x, 0, clip.w, H);
           c.clip();
         }
         c.lineCap = cap;
@@ -185,22 +196,43 @@
       return { canvas: c, g, off, clip: null, pending: 0 };
     }
 
-    // Where the two columns meet, in canvas pixels, for these column widths.
-    function splitAt(poles, widths) {
+    // Where the divider between free debate's two columns stands, in canvas pixels, while stage.css moves it to
+    // `target` (its spring as the floor changes hands, a shortened one when the floor is sent straight back, the
+    // columns settling as the stage mounts); null once nothing moves it. Taken from the columns' own transition rather
+    // than worked out from the clock: a new transition starts on the frame after the columns are written, and the
+    // projector learns of a change of floor later than the console does. How far along its eased path the divider is
+    // costs a style read; where the path set out from is read from the divider's box once, when the transition is first
+    // seen (a layout read), or on every frame for one first seen late in its run.
+    function divider(target) {
+      const halves = canvas.parentNode && canvas.parentNode.querySelector('.dt-halves');
+      const tr = halves ? halves.getAnimations().find(a => a.transitionProperty === 'grid-template-columns') : null;
+      const p = tr && tr.effect ? tr.effect.getComputedTiming().progress : null;
+      if (typeof p !== 'number') { path = null; return null; }
+      const box = () => parseFloat(getComputedStyle(halves).gridTemplateColumns) * canvas.width / W;
+      if (!path || path.tr !== tr) {
+        const at = box();
+        if (!isFinite(at)) { path = null; return null; }
+        path = { tr, from: p < 0.5 ? (at - target * p) / (1 - p) : null };
+        if (path.from === null) return Math.round(at);
+      }
+      const at = path.from === null ? box() : path.from + (target - path.from) * p;
+      return isFinite(at) ? Math.round(at) : null;
+    }
+
+    // Where the two columns meet once they have sprung, in canvas pixels.
+    function splitAt(poles) {
       const i = poles.findIndex(p => p.edge === 'left');
-      const leftWidth = i >= 0 ? widths[i] : 1 - widths[0];
+      const leftWidth = i >= 0 ? poles[i].width : 1 - poles[0].width;
       return Math.round(leftWidth * canvas.width);
     }
 
-    // The stage made from the layers: each side's pixels copied from its own canvas, over the columns' new widths.
-    // Only the strip the edge between them crossed changes hands (the rest of the stage already holds what the
-    // layers hold), so a change of floor costs a copy of that strip, however long the trails have grown.
-    function compose(poles, before) {
+    // The stage made from the layers: each side's pixels copied from its own canvas, either side of the seam at
+    // `split`. Only the strip the seam crossed since `was` changes hands (the rest of the stage already holds what the
+    // layers hold), so a frame of a change of floor costs a copy of that strip, however long the trails have grown.
+    function compose(poles, was, split) {
       const cw = canvas.width, ch = canvas.height;
-      const split = splitAt(poles, poles.map(p => p.width));
       let x0 = 0, x1 = cw;
-      if (before) {
-        const was = splitAt(poles, before);
+      if (was !== null) {
         x0 = Math.max(0, Math.min(was, split) - 2);
         x1 = Math.min(cw, Math.max(was, split) + 2);
       }
@@ -222,6 +254,44 @@
       ctx.restore();
     }
 
+    // The title and end cards: each side's half-sky drawn on the stage as it always was, cut at the middle; and the band
+    // about the middle drawn again on a canvas of each side's own, faded out toward the other side, the two added
+    // together over the band; so the two skies cross over instead of meeting in a seam, and outside the band the stage
+    // is what it was. A card's sky stands still, so this is done once, when it is painted afresh.
+    function blend(poles) {
+      const ratio = canvas.width / W;
+      const lo = Math.round((0.5 - FEATHER / 2) * canvas.width), hi = Math.round((0.5 + FEATHER / 2) * canvas.width);
+      const bands = poles.map((p, i) => {
+        const left = p.edge === 'left';
+        const band = document.createElement('canvas');
+        band.className = 'dt-canvas-layer';
+        band.width = hi - lo;
+        band.height = canvas.height;
+        const g = band.getContext('2d');
+        g.setTransform(ratio, 0, 0, ratio, -lo, 0);
+        arcs(p, drawn.ends[i], theta(p.used), 'round', [onStage(left ? 0 : W / 2, W / 2), { g, clip: { x: lo / ratio, w: (hi - lo) / ratio } }]);
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalCompositeOperation = 'destination-in';   // keep this side's sky only as far as the ramp lets it
+        const ramp = g.createLinearGradient(0, 0, band.width, 0);
+        ramp.addColorStop(0, left ? '#000' : 'rgb(0 0 0 / 0)');
+        ramp.addColorStop(1, left ? 'rgb(0 0 0 / 0)' : '#000');
+        g.fillStyle = ramp;
+        g.fillRect(0, 0, band.width, band.height);
+        drawn.used[i] = p.used;
+        return band;
+      });
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(lo, 0, hi - lo, canvas.height);
+      bands.forEach((band, i) => {
+        ctx.globalCompositeOperation = i ? 'lighter' : 'source-over';   // the two fades add up to the whole
+        ctx.drawImage(band, lo, 0);
+        band.width = 0;
+        band.height = 0;
+      });
+      ctx.restore();
+    }
+
     function dropLayers() {
       layers.forEach(L => { L.canvas.width = 0; L.canvas.height = 0; });
       layers = [];
@@ -238,14 +308,26 @@
         const fresh = !drawn || drawn.key !== sc.key || sc.poles.some((p, i) => p.used < drawn.used[i]);
         if (fresh) {
           ctx.clearRect(0, 0, W, H);
-          drawn = { key: sc.key, used: [], widths: [], ends: sc.poles.map(p => new Float64Array(skyOf(p.sky).stars.length)) };
+          drawn = { key: sc.key, used: [], split: null, target: null, ends: sc.poles.map(p => new Float64Array(skyOf(p.sky).stars.length)) };
           dropLayers();
           if (sc.dual) layers = sc.poles.map(layerFor);
+          if (sc.card) return blend(sc.poles);
         }
-        const moved = !!sc.dual && (fresh || sc.poles.some((p, i) => p.width !== drawn.widths[i]));
+        // In free debate, where the seam between the two skies stands this frame: under the divider. When the floor
+        // changes hands the columns spring and the seam goes with them, a frame at a time, instead of jumping to where
+        // they will end; the divider is read only from a change of floor (or a fresh sky) until it is at rest.
+        let split = null;
+        if (sc.dual) {
+          const target = splitAt(sc.poles);
+          if (fresh || target !== drawn.target) moving = !still;
+          const at = moving ? divider(target) : null;
+          if (at === null) moving = false;
+          split = at === null ? target : at;
+          drawn.target = target;
+        }
         sc.poles.forEach((p, i) => {
           if (!fresh && p.used === drawn.used[i]) return;
-          const targets = !sc.dual ? [onStage(p)] : moved ? [layers[i]] : [layers[i], onStage(p)];
+          const targets = !sc.dual ? [onStage()] : fresh ? [layers[i]] : [layers[i], toSeam(p, split)];
           arcs(p, drawn.ends[i], theta(p.used), fresh ? 'round' : 'butt', targets);
           drawn.used[i] = p.used;
           // A canvas that is never shown keeps what is drawn on it as a list of strokes until it is read; left alone,
@@ -256,11 +338,11 @@
             layers[i].pending = 0;
           }
         });
-        if (moved) compose(sc.poles, fresh ? null : drawn.widths);
-        drawn.widths = sc.poles.map(p => p.width);
+        if (sc.dual && (fresh || split !== drawn.split)) compose(sc.poles, fresh ? null : drawn.split, split);
+        if (sc.dual) drawn.split = split;
       },
-      resize(w, h) { W = w; H = h; skies = {}; drawn = null; dropLayers(); },
-      destroy() { skies = {}; drawn = null; dropLayers(); },
+      resize(w, h) { W = w; H = h; skies = {}; drawn = null; moving = false; path = null; dropLayers(); },
+      destroy() { skies = {}; drawn = null; moving = false; path = null; dropLayers(); },
     };
   }
 
