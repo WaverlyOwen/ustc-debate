@@ -61,6 +61,8 @@ timer/
 
 `timer/debate-timer.html` 是配套的比赛计时器：一个文件，双击用 Edge 打开，不用联网。赛制取自上面 `references/formats/` 里的赛制库，也可以在界面里自己编辑赛制、导入导出。支持单屏和双窗口投影、三种计时方式、30 秒提示铃与终止铃、8 个全由代码生成的主题（暗场、亮场、直播抠像各有适用的）。开赛页的「导出这一场」能把一场比赛存成单独的 html，拷到比赛电脑上双击就进开场卡。用法、键位、加赛制与加主题的办法见 [`timer/README.md`](timer/README.md)。
 
+不想下载也可以直接打开线上版：<https://waverlyowen.github.io/ustc-debate/>（GitHub Pages，推送到 main 后自动更新；各辩题的备赛 PDF 在 <https://waverlyowen.github.io/ustc-debate/prep/>）。投影电脑没有网络时仍然用下载的单文件。
+
 ## 使用方法
 
 **在 Claude Code 中**：克隆本仓库后在仓库目录内启动 Claude Code，技能会自动加载。直接说：
