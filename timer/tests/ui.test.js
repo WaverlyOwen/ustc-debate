@@ -564,9 +564,13 @@
     assert.equal(segs().length, before + 2);
     assert.equal(document.querySelectorAll('.dt-progress > [data-extra]').length, 2);
     assert.equal(dock.querySelector('button[data-act="insert"]').disabled, true, 'not in the attack itself');
+    t.clock.advance(2000);
     press('KeyZ');
     assert.equal(t.c.session().cursor, brk, 'one undo takes it all back');
     assert.equal(segs().length, before);
+    assert.ok(DT.engine.getRun(t.c.session()).running, 'the break was running, so it runs on');
+    assert.equal(left(t), 23000, 'the time since the insert charged to it');
+    assert.equal(document.querySelector('.dt-title').textContent, '评委打分');
     t.done();
   });
 
@@ -941,7 +945,21 @@
 
   const run = t => DT.engine.getRun(t.c.session());
   const left = t => DT.engine.remaining(run(t), 'main', DT.clock.now());
-  const later = ms => new Promise(r => setTimeout(r, ms));
+  // Holds the browser's frames for one test and hands them to the frame loop one at a time with step(), so the loop
+  // runs exactly when the test says. Waiting on real frames does not hold up in the runner: its clock is virtual,
+  // leaps from timer to timer while a loaded machine holds frames back (so a deadline on it, or a timer raced against
+  // the frame, can run out before one frame is drawn: both frame tests failed together that way under load), and
+  // ends the page when nothing but a frame is pending (so waiting on frames alone can end the run).
+  function holdFrames() {
+    const real = { request: window.requestAnimationFrame, cancel: window.cancelAnimationFrame };
+    let queue = [], id = 0;
+    window.requestAnimationFrame = fn => { queue.push({ id: ++id, fn }); return id; };
+    window.cancelAnimationFrame = n => { queue = queue.filter(q => q.id !== n); };
+    return {
+      step() { const due = queue; queue = []; due.forEach(q => q.fn(performance.now())); },
+      release() { window.requestAnimationFrame = real.request; window.cancelAnimationFrame = real.cancel; },
+    };
+  }
 
   DT.test('ui: clicking the current row of the stage list leaves its running clock alone', () => {
     const t = boot();
@@ -1033,40 +1051,50 @@
     assert.equal(saved.runs[stage.id].clocks.main.used, t.c.session().runs[stage.id].clocks.main.used, 'the last step is saved on the way out');
   });
 
-  DT.test('ui: one frame that throws does not stop the frame loop', async () => {
+  DT.test('ui: one frame that throws does not stop the frame loop', () => {
+    const frames = holdFrames();
     const tick = DT.engine.tick;
     let calls = 0;
     DT.engine.tick = function () { if (!calls++) throw new Error('odd data'); return tick.apply(this, arguments); };
     const warn = console.warn;
     console.warn = () => {};
     let t;
-    try { t = boot(); } finally { DT.engine.tick = tick; console.warn = warn; }
+    try { t = boot(); } finally { DT.engine.tick = tick; console.warn = warn; }   // the first frame, at mount, throws
     try {
       press('Space');
       t.clock.advance(5000);
-      // The loop paints on the browser's own frames, which a loaded headless browser can hold back for a while:
-      // wait for the paint itself (up to 3 s), not for a fixed number of frames.
-      const sec = () => document.querySelector('.dt-clock[data-clock="main"] .dt-sec').textContent;
-      const until = Date.now() + 3000;
-      while (sec() !== '55' && Date.now() < until) await Promise.race([new Promise(r => requestAnimationFrame(r)), later(50)]);
-      assert.equal(sec(), '55');
-    } finally { t.done(); }
+      frames.step();                                    // the frame it asked for before it threw
+      assert.equal(document.querySelector('.dt-clock[data-clock="main"] .dt-sec').textContent, '55');
+    } finally { t.done(); frames.release(); }
   });
-  // The engine plans thirty seconds over ahead; the frame loop plans again as each one passes.
-  DT.test('ui: the seconds over keep being planned while a stage runs over', async () => {
-    const t = boot();
-    try {
-      press('Space');
-      const tocks = list => list.filter(b => b.sound === 'tock').map(b => b.at - T0);
-      const first = tocks(t.bells.log.scheduled[t.bells.log.scheduled.length - 1]);
-      assert.deepEqual([first.length, first[0], first[29]], [30, 181000, 210000]);
-      t.clock.advance(215500);                          // past the last of them
-      const last = () => tocks(t.bells.log.scheduled[t.bells.log.scheduled.length - 1]);
-      const until = Date.now() + 3000;
-      while (last()[0] !== 216000 && Date.now() < until) await Promise.race([new Promise(r => requestAnimationFrame(r)), later(50)]);
-      assert.deepEqual([last().length, last()[0], last()[29]], [30, 216000, 245000]);
-      assert.equal(t.c.session().runs[t.c.session().timeline[0].id].over.main, 35);
-    } finally { t.done(); }
+  // The engine plans thirty seconds over ahead; the frame loop plans again as each one passes, beside a projector
+  // window too, and not on a frame where nothing changed.
+  DT.test('ui: the seconds over keep being planned while a stage runs over', () => {
+    [false, true].forEach(desk => {
+      const frames = holdFrames();
+      const t = desk ? bootDesk() : boot();
+      const where = desk ? 'beside a projector' : 'alone';
+      const over = [];
+      t.c.on('events', list => list.forEach(e => { if (e.type === 'over') over.push(e.key); }));
+      try {
+        press('Space');
+        const log = t.bells.log.scheduled;
+        const last = () => log[log.length - 1].filter(b => b.sound === 'tock').map(b => b.at - T0);
+        assert.deepEqual([last().length, last()[0], last()[29]], [30, 181000, 210000], where);
+        t.clock.advance(215500);                        // past the last of them, with no frame in between
+        frames.step();
+        assert.deepEqual([last().length, last()[0], last()[29]], [30, 216000, 245000], where);
+        assert.equal(t.c.session().runs[t.c.session().timeline[0].id].over.main, 35);
+        assert.deepEqual(over, ['o34', 'o35'], 'only the seconds over within the stale window, ' + where);
+        const plans = log.length;
+        frames.step(); frames.step(); frames.step();   // the clock held: nothing changed
+        assert.equal(log.length, plans, 'no plan on a frame where nothing changed, ' + where);
+        t.clock.advance(1000); frames.step();
+        assert.deepEqual([log.length, last()[0]], [plans + 1, 217000], 'one plan for the next second over, ' + where);
+        t.clock.advance(400); frames.step();
+        assert.equal(log.length, plans + 1, 'and none until the one after, ' + where);
+      } finally { t.done(); frames.release(); }
+    });
   });
   DT.test('ui: the current row of the stage list shows its time behind a dot of its own', () => {
     const t = boot();

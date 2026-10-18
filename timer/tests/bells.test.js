@@ -172,6 +172,27 @@
     DT.clock.reset();
   });
 
+  // The lead is only for a bell the engine has passed. One still ahead of the page clock is the timekeeper's to stop:
+  // a pause 50 ms before the end bell must silence it (else it rings with the clock stopped at 0:01, and again on
+  // resuming), and a ↑ just before it must move it, not ring it now and once more a second later.
+  DT.test('bells: a bell not yet due by the page clock stops when the plan changes, however close it is', () => {
+    fresh(); DT.clock.set(() => 0); B.unlock();
+    B.schedule([{ at: 1000, sound: 'double' }], 0);
+    const end = ctx.started.slice();
+    ctx.currentTime = 10.95;                              // 50 ms before it, and the timekeeper pauses
+    B.schedule([], 950);
+    end.forEach(n => assert.ok(n.stopCalls.includes(0) && n.disconnected, 'the end bell does not ring on a stopped clock'));
+    B.schedule([{ at: 1000, sound: 'double' }], 0);       // running again from the start: 1 s to go
+    const again = ctx.started.slice(end.length);
+    ctx.currentTime = 10.95;
+    B.schedule([{ at: 2000, sound: 'double' }], 950);     // ↑ 50 ms before it: the end bell moves a second on
+    again.forEach(n => assert.ok(n.stopCalls.includes(0) && n.disconnected, 'not struck at the old time'));
+    const moved = ctx.started.slice(end.length + again.length);
+    assert.equal(moved.length, end.length, 'struck once, at the new time');
+    moved.forEach(n => assert.ok(n.startAt > 11.9, 'at the new time'));
+    DT.clock.reset();
+  });
+
   const reaches = (node, target) => node === target || node.outs.some(n => reaches(n, target));
 
   DT.test('bells: the sound check plays its nine sounds on the audio clock, through the master gain', () => {

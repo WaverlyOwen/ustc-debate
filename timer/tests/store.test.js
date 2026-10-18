@@ -86,6 +86,20 @@
     assert.ok(S.isPristine(restored[0]));
   });
 
+  // Revised 2026-10-18: a built-in edited before the new default bells keeps the bells it was saved with (no 5 s, no
+  // 3-2-1) and takes the tock over time from the new default, which it does not name; 恢复默认 brings the new sequence.
+  DT.test('store: an edited built-in saved with the old bells loads, rings them plus the tock over time, and restores to the new ones', () => {
+    const st = memStorage(); S.useStorage(st);
+    const old = Object.assign(JSON.parse(JSON.stringify(DT.BUILTIN_FORMATS[0])), { name: '改过的', bells: { warn: [30], countdown: 0, end: 'double' } });
+    st.setItem('dt.formats.v1', JSON.stringify({ schema: 1, formats: [old] }));
+    const list = S.loadFormats();
+    assert.equal(list[0].name, '改过的');
+    assert.deepEqual(DT.engine.effectiveBells(list[0], list[0].stages[0]), { warn: [30], countdown: 0, end: 'double', overtime: 'tick' });
+    const restored = S.restoreBuiltin(list, list[0].id);
+    assert.deepEqual(restored[0].bells, DT.engine.DEFAULT_BELLS);
+    assert.ok(S.isPristine(restored[0]));
+  });
+
   DT.test('store: bad storage never throws', () => {
     const st = memStorage(); S.useStorage(st);
     st.setItem('dt.formats.v1', '{not json'); st.setItem('dt.session.v1', 'x'); st.setItem('dt.settings.v1', '[');

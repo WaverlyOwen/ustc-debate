@@ -7240,14 +7240,16 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   let factory = defaultFactory;
   let ctx = null, master = null, volume = 0.8, muted = false;
   let pending = [];     // last list passed to schedule(), replayed after unlock
-  let live = [];        // {nodes, key, start} per scheduled bell; start is on the audio clock
+  let live = [];        // {nodes, key, at, start} per scheduled bell; at is on the page clock, start on the audio clock
   let check = [];       // the node groups of a sound check under way (demo); schedule() never touches them
   let noise = null;     // {ctx, buffer}: one burst of white noise, shared by every tick and tock of a context
 
   const RING_S = 5;     // every voice has died away within this many seconds of its start
-  // A bell due within this long counts as ringing already. The page reads the audio clock up to a render buffer late,
-  // so a bell the engine has just passed (and so no longer lists to plan again) can still read as not started; the
-  // UI plans again on every bell it passes, every second over, so without this lead such bells would be dropped.
+  // A bell the engine has already passed counts as ringing while the audio clock is within this long of it. The page
+  // reads the audio clock up to a render buffer late, so such a bell (which the engine no longer lists to plan again)
+  // can still read as not started; the UI plans again on every bell it passes, every second over, so without this lead
+  // such bells would be dropped. A bell still ahead of the page clock gets no lead: a pause or a ↑ pressed just before
+  // it must stop it, or it would ring anyway, and once more at its new time.
   const DUE_S = 0.1;
   const NOISE_S = 0.06; // the longest click that uses the noise burst
 
@@ -7389,20 +7391,21 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     stopDemo();
   }
 
-  // Stops the bells that have not started yet. A bell that is already ringing (or due within DUE_S)
-  // plays out, so an action taken right after a double or long bell does not cut it off.
-  function cancelPending() {
+  // Stops the bells that have not started yet, except one already due by the page clock (`at` <= now) that the audio
+  // clock reaches within DUE_S. A bell that is already ringing plays out, so an action taken right after a double or
+  // long bell does not cut it off.
+  function cancelPending(now) {
     const t = ctx ? ctx.currentTime : 0;
     const ringing = [];
     live.forEach(bell => {
-      if (bell.start > t + DUE_S) stopNodes(bell.nodes);
+      if (bell.start > (bell.at <= now ? t + DUE_S : t)) stopNodes(bell.nodes);
       else if (bell.start > t - RING_S) ringing.push(bell);
     });
     live = ringing;
   }
 
   function schedule(list, now) {
-    cancelPending();
+    cancelPending(now);
     pending = list || [];
     if (!ctx) return;
     const seen = {};
@@ -7413,7 +7416,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       if (seen[key]) return;
       seen[key] = true;
       const start = ctx.currentTime + Math.max(0, item.at - now) / 1000;
-      live.push({ nodes: VOICES[item.sound](start), key, start });
+      live.push({ nodes: VOICES[item.sound](start), key, at: item.at, start });
     });
   }
 
