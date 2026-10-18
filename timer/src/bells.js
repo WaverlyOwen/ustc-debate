@@ -6,11 +6,23 @@
   let ctx = null, master = null, volume = 0.8, muted = false;
   let pending = [];     // last list passed to schedule(), replayed after unlock
   let live = [];        // {nodes, key, start} per scheduled bell; start is on the audio clock
+  let check = [];       // the node groups of a sound check under way (demo); schedule() never touches them
+  let noise = null;     // {ctx, buffer}: one burst of white noise, shared by every tick and tock of a context
 
   const RING_S = 5;     // every voice has died away within this many seconds of its start
+  // A bell due within this long counts as ringing already. The page reads the audio clock up to a render buffer late,
+  // so a bell the engine has just passed (and so no longer lists to plan again) can still read as not started; the
+  // UI plans again on every bell it passes, every second over, so without this lead such bells would be dropped.
+  const DUE_S = 0.1;
+  const NOISE_S = 0.06; // the longest click that uses the noise burst
 
-  const SOUNDS = ['ding', 'double', 'triple', 'long', 'tick', 'chime'];
+  const SOUNDS = ['ding', 'double', 'triple', 'long', 'tick', 'tock', 'chime'];
   const PARTIALS = [[1, 1], [2.76, 0.35], [5.4, 0.15]];   // [frequency ratio, gain]
+  // The sound check (revised 2026-10-18): what a stage rings, pressed into nine seconds, as [seconds in, sound]:
+  // the 30 s and 5 s warnings, 3-2-1, the end bell, then three seconds over.
+  const DEMO = Object.freeze([[0, 'ding'], [1.2, 'ding'], [2.2, 'tick'], [3.2, 'tick'], [4.2, 'tick'],
+    [5.2, 'double'], [6.2, 'tock'], [7.2, 'tock'], [8.2, 'tock']]);
+  const DEMO_LEAD_S = 0.05;   // the first strike waits this long, so a context only just resumed does not clip it
 
   function masterGain() { return muted ? 0 : volume; }
 
@@ -52,19 +64,26 @@
     return nodes;
   }
 
-  function tick(t) {
-    const dur = 0.045;
-    const g = envelope(t, 0.6, 0.002, dur);
-    const nodes = [osc(1760, t, dur, g)];
-    const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const data = buf.getChannelData(0);
+  // Made once per context: thirty tocks are planned ahead in overtime, and each would otherwise fill a buffer of its own.
+  function noiseBuffer() {
+    if (noise && noise.ctx === ctx) return noise.buffer;
+    const len = Math.max(1, Math.floor(ctx.sampleRate * NOISE_S));
+    const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
     for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    noise = { ctx, buffer };
+    return buffer;
+  }
+
+  // A short click: a sine through a fast envelope, with a breath of band-passed noise for the attack.
+  function click(t, f0, band, peak, dur) {
+    const g = envelope(t, peak, 0.002, dur);
+    const nodes = [osc(f0, t, dur, g)];
     const src = ctx.createBufferSource();
-    src.buffer = buf;
+    src.buffer = noiseBuffer();
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = 2400;
+    bp.frequency.value = band;
     bp.Q.value = 1.2;
     src.connect(bp);
     bp.connect(g);
@@ -74,12 +93,17 @@
     return nodes;
   }
 
+  function tick(t) { return click(t, 1760, 2400, 0.6, 0.045); }
+  // Every second over: lower, softer and a little longer than tick, a metronome rather than an alarm, since it
+  // keeps going for as long as the speaker does.
+  function tock(t) { return click(t, 880, 1200, 0.35, 0.06); }
+
   function chime(t) {
     return [[1046.5, t], [1568, t + 0.35]].map(([f, at]) => osc(f, at, 0.7, envelope(at, 0.4, 0.01, 0.7)));
   }
 
   const VOICES = {
-    ding, tick, chime,
+    ding, tick, tock, chime,
     double: t => repeated(t, 2, 0.32),
     triple: t => repeated(t, 3, 0.28),
     long: t => strike(t, 1046, 3),
@@ -123,19 +147,20 @@
     });
   }
 
-  // Stops every scheduled bell, including one that is ringing now.
+  // Stops every scheduled bell, including one that is ringing now, and a sound check.
   function cancelAll() {
     live.forEach(bell => stopNodes(bell.nodes));
     live = [];
+    stopDemo();
   }
 
-  // Stops the bells that have not started yet. A bell that is already ringing
+  // Stops the bells that have not started yet. A bell that is already ringing (or due within DUE_S)
   // plays out, so an action taken right after a double or long bell does not cut it off.
   function cancelPending() {
     const t = ctx ? ctx.currentTime : 0;
     const ringing = [];
     live.forEach(bell => {
-      if (bell.start > t) stopNodes(bell.nodes);
+      if (bell.start > t + DUE_S) stopNodes(bell.nodes);
       else if (bell.start > t - RING_S) ringing.push(bell);
     });
     live = ringing;
@@ -157,13 +182,31 @@
     });
   }
 
+  // The sound check on the title card: DEMO on the audio clock, from now, through the master gain like every bell, so a
+  // volume or mute change during it is heard on the sounds still to come. It is kept apart from `live`, so a schedule()
+  // (every action calls one) neither cuts it short nor is cut short by it. Called again, it starts over from the top.
+  // It runs in a key press or a click, so it unlocks the audio itself. False when there is no audio to play it on.
+  function demo() {
+    stopDemo();
+    if (!ctx) unlock();
+    if (!ctx) return false;
+    const t0 = ctx.currentTime + DEMO_LEAD_S;
+    check = DEMO.map(([at, sound]) => VOICES[sound](t0 + at));
+    return true;
+  }
+
+  function stopDemo() {
+    check.forEach(stopNodes);
+    check = [];
+  }
+
   function resetForTests() {
     cancelAll();
-    ctx = null; master = null; volume = 0.8; muted = false; pending = [];
+    ctx = null; master = null; volume = 0.8; muted = false; pending = []; noise = null;
   }
 
   DT.bells = {
-    unlock, isUnlocked, setVolume, setMuted, play, schedule, cancelAll, SOUNDS,
+    unlock, isUnlocked, setVolume, setMuted, play, schedule, cancelAll, demo, stopDemo, SOUNDS, DEMO,
     _setContextFactory(fn) { factory = fn || defaultFactory; },
     _resetForTests: resetForTests,
     _master: () => master,

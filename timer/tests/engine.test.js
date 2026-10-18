@@ -31,11 +31,32 @@
 
   DT.test('engine: effectiveBells merges default, format and stage; breaks chime', () => {
     const f = fx();
-    assert.deepEqual(E.effectiveBells(f, f.stages[0]), { warn: [30], countdown: 0, end: 'double' });
-    assert.deepEqual(E.effectiveBells(f, f.stages[4]), { warn: [30], countdown: 5, end: 'double' });
-    assert.deepEqual(E.effectiveBells({ bells: { end: 'triple' } }, { type: 'single' }), { warn: [30], countdown: 0, end: 'triple' });
-    assert.deepEqual(E.effectiveBells(f, f.stages[2]), { warn: [], countdown: 0, end: 'chime' });
-    assert.deepEqual(E.effectiveBells(f, { type: 'break', bells: { warn: [10] } }), { warn: [10], countdown: 0, end: 'chime' });
+    assert.deepEqual(E.effectiveBells(f, f.stages[0]), { warn: [30], countdown: 0, end: 'double', overtime: 'tick' });
+    assert.deepEqual(E.effectiveBells(f, f.stages[4]), { warn: [30], countdown: 5, end: 'double', overtime: 'tick' });
+    assert.deepEqual(E.effectiveBells({ bells: { end: 'triple' } }, { type: 'single' }),
+      { warn: [30, 5], countdown: 3, end: 'triple', overtime: 'tick' });
+    assert.deepEqual(E.effectiveBells(f, f.stages[2]), { warn: [], countdown: 3, end: 'chime', overtime: 'none' });
+    assert.deepEqual(E.effectiveBells(f, { type: 'break', bells: { warn: [10] } }), { warn: [10], countdown: 3, end: 'chime', overtime: 'none' });
+    assert.equal(E.effectiveBells({ bells: { overtime: 'none' } }, { type: 'single' }).overtime, 'none', 'the format turns it off');
+    assert.equal(E.effectiveBells({ bells: { overtime: 'none' } }, { type: 'single', bells: { overtime: 'tick' } }).overtime, 'tick',
+      'and a stage back on');
+  });
+
+  // Revised 2026-10-18: what the school cup asks of a speech, from a format that says nothing of its bells.
+  DT.test('engine: the default bells ring at 30 s, 5 s, 3-2-1, the end and every second over; a break counts down and chimes', () => {
+    const d = E.effectiveBells({}, { type: 'single' });
+    assert.deepEqual(d, { warn: [30, 5], countdown: 3, end: 'double', overtime: 'tick' });
+    assert.deepEqual(E.DEFAULT_BELLS, d);
+    assert.deepEqual(E.bellPoints(d).map(p => [p.key, p.ms, p.type]), [
+      ['w30', 30000, 'warn'], ['w5', 5000, 'warn'], ['c3', 3000, 'count'], ['c2', 2000, 'count'], ['c1', 1000, 'count'], ['end', 0, 'end']]);
+    assert.deepEqual(E.effectiveBells({ bells: { warn: [60] } }, { type: 'break' }), { warn: [], countdown: 3, end: 'chime', overtime: 'none' });
+    const f = fx(); delete f.bells;
+    const s = E.toggle(E.goto(E.createSession(f, MATCH, T0), 0, T0), T0);
+    const up = E.upcomingBells(s, T0 + 1000).map(b => [b.sound, b.at - T0]);
+    assert.deepEqual(up.slice(0, 7), [['ding', 150000], ['ding', 175000], ['tick', 177000], ['tick', 178000], ['tick', 179000],
+      ['double', 180000], ['tock', 181000]]);
+    assert.equal(up.length, 6 + 30, 'thirty seconds over are planned ahead');
+    assert.deepEqual(up[up.length - 1], ['tock', 210000]);
   });
 
   DT.test('engine: fmt rounds remaining up and overtime down', () => {
@@ -239,7 +260,7 @@
     const r = E.getRun(out.session);
     assert.equal(r.running, false); assert.ok(r.done);
     assert.equal(E.remaining(r, 'main', T0 + 40000), 0);
-    assert.deepEqual(out.events.map(e => e.type), ['end']);
+    assert.deepEqual(out.events.map(e => e.key), ['c1', 'end'], 'its countdown before it (c3 and c2 are stale by now)');
     assert.equal(E.toggle(out.session, T0 + 41000).lastFeedback.code, 'done');
   });
 
@@ -286,26 +307,92 @@
     assert.equal(E.reset(s, T0, 99).history.length, s.history.length, 'no such stage: nothing to undo');
   });
 
-  DT.test('engine: extras insert after the current stage and respect perSide', () => {
-    let s = E.toggle(at(0), T0); s = E.toggle(s, T0 + 170000);
-    s = E.insertExtra(s, '奇袭', 0, 'con', T0 + 171000);
-    assert.equal(s.cursor, 0);
-    assert.equal(s.timeline[1].name, '反方奇袭质询');
-    assert.equal(s.timeline[1].side, 'con');
-    assert.ok(s.timeline[1].extra);
-    assert.equal(s.timeline[1].secs, 150);
+  // Revised 2026-10-18: a surprise attack goes in during the judges' break, as a package (the attack, then the break
+  // again), and the timer moves onto it.
+  DT.test('engine: a surprise attack goes in during a running break, with the break again after it, and the cursor on it', () => {
+    let s = E.toggle(at(2), T0);                                   // the judges' break, running
+    s = E.insertExtra(s, '奇袭', 0, 'con', T0 + 12000);
+    assert.equal(s.lastFeedback, null);
+    assert.equal(s.cursor, 3);
+    assert.deepEqual(s.timeline.map(x => [x.id, x.name, x.type, x.side, x.secs, !!x.extra]).slice(2, 6), [
+      ['b1', '评委打分', 'break', null, 30, false],
+      ['x-1', '反方奇袭质询', 'single', 'con', 150, true],
+      ['x-1-b', '评委打分', 'break', null, 30, true],
+      ['s3', '自由辩论', 'dual', null, 240, false]]);
+    const b = E.getRun(s, 'b1');
+    assert.equal(b.running, false, 'the break is stopped');
+    assert.equal(E.remaining(b, 'main', T0 + 20000), 18000, 'and charged up to the insert, no further');
+    const r = E.getRun(s);
+    assert.equal(r.running, false, 'the attack waits for space');
+    assert.equal(E.remaining(r, 'main', T0 + 20000), 150000);
     assert.equal(s.extrasUsed['奇袭'].con, 1);
-    const again = E.insertExtra(s, '奇袭', 1, 'con', T0 + 172000);
-    assert.equal(again.lastFeedback.code, 'extra-limit');
-    assert.equal(again.timeline.length, s.timeline.length);
-    const pro = E.insertExtra(s, '奇袭', 1, 'pro', T0 + 172000);
-    assert.equal(pro.timeline[1].name, '正方奇袭申论');
-    assert.ok(pro.timeline[1].id !== pro.timeline[2].id);
+    assert.equal(s.extrasUsed['奇袭'].pro, 0);
+    const v = E.view(s, T0 + 12000);
+    assert.equal(v.stage.name, '反方奇袭质询');
+    assert.equal(v.stage.extra, true);
+    assert.equal(v.next.name, '评委打分');
+    assert.deepEqual(v.progress.filter(p => p.extra).map(p => [p.index, p.type, p.side, p.state]),
+      [[3, 'single', 'con', 'current'], [4, 'break', null, 'todo']]);
+    s = E.toggle(s, T0 + 15000);
+    assert.ok(E.getRun(s).running, 'space starts it');
   });
 
-  DT.test('engine: extras cannot be inserted while a clock is running', () => {
-    const s = E.toggle(at(0), T0);
-    assert.equal(E.insertExtra(s, '奇袭', 0, 'pro', T0 + 1000).lastFeedback.code, 'running');
+  DT.test('engine: the break after a surprise attack is a copy of the break it went into', () => {
+    const f = fx();
+    f.stages[2].bells = { countdown: 5 };
+    f.stages[2].note = '评委打分时只看表';
+    let s = E.goto(E.createSession(f, MATCH, T0), 2, T0);           // in the break, not started
+    s = E.insertExtra(s, '奇袭', 1, 'pro', T0);
+    const copy = s.timeline[4];
+    assert.deepEqual([copy.id, copy.name, copy.type, copy.secs, copy.note], ['x-1-b', '评委打分', 'break', 30, '评委打分时只看表']);
+    assert.deepEqual(copy.bells, { countdown: 5 });
+    assert.deepEqual(E.effectiveBells(s.format, copy), E.effectiveBells(s.format, s.timeline[2]));
+    assert.equal(s.timeline[3].name, '正方奇袭申论');
+    assert.equal(s.timeline[3].secs, 120);
+    assert.equal(E.getRun(s, 'b1').running, false);
+    assert.equal(Object.keys(s.runs).length, 0, 'a break never started is left without a run');
+  });
+
+  DT.test('engine: a surprise attack is refused outside a break', () => {
+    const title = E.createSession(fx(), MATCH, T0);
+    [title, at(0), E.toggle(at(0), T0), at(3), E.toggle(at(3), T0), at(4)].forEach((s, i) => {
+      const r = E.insertExtra(s, '奇袭', 0, 'pro', T0 + 1000);
+      assert.deepEqual(r.lastFeedback, { code: 'not-break', message: '奇袭只能在评委打分的间隔里插入' }, 'case ' + i);
+      assert.equal(r.timeline.length, s.timeline.length);
+      assert.equal(r.cursor, s.cursor);
+      assert.equal(r.history.length, s.history.length, 'nothing to undo');
+    });
+    assert.deepEqual(E.insertBlocked(at(2)), null);
+    assert.equal(E.insertBlocked(title).code, 'not-break');
+  });
+
+  DT.test('engine: each side has its surprise attacks per group, and a second package gets ids of its own', () => {
+    let s = E.insertExtra(at(2), '奇袭', 0, 'con', T0);
+    s = E.goto(s, 4, T0 + 200000);                                 // the break after the attack
+    assert.equal(E.currentStage(s).id, 'x-1-b');
+    const again = E.insertExtra(s, '奇袭', 1, 'con', T0 + 201000);
+    assert.equal(again.lastFeedback.code, 'extra-limit');
+    assert.equal(again.lastFeedback.message, '反方的奇袭已经用过了');
+    assert.equal(again.timeline.length, s.timeline.length);
+    const pro = E.insertExtra(s, '奇袭', 1, 'pro', T0 + 201000);
+    assert.equal(pro.cursor, 5);
+    assert.deepEqual(pro.timeline.slice(3, 7).map(x => x.id), ['x-1', 'x-1-b', 'x-2', 'x-2-b']);
+    assert.equal(pro.timeline[5].name, '正方奇袭申论');
+    assert.deepEqual(pro.extrasUsed['奇袭'], { pro: 1, con: 1 });
+    assert.equal(E.insertExtra(at(2), '奇袭', 9, 'pro', T0).timeline.length, 5, 'no such form: nothing happens');
+  });
+
+  DT.test('engine: one undo takes a surprise attack back, and a break that was running runs on', () => {
+    let s = E.toggle(at(2), T0);
+    s = E.insertExtra(s, '奇袭', 0, 'pro', T0 + 10000);
+    const u = E.undo(s, T0 + 13000);
+    assert.equal(u.cursor, 2);
+    assert.deepEqual(u.timeline.map(x => x.id), ['s1', 's2', 'b1', 's3', 's4']);
+    assert.deepEqual(u.extrasUsed['奇袭'], { pro: 0, con: 0 });
+    const r = E.getRun(u);
+    assert.ok(r.running, 'the break was running, so it runs on');
+    assert.equal(E.remaining(r, 'main', T0 + 13000), 17000);
+    assert.equal(u.lastRung, null);
   });
 
   DT.test('engine: view reports calm, warn, count, over and done phases', () => {
@@ -351,11 +438,103 @@
 
   DT.test('engine: upcomingBells lists future bells of the running clock', () => {
     const s = E.toggle(at(4), T0);
-    assert.deepEqual(E.upcomingBells(s, T0 + 1000).map(b => [b.sound, b.at - T0]), [
+    const up = E.upcomingBells(s, T0 + 1000).map(b => [b.sound, b.at - T0]);
+    assert.deepEqual(up.slice(0, 7), [
       ['ding', 180000], ['tick', 205000], ['tick', 206000], ['tick', 207000], ['tick', 208000], ['tick', 209000], ['double', 210000]]);
+    assert.deepEqual(up.slice(7), Array.from({ length: 30 }, (x, i) => ['tock', 211000 + i * 1000]), 'then the seconds over');
     assert.deepEqual(E.upcomingBells(E.toggle(s, T0 + 2000), T0 + 2000), []);
     const b = E.toggle(at(2), T0);
-    assert.deepEqual(E.upcomingBells(b, T0).map(x => [x.sound, x.at - T0]), [['chime', 30000]]);
+    assert.deepEqual(E.upcomingBells(b, T0).map(x => [x.sound, x.at - T0]), [['tick', 27000], ['tick', 28000], ['tick', 29000], ['chime', 30000]]);
+  });
+
+  // ---- every second over (revised 2026-10-18) ----
+
+  DT.test('engine: a single stage over time reports each whole second over at its exact moment', () => {
+    let s = E.toggle(at(0), T0);
+    const events = [];
+    for (let t = 179000; t <= 183100; t += 250) {
+      const out = E.tick(s, T0 + t); s = out.session; out.events.forEach(e => events.push(e));
+    }
+    assert.deepEqual(events.map(e => [e.type, e.clock, e.key, e.at - T0]), [
+      ['end', 'main', 'end', 180000], ['over', 'main', 'o1', 181000], ['over', 'main', 'o2', 182000], ['over', 'main', 'o3', 183000]]);
+    const r = E.getRun(s);
+    assert.equal(r.over.main, 3);
+    assert.equal(r.fired.main.filter(k => k[0] === 'o').length, 0, 'the seconds over are counted, not kept in fired');
+    assert.ok(r.running, 'and the clock runs on');
+    const up = E.upcomingBells(s, T0 + 183100);
+    assert.deepEqual([up.length, up[0].sound, up[0].at - T0, up[29].at - T0], [30, 'tock', 184000, 213000], 'a rolling window from here');
+  });
+
+  DT.test('engine: seconds over follow the stale rule and stop with the clock', () => {
+    let s = E.toggle(at(0), T0);
+    let out = E.tick(s, T0 + 185600);                             // first look 5.6 s over: o5 is 0.6 s old, o4 1.6 s
+    assert.deepEqual(out.events.map(e => e.key), ['o5']);
+    assert.equal(E.getRun(out.session).over.main, 5, 'those before it are passed over');
+    out = E.tick(out.session, T0 + 186500);
+    assert.deepEqual(out.events.map(e => e.key), ['o6']);
+    s = E.toggle(out.session, T0 + 186500);                        // paused
+    assert.deepEqual(E.tick(s, T0 + 199000).events, []);
+    assert.deepEqual(E.upcomingBells(s, T0 + 199000), []);
+    s = E.toggle(s, T0 + 200000);                                  // on again, 6.5 s over
+    assert.equal(E.upcomingBells(s, T0 + 200000)[0].at - T0, 200500);
+    assert.deepEqual(E.tick(s, T0 + 200600).events.map(e => e.key), ['o7']);
+    // A run saved before run.over existed counts from what is in front of it.
+    const old = JSON.parse(JSON.stringify(E.toggle(at(0), T0)));
+    delete old.runs.s1.over;
+    out = E.tick(old, T0 + 185600);
+    assert.deepEqual(out.events.map(e => e.key), ['o5']);
+    assert.equal(E.getRun(out.session).over.main, 5);
+  });
+
+  DT.test('engine: setting the time back above zero clears the seconds over; setting it into overtime spends them', () => {
+    let s = E.toggle(at(0), T0);
+    s = E.tick(s, T0 + 184500).session;
+    assert.equal(E.getRun(s).over.main, 4);
+    s = E.adjust(s, 10000, T0 + 184500);                          // 5.5 s left
+    assert.equal(E.getRun(s).over.main, 0);
+    assert.ok(E.getRun(s).fired.main.indexOf('end') < 0, 'the end bell is armed again');
+    let keys = [];
+    for (let t = 184500; t <= 192000; t += 250) {
+      const out = E.tick(s, T0 + t); s = out.session; keys = keys.concat(out.events.map(e => e.key));
+    }
+    assert.deepEqual(keys, ['end', 'o1', 'o2'], 'over again from the new zero, at 190 s');
+    // Running, 5.5 s left, set 10 s back: 4.5 s over. The end bell rings at once; the four seconds behind stay silent.
+    let t = E.tick(E.toggle(at(0), T0), T0 + 174500).session;
+    t = E.adjust(t, -10000, T0 + 174500);
+    assert.deepEqual(t.lastRung.map(e => [e.key, e.sound]), [['end', 'double']]);
+    assert.equal(E.getRun(t).over.main, 4);
+    assert.deepEqual(E.tick(t, T0 + 174600).events, [], 'no burst for the seconds set behind it');
+    assert.deepEqual(E.upcomingBells(t, T0 + 174600).slice(0, 2).map(b => [b.sound, b.at - T0]), [['tock', 175000], ['tock', 176000]]);
+    // Paused and set into overtime: nothing rings, and the count is ready for when it runs on.
+    let p = E.toggle(E.toggle(at(0), T0), T0 + 170000);
+    p = E.adjust(p, -12500, T0 + 171000);
+    assert.equal(p.lastRung, null);
+    assert.equal(E.getRun(p).over.main, 2);
+  });
+
+  DT.test('engine: undo rings a late end bell, not a late second over', () => {
+    let s = E.toggle(at(0), T0);
+    s = E.tick(s, T0 + 178000).session;
+    s = E.toggle(s, T0 + 178000);                                  // paused by mistake
+    const u = E.undo(s, T0 + 183500);                              // it ran on through 0:00 and three seconds over
+    assert.deepEqual(u.lastRung.map(e => [e.key, e.sound]), [['end', 'double']]);
+    assert.equal(E.getRun(u).over.main, 3);
+    assert.equal(E.upcomingBells(u, T0 + 183500)[0].at - T0, 184000);
+  });
+
+  DT.test('engine: free debate sides, breaks and stages set to none never ring over', () => {
+    const b = E.tick(E.toggle(at(2), T0), T0 + 30500).session;
+    assert.deepEqual(E.tick(b, T0 + 40000).events, []);
+    assert.ok(!E.upcomingBells(E.toggle(at(2), T0), T0).some(x => x.sound === 'tock'));
+    const d = E.toggle(at(3), T0);
+    const dout = E.tick(d, T0 + 485000);
+    assert.ok(!dout.events.some(e => e.type === 'over'));
+    assert.ok(!E.upcomingBells(d, T0).some(x => x.sound === 'tock'));
+    const f = fx(); f.bells.overtime = 'none';
+    const n = E.toggle(E.goto(E.createSession(f, MATCH, T0), 0, T0), T0);
+    assert.ok(!E.tick(n, T0 + 183000).events.some(e => e.type === 'over'));
+    assert.ok(!E.upcomingBells(n, T0).some(x => x.sound === 'tock'));
+    assert.equal(E.getRun(E.tick(n, T0 + 183000).session).over.main, 0);
   });
 
   DT.test('engine: upcomingBells follows the handover in a dual stage', () => {
@@ -389,6 +568,11 @@
     E.adjust(s, 1000, T0 + 1000); E.tick(s, T0 + 999999); E.next(s, T0 + 1000); E.undo(s, T0 + 1000);
     E.insertExtra(E.pause(s, T0 + 1), '奇袭', 0, 'pro', T0 + 2);
     assert.equal(JSON.stringify(s), snap);
+    const b = E.toggle(at(2), T0);
+    const bsnap = JSON.stringify(b);
+    E.insertExtra(b, '奇袭', 0, 'pro', T0 + 5000);
+    E.tick(E.toggle(at(0), T0), T0 + 190000);
+    assert.equal(JSON.stringify(b), bsnap);
   });
 
   DT.test('engine: a session survives a JSON round trip', () => {
@@ -422,7 +606,7 @@
     assert.deepEqual(s.lastRung.map(e => [e.type, e.clock, e.key, e.sound, e.at - T0]), [['warn', 'main', 'w30', 'ding', 148000]]);
     assert.ok(E.getRun(s).fired.main.indexOf('w30') >= 0);
     assert.equal(E.tick(s, T0 + 148100).events.length, 0, 'tick does not report it again');
-    assert.deepEqual(E.upcomingBells(s, T0 + 148000).map(b => b.sound), ['double']);
+    assert.deepEqual(E.upcomingBells(s, T0 + 148000).map(b => b.sound).slice(0, 2), ['double', 'tock'], 'the end bell, then the seconds over');
     assert.equal(E.adjust(s, -1000, T0 + 149000).lastRung, null, 'the next action does not ring it again');
     const end = E.adjust(E.tick(s, T0 + 174000).session, -5000, T0 + 174000);   // 0:01 -> over
     assert.deepEqual(end.lastRung.map(e => [e.key, e.sound]), [['end', 'double']]);
@@ -461,7 +645,7 @@
     assert.ok(E.getRun(u).fired.main.indexOf('w30') >= 0);
   });
 
-  DT.test('engine: nothing is inserted on the end card; the title card inserts before the first stage', () => {
+  DT.test('engine: nothing is inserted on the end card, nor on the title card', () => {
     const s = E.goto(E.createSession(fx(), MATCH, T0), 99, T0);
     const r = E.insertExtra(s, '奇袭', 0, 'pro', T0);
     assert.equal(r.lastFeedback.code, 'ended');
@@ -470,6 +654,7 @@
     assert.equal(E.view(r, T0).mode, 'end');
     const t = E.insertExtra(E.createSession(fx(), MATCH, T0), '奇袭', 0, 'pro', T0);
     assert.equal(t.cursor, -1);
-    assert.equal(t.timeline[0].name, '正方奇袭质询');
+    assert.equal(t.lastFeedback.code, 'not-break');
+    assert.equal(t.timeline[0].name, '正方一辩开篇立论');
   });
 })();

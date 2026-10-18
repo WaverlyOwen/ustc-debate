@@ -53,6 +53,8 @@
     assert.deepEqual(S.validateFormat(f), ['第 2 个环节：先发言的一方只能是正方或反方']);
     assert.deepEqual(S.validateFormat(Object.assign(good(), { bells: { warn: [30], countdown: 11, end: 'double' } })), ['铃声：逐秒倒数最多 10 秒']);
     assert.deepEqual(S.validateFormat(withStage({ bells: { warn: [-5] } })), ['第 1 个环节：铃声：提示铃点要写成正整数秒']);
+    assert.deepEqual(S.validateFormat(withStage({ bells: { overtime: 'tock' } })), ['第 1 个环节：铃声：超时每秒提示只能是开或关']);
+    assert.deepEqual(S.validateFormat(Object.assign(good(), { bells: { overtime: 'none' } })), []);
     assert.deepEqual(S.validateFormat(Object.assign(good(), { extras: [{ group: '奇袭', perSide: 0, variants: [{ name: 'x', type: 'single', secs: 60 }] }] })),
       ['可插入环节「奇袭」：每方次数至少 1 次']);
     assert.deepEqual(S.validateFormat(null), ['这不是一个赛制']);

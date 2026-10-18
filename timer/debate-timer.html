@@ -823,7 +823,11 @@ body {
 .dt-dock[data-pinned] { transition: none; }
 
 .dt-dock-group { display: flex; gap: .15em; }
+.dt-dock-group[hidden] { display: none; }
 .dt-dock-group + .dt-dock-group { padding-left: .3em; border-left: 1px solid var(--panel-line); }
+/* The title card's volume beside 试音 (ui.js DOCK): the console's slider, short, on the dock's row. */
+.dt-dock .dt-volume { flex-basis: auto; gap: .55em; padding: 0 .6em 0 .35em; letter-spacing: .06em; white-space: nowrap; }
+.dt-dock .dt-volume input { flex: none; width: 6.5em; }
 /* 退出 stands apart at the far end, out of reach of a hand going for 全屏: the room split evenly around its divider. */
 .dt-dock-group[data-exit] { margin-left: .45em; padding-left: .75em; }
 
@@ -5402,10 +5406,12 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     "theme": "hall",
     "bells": {
       "warn": [
-        30
+        30,
+        5
       ],
-      "countdown": 0,
-      "end": "double"
+      "countdown": 3,
+      "end": "double",
+      "overtime": "tick"
     },
     "stages": [
       {
@@ -5500,10 +5506,12 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     "theme": "hall",
     "bells": {
       "warn": [
-        30
+        30,
+        5
       ],
-      "countdown": 0,
-      "end": "double"
+      "countdown": 3,
+      "end": "double",
+      "overtime": "tick"
     },
     "stages": [
       {
@@ -5647,10 +5655,12 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     "theme": "hall",
     "bells": {
       "warn": [
-        30
+        30,
+        5
       ],
-      "countdown": 0,
-      "end": "double"
+      "countdown": 3,
+      "end": "double",
+      "overtime": "tick"
     },
     "stages": [
       {
@@ -5850,10 +5860,12 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     "theme": "hall",
     "bells": {
       "warn": [
-        30
+        30,
+        5
       ],
-      "countdown": 0,
-      "end": "double"
+      "countdown": 3,
+      "end": "double",
+      "overtime": "tick"
     },
     "stages": [
       {
@@ -6029,10 +6041,12 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     "theme": "hall",
     "bells": {
       "warn": [
-        30
+        30,
+        5
       ],
-      "countdown": 0,
-      "end": "double"
+      "countdown": 3,
+      "end": "double",
+      "overtime": "tick"
     },
     "stages": [
       {
@@ -6227,9 +6241,14 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   'use strict';
   const HISTORY_MAX = 100;
   const STALE_MS = 1500;
-  const DEFAULT_BELLS = Object.freeze({ warn: Object.freeze([30]), countdown: 0, end: 'double' });
-  const BREAK_BELLS = Object.freeze({ warn: Object.freeze([]), countdown: 0, end: 'chime' });
+  // What the school cup asks of a speech (revised 2026-10-18): 30 s, 5 s, 3-2-1, the end bell, then every second over.
+  const DEFAULT_BELLS = Object.freeze({ warn: Object.freeze([30, 5]), countdown: 3, end: 'double', overtime: 'tick' });
+  // A 30 s break has no use for a 30 s warning, and it stops itself at zero, so it never runs over.
+  const BREAK_BELLS = Object.freeze({ warn: Object.freeze([]), countdown: 3, end: 'chime', overtime: 'none' });
   const END_SOUND = { double: 'double', triple: 'triple', long: 'long', chime: 'chime', none: null };
+  const OVER_SOUND = { tick: 'tock', none: null };
+  const OVER_AHEAD = 30;   // overtime seconds upcomingBells plans ahead; the UI plans again as each one passes
+  const NOT_BREAK = '奇袭只能在评委打分的间隔里插入';
   const SIDE_NAME = { pro: '正方', con: '反方' };
   const NOT_DUAL = '这个环节只有一个计时器';
   const clone = v => JSON.parse(JSON.stringify(v));
@@ -6243,11 +6262,12 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   // ---- bells ----
 
   function mergeBells(base, over) {
-    const b = { warn: base.warn.slice(), countdown: base.countdown, end: base.end };
+    const b = { warn: base.warn.slice(), countdown: base.countdown, end: base.end, overtime: base.overtime };
     if (!over) return b;
     if (Array.isArray(over.warn)) b.warn = over.warn.slice();
     if (typeof over.countdown === 'number') b.countdown = over.countdown;
     if (typeof over.end === 'string') b.end = over.end;
+    if (typeof over.overtime === 'string') b.overtime = over.overtime;
     return b;
   }
 
@@ -6257,7 +6277,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     return mergeBells(base, stage && stage.bells);
   }
 
-  // Every bell point of one clock, latest-remaining first: w<t>, c<n>…c1, end.
+  // Every bell point of one clock, latest-remaining first: w<t>, c<n>…c1, end. Overtime seconds are not among them:
+  // they never run out, so tick counts them per clock (run.over) instead of keying each into `fired`.
   function bellPoints(bells) {
     const pts = Array.from(new Set(bells.warn || [])).map(t => ({ key: 'w' + t, ms: t * 1000, type: 'warn' }));
     for (let n = bells.countdown || 0; n >= 1; n--) pts.push({ key: 'c' + n, ms: n * 1000, type: 'count' });
@@ -6268,6 +6289,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   function soundOf(point, bells) {
     if (point.type === 'warn') return 'ding';
     if (point.type === 'count') return 'tick';
+    if (point.type === 'over') return OVER_SOUND[bells.overtime] || null;
     return Object.prototype.hasOwnProperty.call(END_SOUND, bells.end) ? END_SOUND[bells.end] : 'double';
   }
 
@@ -6285,9 +6307,14 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       locked: { pro: false, con: false },
       yielded: { pro: 0, con: 0 },
       fired: { main: [], pro: [], con: [] },
+      over: { main: 0 },   // whole seconds of overtime already reported (only a single stage runs over)
       done: false,
     };
   }
+
+  // Whether this run rings every whole second it is over: a single stage whose bells say so.
+  const ringsOver = (run, bells) => run.kind === 'single' && !!soundOf({ type: 'over' }, bells);
+  const overSeen = (run, id) => (run.over && run.over[id]) || 0;   // a run saved before run.over existed has none
 
   // Only a single stage runs into overtime; a dual side or a break that ran out before the next tick reads 0.
   function remaining(run, id, now) {
@@ -6459,6 +6486,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         if (left > p.ms) { if (i >= 0) fired.splice(i, 1); }
         else if (i < 0) { fired.push(p.key); crossed = p; }
       });
+      // The seconds over that the new time is already past are spent the same way, silently: tick then rings the
+      // next one on time, with no burst for those set behind it. Set back above zero, there are none.
+      if (run.kind === 'single') run.over = Object.assign({}, run.over, { [id]: left < 0 ? Math.floor(-left / 1000) : 0 });
       if (live && crossed) s.lastRung = [rung(crossed, id, bells, now)];
     });
   }
@@ -6512,34 +6542,52 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   function next(session, now) { return goto(session, session.cursor + 1, now); }
   function prev(session, now) { return goto(session, session.cursor - 1, now); }
 
-  // Insert an extra stage right after the current one; the cursor stays where it is.
+  // Why nothing can be inserted on the current card, or null. A surprise attack is launched while the judges score,
+  // so only a break takes one (revised 2026-10-18).
+  function insertBlocked(session) {
+    if (session.cursor >= session.timeline.length) return { code: 'ended', message: '比赛已经结束' };
+    const st = currentStage(session);
+    if (!st || st.type !== 'break') return { code: 'not-break', message: NOT_BREAK };
+    return null;
+  }
+
+  // Insert a surprise attack during a break, as one package (revised 2026-10-18): the attack, then a copy of the
+  // break, right after the current one, and the cursor moves onto the attack, not started. A break that is running
+  // stops here and the rest of it is dropped: the copy after the attack gives the judges their time back. One undo
+  // step takes it all back.
   function insertExtra(session, group, variantIndex, side, now) {
     const g = (session.format.extras || []).find(x => x.group === group);
     const variant = g && g.variants[variantIndex];
     if (!variant || !SIDE_NAME[side]) return noop(session);
-    if (session.cursor >= session.timeline.length) return refuse(session, 'ended', '比赛已经结束');
-    const st = currentStage(session);
-    if (st && getRun(session).running) return refuse(session, 'running', '先暂停再插入');
+    const blocked = insertBlocked(session);
+    if (blocked) return refuse(session, blocked.code, blocked.message);
     const used = (session.extrasUsed[group] || {})[side] || 0;
     if (used >= g.perSide) return refuse(session, 'extra-limit', SIDE_NAME[side] + '的' + group + '已经用过了');
     const s = begin(session);
+    const st = currentStage(s);
+    if (s.runs[st.id]) stop(s.runs[st.id], now);
     const ids = new Set(s.timeline.map(x => x.id));
     let n = 1;
-    while (ids.has('x-' + n)) n++;
-    const stage = Object.assign(clone(variant), {
+    while (ids.has('x-' + n) || ids.has('x-' + n + '-b')) n++;
+    const attack = Object.assign(clone(variant), {
       id: 'x-' + n,
       name: SIDE_NAME[side] + variant.name,
       side: variant.type === 'single' ? side : null,
       extra: true,
     });
-    s.timeline.splice(Math.min(s.cursor + 1, s.timeline.length), 0, stage);
+    const again = { id: 'x-' + n + '-b', name: st.name, type: st.type, side: null, secs: st.secs, extra: true };
+    if (st.bells) again.bells = clone(st.bells);
+    if (st.note) again.note = st.note;
+    s.timeline.splice(s.cursor + 1, 0, attack, again);
+    s.cursor += 1;
     s.extrasUsed[group] = s.extrasUsed[group] || { pro: 0, con: 0 };
     s.extrasUsed[group][side] = used + 1;
     return s;
   }
 
   // "As if that press never happened": the restored clock ran on through the undone moments, so a bell point
-  // it crossed then rings now, late rather than never, unless it already rang before the undo.
+  // it crossed then rings now, late rather than never, unless it already rang before the undo. A second over is not
+  // worth a late ring (it would take the place of a late end bell): the next one comes on time.
   function undo(session, now) {
     const h = session.history || [];
     if (!h.length) return refuse(session, 'nothing-to-undo', '没有可以撤销的操作');
@@ -6554,7 +6602,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     const bells = st && effectiveBells(s.format, st);
     const latest = {};
     out.events.forEach(e => {
-      if (e.type === 'switch' || (before && (before.fired[e.clock] || []).indexOf(e.key) >= 0)) return;
+      if (e.type === 'switch' || e.type === 'over') return;
+      if (before && (before.fired[e.clock] || []).indexOf(e.key) >= 0) return;
       latest[e.clock] = e;
     });
     const list = Object.keys(latest).map(id => rung(latest[id], id, bells, now));
@@ -6575,7 +6624,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     if (!r0 || !r0.running) return { session, events: [] };
     const run = clone(r0);
     const events = [];
-    const points = bellPoints(effectiveBells(session.format, st));
+    const bells = effectiveBells(session.format, st);
+    const points = bellPoints(bells);
     let changed = false;
     // Loop because a dual stage can hand over and run the second side out within the same tick.
     for (let guard = 0; guard < 3 && run.running; guard++) {
@@ -6589,6 +6639,17 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         changed = true;
         if (now - at <= staleMs) events.push({ type: p.type, clock: id, key: p.key, at });
       });
+      // Second n over rings at exactly endAt + n s. Only those within the stale window are reported; the count
+      // passes over any before it in one step, so a clock left running for hours costs nothing here.
+      const over = Math.floor((now - endAt) / 1000);
+      const seen = overSeen(run, id);
+      if (ringsOver(run, bells) && over > seen) {
+        for (let n = Math.max(seen + 1, Math.ceil((now - staleMs - endAt) / 1000)); n <= over; n++) {
+          events.push({ type: 'over', clock: id, key: 'o' + n, at: endAt + n * 1000 });
+        }
+        run.over = Object.assign({}, run.over, { [id]: over });
+        changed = true;
+      }
       if (endAt > now || run.kind === 'single') break;
       changed = true;
       c.used = c.total;
@@ -6611,7 +6672,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     return { session: Object.assign({}, session, { runs }), events };
   }
 
-  // Future bells of the running clock, plus the other side's after a dual handover.
+  // Future bells of the running clock, plus the other side's after a dual handover. A single clock that rings in
+  // overtime adds its next OVER_AHEAD seconds over, from wherever it is: a rolling window, planned again by the UI
+  // whenever the session changes, which it does every second over.
   function upcomingBells(session, now) {
     const st = currentStage(session);
     const run = st && session.runs[st.id];
@@ -6629,6 +6692,11 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     list(run.active, endAt);
     const to = other(run.active);
     if (run.kind === 'dual' && !run.locked[to]) list(to, endAt + run.clocks[to].total - run.clocks[to].used);
+    if (ringsOver(run, bells)) {
+      const sound = soundOf({ type: 'over' }, bells);
+      const first = Math.max(overSeen(run, run.active) + 1, Math.floor((now - endAt) / 1000) + 1);
+      for (let n = first; n < first + OVER_AHEAD; n++) out.push({ at: endAt + n * 1000, sound, clock: run.active });
+    }
     return out;
   }
 
@@ -6720,7 +6788,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 
   DT.engine = {
     DEFAULT_BELLS, createSession, currentStage, getRun, remaining, view, toggle, floor, pause, adjust,
-    yieldTime, reset, goto, next, prev, insertExtra, undo, tick, upcomingBells, record, fmt,
+    yieldTime, reset, goto, next, prev, insertExtra, insertBlocked, undo, tick, upcomingBells, record, fmt,
     effectiveBells, bellPoints,
   };
 })(window.DT = window.DT || {});
@@ -6735,6 +6803,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   };
   let KEYS = PLAIN_KEYS;
   const END_BELLS = ['double', 'triple', 'long', 'none', 'chime'];
+  const OVERTIME_BELLS = ['tick', 'none'];
   const HISTORY_LIMIT = 20;
   const VARIANT_NAME_MAX = 38;   // an inserted stage is named 正方 / 反方 + this, and stage names stop at 40
 
@@ -6803,6 +6872,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     if (b.warn !== undefined && !(Array.isArray(b.warn) && b.warn.every(isPosInt))) errs.push('铃声：提示铃点要写成正整数秒');
     if (b.countdown !== undefined && !(Number.isInteger(b.countdown) && b.countdown >= 0 && b.countdown <= 10)) errs.push('铃声：逐秒倒数最多 10 秒');
     if (b.end !== undefined && END_BELLS.indexOf(b.end) < 0) errs.push('铃声：终止铃只能是两声、三声、长鸣或不响');
+    if (b.overtime !== undefined && OVERTIME_BELLS.indexOf(b.overtime) < 0) errs.push('铃声：超时每秒提示只能是开或关');
     return errs;
   }
   function stageErrors(s, i, firstIndexOfId) {
@@ -7171,11 +7241,23 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   let ctx = null, master = null, volume = 0.8, muted = false;
   let pending = [];     // last list passed to schedule(), replayed after unlock
   let live = [];        // {nodes, key, start} per scheduled bell; start is on the audio clock
+  let check = [];       // the node groups of a sound check under way (demo); schedule() never touches them
+  let noise = null;     // {ctx, buffer}: one burst of white noise, shared by every tick and tock of a context
 
   const RING_S = 5;     // every voice has died away within this many seconds of its start
+  // A bell due within this long counts as ringing already. The page reads the audio clock up to a render buffer late,
+  // so a bell the engine has just passed (and so no longer lists to plan again) can still read as not started; the
+  // UI plans again on every bell it passes, every second over, so without this lead such bells would be dropped.
+  const DUE_S = 0.1;
+  const NOISE_S = 0.06; // the longest click that uses the noise burst
 
-  const SOUNDS = ['ding', 'double', 'triple', 'long', 'tick', 'chime'];
+  const SOUNDS = ['ding', 'double', 'triple', 'long', 'tick', 'tock', 'chime'];
   const PARTIALS = [[1, 1], [2.76, 0.35], [5.4, 0.15]];   // [frequency ratio, gain]
+  // The sound check (revised 2026-10-18): what a stage rings, pressed into nine seconds, as [seconds in, sound]:
+  // the 30 s and 5 s warnings, 3-2-1, the end bell, then three seconds over.
+  const DEMO = Object.freeze([[0, 'ding'], [1.2, 'ding'], [2.2, 'tick'], [3.2, 'tick'], [4.2, 'tick'],
+    [5.2, 'double'], [6.2, 'tock'], [7.2, 'tock'], [8.2, 'tock']]);
+  const DEMO_LEAD_S = 0.05;   // the first strike waits this long, so a context only just resumed does not clip it
 
   function masterGain() { return muted ? 0 : volume; }
 
@@ -7217,19 +7299,26 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     return nodes;
   }
 
-  function tick(t) {
-    const dur = 0.045;
-    const g = envelope(t, 0.6, 0.002, dur);
-    const nodes = [osc(1760, t, dur, g)];
-    const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const data = buf.getChannelData(0);
+  // Made once per context: thirty tocks are planned ahead in overtime, and each would otherwise fill a buffer of its own.
+  function noiseBuffer() {
+    if (noise && noise.ctx === ctx) return noise.buffer;
+    const len = Math.max(1, Math.floor(ctx.sampleRate * NOISE_S));
+    const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
     for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    noise = { ctx, buffer };
+    return buffer;
+  }
+
+  // A short click: a sine through a fast envelope, with a breath of band-passed noise for the attack.
+  function click(t, f0, band, peak, dur) {
+    const g = envelope(t, peak, 0.002, dur);
+    const nodes = [osc(f0, t, dur, g)];
     const src = ctx.createBufferSource();
-    src.buffer = buf;
+    src.buffer = noiseBuffer();
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = 2400;
+    bp.frequency.value = band;
     bp.Q.value = 1.2;
     src.connect(bp);
     bp.connect(g);
@@ -7239,12 +7328,17 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     return nodes;
   }
 
+  function tick(t) { return click(t, 1760, 2400, 0.6, 0.045); }
+  // Every second over: lower, softer and a little longer than tick, a metronome rather than an alarm, since it
+  // keeps going for as long as the speaker does.
+  function tock(t) { return click(t, 880, 1200, 0.35, 0.06); }
+
   function chime(t) {
     return [[1046.5, t], [1568, t + 0.35]].map(([f, at]) => osc(f, at, 0.7, envelope(at, 0.4, 0.01, 0.7)));
   }
 
   const VOICES = {
-    ding, tick, chime,
+    ding, tick, tock, chime,
     double: t => repeated(t, 2, 0.32),
     triple: t => repeated(t, 3, 0.28),
     long: t => strike(t, 1046, 3),
@@ -7288,19 +7382,20 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     });
   }
 
-  // Stops every scheduled bell, including one that is ringing now.
+  // Stops every scheduled bell, including one that is ringing now, and a sound check.
   function cancelAll() {
     live.forEach(bell => stopNodes(bell.nodes));
     live = [];
+    stopDemo();
   }
 
-  // Stops the bells that have not started yet. A bell that is already ringing
+  // Stops the bells that have not started yet. A bell that is already ringing (or due within DUE_S)
   // plays out, so an action taken right after a double or long bell does not cut it off.
   function cancelPending() {
     const t = ctx ? ctx.currentTime : 0;
     const ringing = [];
     live.forEach(bell => {
-      if (bell.start > t) stopNodes(bell.nodes);
+      if (bell.start > t + DUE_S) stopNodes(bell.nodes);
       else if (bell.start > t - RING_S) ringing.push(bell);
     });
     live = ringing;
@@ -7322,13 +7417,31 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     });
   }
 
+  // The sound check on the title card: DEMO on the audio clock, from now, through the master gain like every bell, so a
+  // volume or mute change during it is heard on the sounds still to come. It is kept apart from `live`, so a schedule()
+  // (every action calls one) neither cuts it short nor is cut short by it. Called again, it starts over from the top.
+  // It runs in a key press or a click, so it unlocks the audio itself. False when there is no audio to play it on.
+  function demo() {
+    stopDemo();
+    if (!ctx) unlock();
+    if (!ctx) return false;
+    const t0 = ctx.currentTime + DEMO_LEAD_S;
+    check = DEMO.map(([at, sound]) => VOICES[sound](t0 + at));
+    return true;
+  }
+
+  function stopDemo() {
+    check.forEach(stopNodes);
+    check = [];
+  }
+
   function resetForTests() {
     cancelAll();
-    ctx = null; master = null; volume = 0.8; muted = false; pending = [];
+    ctx = null; master = null; volume = 0.8; muted = false; pending = []; noise = null;
   }
 
   DT.bells = {
-    unlock, isUnlocked, setVolume, setMuted, play, schedule, cancelAll, SOUNDS,
+    unlock, isUnlocked, setVolume, setMuted, play, schedule, cancelAll, demo, stopDemo, SOUNDS, DEMO,
     _setContextFactory(fn) { factory = fn || defaultFactory; },
     _resetForTests: resetForTests,
     _master: () => master,
@@ -8898,6 +9011,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   const SIDES = [['pro', '正', '正方'], ['con', '反', '反方']];
   const COUNTDOWNS = [0, 3, 5, 10];
   const END_NAMES = { double: '两声', triple: '三声', long: '长鸣', chime: '轻铃', none: '不响' };
+  const OVERTIME = [['tick', '开'], ['none', '关']];
   const MSG = {
     secs: '时长写成 3:00 或 180',
     warn: '提示铃点写成秒数，如 30 或 60, 30',
@@ -9274,8 +9388,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       return g;
     }
 
-    // Warning bells, countdown and end bell. `set(field, value)` stores one of them.
-    function bellControls(bells, key, slot, set, isBreak) {
+    // Warning bells, countdown, end bell and the tock every second over. `set(field, value)` stores one of them.
+    // `overtime` false leaves the last one out: a free debate side or a break stops at zero and is never over.
+    function bellControls(bells, key, slot, set, isBreak, overtime) {
       const box = el('div', 'dt-ed-bells');
       const warn = parsedField('warn', key + ':warn', bells.warn.join(', '), slot, parseWarn, () => MSG.warn,
         v => { set('warn', v); return v.join(', '); });
@@ -9294,6 +9409,13 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       const end = selectBox('end', key + ':end', ends.map(e => [e, END_NAMES[e]]), bells.end);
       end.addEventListener('change', () => { set('end', end.value); commit(); });
       box.appendChild(field('终止铃', end));
+      if (overtime !== false) {
+        const over = selectBox('overtime', key + ':overtime', OVERTIME, bells.overtime === 'none' ? 'none' : 'tick');
+        over.addEventListener('change', () => { set('overtime', over.value); commit(); });
+        const o = field('超时每秒提示', over);
+        o.title = '单方环节超时后，每过一秒轻响一声，直到暂停或换环节';
+        box.appendChild(o);
+      }
       return box;
     }
 
@@ -9444,7 +9566,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       box.appendChild(field('计时员提示', noteBox, 'dt-ed-wide'));
 
       const custom = !!s.bells;
-      const mode = selectBox('bells-mode', k + ':bells-mode', [['follow', s.type === 'break' ? '跟随默认（轻铃一声）' : '跟随赛制'], ['custom', '自定义']],
+      const mode = selectBox('bells-mode', k + ':bells-mode', [['follow', s.type === 'break' ? '跟随默认（3、2、1 后轻铃）' : '跟随赛制'], ['custom', '自定义']],
         custom ? 'custom' : 'follow');
       mode.addEventListener('change', () => {
         if (mode.value === 'custom') s.bells = DT.engine.effectiveBells(draft, Object.assign({}, s, { bells: undefined }));
@@ -9458,7 +9580,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       if (custom) {
         bells.appendChild(bellControls(DT.engine.effectiveBells(draft, s), k + ':bells', rowOf(s), (key, v) => {
           s.bells[key] = v;
-        }, s.type === 'break'));
+        }, s.type === 'break', s.type === 'single'));
       }
       box.appendChild(bells);
       return box;
@@ -10145,6 +10267,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     'seat-right': Object.assign({ seat: 'right' }, DUAL),
     'long': { at: 73, format: longFormat, steps: [[0, 'goto', LONG_NAME], [0, 'toggle']] },
     'dock': Object.assign({ dock: true }, SINGLE),   // the control dock held open over a running stage
+    'dock-title': { dock: true, at: 0, steps: [] },  // the dock on the title card: 试音 and the volume in place of 正方 / 反方
     'help': Object.assign({ overlay: 'help' }, SINGLE),   // the key table (H) over a running stage
     'setup': { setup: true, at: 0, steps: [] },
     'setup-resume': Object.assign({ setup: true }, DUAL),   // the free debate left half way
@@ -10215,6 +10338,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   // but a console opened anew cannot (its O opens a window of its own), so this one is to be closed.
   const CONSOLE_GONE = '控制台已关闭。关掉这个窗口，在主窗口按 O 重新打开投影';
   const CONSOLE_AWAY = '计时员在开赛页，回到计时后继续';         // a key in a projector window while the console is away
+  // The toast of the sound check (B or 试音 on the title card), naming what it plays in order (bells.js DEMO).
+  const SOUND_CHECK = '试音：30 秒 → 5 秒 → 3、2、1 → 结束 → 超时';
   // What ?exportProbe=1 exports, for the end-to-end test (new spec §4.4).
   const PROBE = {
     format: 'ustc-freshman-cup', theme: 'hall',
@@ -10234,8 +10359,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     [['Shift+↑', 'Shift+↓'], '当前时钟 +5 / −5 秒'],
     [['R R'], '重置当前环节（连按两次）；其他环节在环节列表（S）里重置'],
     [['G G'], '当前发言方放弃剩余时间（自由辩 / 对辩，连按两次）'],
-    [['B'], '手动敲铃'],
-    [['X'], '插入奇袭（赛制有可插入环节时）'],
+    [['B'], '手动敲铃；开场卡上：试音（整套提示音压缩着放一遍，再按从头再放）'],
+    [['X'], '插入奇袭（评委打分的间隔里，赛制有可插入环节时）；插入后直接进入奇袭'],
     [['S'], '环节列表'],
     [['Shift+S'], '本场记录'],
     [['E'], '编辑赛制（这一场照常进行）'],
@@ -10276,6 +10401,11 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     '<div class="dt-dock-group">' +
     '<button type="button" data-act="floor" data-side="pro"><i class="dt-swatch" data-side="pro"></i><span>正方</span><kbd>A</kbd></button>' +
     '<button type="button" data-act="floor" data-side="con"><i class="dt-swatch" data-side="con"></i><span>反方</span><kbd>L</kbd></button></div>' +
+    // On the title card only, in place of 正方 / 反方 (which no title card uses): the sound check and the volume, so
+    // the level can be set to the room before the match. Not a <label>: see the console's slider.
+    '<div class="dt-dock-group" data-check hidden>' +
+    '<button type="button" data-act="bell"><span class="dt-bell-label">试音</span><kbd>B</kbd></button>' +
+    '<div class="dt-volume"><span>音量</span><input type="range" name="volume" aria-label="音量" min="0" max="1" step="0.05"></div></div>' +
     '<div class="dt-dock-group">' +
     '<button type="button" data-act="undo"><span>撤销</span><kbd>Z</kbd></button>' +
     RESET_BUTTON +
@@ -10313,7 +10443,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     RESET_BUTTON +
     '<button type="button" data-act="insert" data-wide><span>插入奇袭</span><kbd>X</kbd></button></div>' +
     '<div class="dt-control-group">' +
-    '<button type="button" data-act="bell"><span>敲铃</span><kbd>B</kbd></button>' +
+    '<button type="button" data-act="bell"><span class="dt-bell-label">敲铃</span><kbd>B</kbd></button>' +
     '<button type="button" data-act="mute" aria-pressed="false"><span class="dt-mute-label">静音</span><kbd>M</kbd></button>' +
     // Not a <label>: a click on 音量 would give the slider focus (new spec §3, P1).
     '<div class="dt-volume"><span>音量</span><input type="range" name="volume" aria-label="音量" min="0" max="1" step="0.05"></div></div>' +
@@ -10517,10 +10647,12 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   function controlSet(box) {
     const b = sel => box.querySelector('button[data-act="' + sel + '"]');
     const toggle = b('toggle');
+    const bell = b('bell');
     return {
       prev: b('prev'), next: b('next'), toggle, new: b('new'), undo: b('undo'), insert: b('insert'), reset: b('reset'),
       pro: box.querySelector('button[data-side="pro"]'), con: box.querySelector('button[data-side="con"]'),
       icon: toggle.querySelector('.dt-icon'), label: toggle.querySelector('.dt-toggle-label'),
+      bell: bell && bell.querySelector('.dt-bell-label'), check: box.querySelector('[data-check]'),
     };
   }
 
@@ -10599,6 +10731,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     let raf = null, destroyed = false, overlay = null, armed = null, dockTimer = null, dockPinned = false;
     let desk = null;   // the console's handle while a projector window is open
     let lastAdjust = null, saveTimer = null;   // {key, at} of the last adjust; a save held back while a key repeats
+    let checking = false;   // a sound check was started here and may still be playing: leaving the title card stops it
+    const dockVolume = dock.querySelector('input[name="volume"]');
     const disarms = [];   // one per 重置 / 退出 of the dock and the console, to put its label back when the page goes
 
     function viewAt(now) {
@@ -10641,13 +10775,29 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         btn[side].disabled = !dual || !!(clock && clock.locked);
       });
       btn.undo.disabled = !(session.history && session.history.length);
-      btn.insert.disabled = !v.extras.length || v.mode === 'end';
+      // A surprise attack goes in during a break, while either side still has one to use.
+      btn.insert.disabled = !(st && st.type === 'break' && v.extras.some(g => g.used.pro < g.perSide || g.used.con < g.perSide));
       btn.reset.disabled = !st;
+      const title = v.mode === 'title';
+      if (btn.bell) text(btn.bell, title ? '试音' : '敲铃');   // B, which is the sound check on the title card
+      // The dock makes room for the sound check on the title card, where 正方 / 反方 and 插入奇袭 never apply, so it
+      // stays one row on a 4:3 projector.
+      if (btn.check) {
+        attr(btn.check, 'hidden', !title);
+        attr(btn.pro.parentNode, 'hidden', title);
+        attr(btn.insert, 'hidden', title);
+      }
+    }
+
+    // A volume slider follows the setting, except the one being dragged.
+    function showVolume(input) {
+      if (document.activeElement !== input) input.value = String(settings.volume);
     }
 
     function paintStatus() {
       attr(pills.sound, 'data-shown', !still && !bells.isUnlocked());
       attr(pills.muted, 'data-shown', !!settings.muted);
+      showVolume(dockVolume);
       if (desk) desk.paintSettings();
     }
 
@@ -10692,6 +10842,10 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       if (merged) next = Object.assign({}, next, { history: h1.slice(0, -1) });
       lastAdjust = key && pushed ? { key, at: now } : null;
       session = next;
+      if (checking && session.cursor >= 0) {   // the match is under way: what is left of a sound check would ring over it
+        checking = false;
+        bells.stopDemo();
+      }
       save(merged);
       bells.schedule(DT.engine.upcomingBells(session, now), now);
       if (session.lastFeedback) toast(session.lastFeedback.message, session.lastFeedback.code === 'locked');
@@ -10717,6 +10871,20 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       settings.volume = volume;
       bells.setVolume(volume);
       DT.store.saveSettings(settings);
+      paintStatus();   // the other slider (the dock's or the console's) follows
+    }
+
+    // 试音 (B on the title card, revised 2026-10-18): every sound a stage rings, in order, pressed into nine seconds,
+    // so the volume can be set to the room before the match; the volume slider sits beside the button and a change is
+    // heard on the sounds still to come. Pressing again starts it over, to hear a new level from the top. It is asked
+    // for to be heard, so a muted timer is unmuted first (the 静音 mark goes, and M mutes again).
+    function soundCheck() {
+      const unmute = !!settings.muted;
+      if (unmute) toggleMute();
+      bells.demo();
+      checking = true;
+      paintStatus();   // the check unlocks the audio: the sound hint goes
+      toast((unmute ? '已取消静音。' : '') + SOUND_CHECK);
     }
 
     // Leaving for the setup page (new spec §2.2): the clock is settled and stopped first, so the time spent away is
@@ -10734,7 +10902,10 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       env.onExit(session);
     }
 
-    const OTHER_ACTS = { bell: () => bells.play('ding'), mute: toggleMute, fullscreen: () => toggleFullscreen(root), exit };
+    const OTHER_ACTS = {
+      bell: () => (session.cursor < 0 ? soundCheck() : bells.play('ding')),
+      mute: toggleMute, fullscreen: () => toggleFullscreen(root), exit,
+    };
 
     function act(name) {
       if (destroyed) return false;
@@ -10920,7 +11091,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
           });
           body.appendChild(sec);
         });
-        body.appendChild(el('p', 'dt-hint', '插在当前环节之后，按 → 进入'));
+        body.appendChild(el('p', 'dt-hint', '插入后直接进入奇袭，按空格开始；奇袭之后再给评委一段同样的间隔'));
       };
     }
 
@@ -10994,8 +11165,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         toast('这个赛制没有可插入的环节');
         return false;
       }
-      if (name === 'insert' && session.cursor >= session.timeline.length) {
-        toast('比赛已经结束');
+      const blocked = name === 'insert' && DT.engine.insertBlocked(session);   // only a break takes a surprise attack
+      if (blocked) {
+        toast(blocked.message);
         return false;
       }
       closeOverlay();
@@ -11062,6 +11234,10 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     dock.addEventListener('click', onControlClick);
     confirmControls(dock);
     keepFocus(dock);
+    dockVolume.addEventListener('input', () => setVolume(Number(dockVolume.value)));
+    // Let go of the slider once it is set, or its focus would hold the dock open for good (hideDock waits on focus).
+    // The arrow keys belong to the timer, so the slider is for the mouse only, as on the console.
+    dockVolume.addEventListener('change', () => dockVolume.blur());
     dock.addEventListener('focusin', showDock);
     dock.addEventListener('focusout', showDock);
 
@@ -11109,7 +11285,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         paintSettings() {
           attr(mute, 'aria-pressed', settings.muted ? 'true' : 'false');
           text(mute.querySelector('.dt-mute-label'), settings.muted ? '取消静音' : '静音');
-          if (document.activeElement !== volume) volume.value = String(settings.volume);
+          showVolume(volume);
         },
         destroy() {
           root.insertBefore(stage.el, root.firstChild);
@@ -11162,6 +11338,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
           session = out.session;
           save(false);
           emit('change', session);
+          // The seconds over are planned only so far ahead (engine OVER_AHEAD); each one that passes changes the
+          // session, so the plan rolls on here while the clock runs over.
+          bells.schedule(DT.engine.upcomingBells(session, now), now);
         }
         pulse(out.events);
         paint(now);

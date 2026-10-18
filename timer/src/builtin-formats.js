@@ -11,10 +11,12 @@
     "theme": "hall",
     "bells": {
       "warn": [
-        30
+        30,
+        5
       ],
-      "countdown": 0,
-      "end": "double"
+      "countdown": 3,
+      "end": "double",
+      "overtime": "tick"
     },
     "stages": [
       {
@@ -109,10 +111,12 @@
     "theme": "hall",
     "bells": {
       "warn": [
-        30
+        30,
+        5
       ],
-      "countdown": 0,
-      "end": "double"
+      "countdown": 3,
+      "end": "double",
+      "overtime": "tick"
     },
     "stages": [
       {
@@ -256,10 +260,12 @@
     "theme": "hall",
     "bells": {
       "warn": [
-        30
+        30,
+        5
       ],
-      "countdown": 0,
-      "end": "double"
+      "countdown": 3,
+      "end": "double",
+      "overtime": "tick"
     },
     "stages": [
       {
@@ -459,10 +465,12 @@
     "theme": "hall",
     "bells": {
       "warn": [
-        30
+        30,
+        5
       ],
-      "countdown": 0,
-      "end": "double"
+      "countdown": 3,
+      "end": "double",
+      "overtime": "tick"
     },
     "stages": [
       {
@@ -638,10 +646,12 @@
     "theme": "hall",
     "bells": {
       "warn": [
-        30
+        30,
+        5
       ],
-      "countdown": 0,
-      "end": "double"
+      "countdown": 3,
+      "end": "double",
+      "overtime": "tick"
     },
     "stages": [
       {

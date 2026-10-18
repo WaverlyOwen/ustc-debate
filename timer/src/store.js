@@ -7,6 +7,7 @@
   };
   let KEYS = PLAIN_KEYS;
   const END_BELLS = ['double', 'triple', 'long', 'none', 'chime'];
+  const OVERTIME_BELLS = ['tick', 'none'];
   const HISTORY_LIMIT = 20;
   const VARIANT_NAME_MAX = 38;   // an inserted stage is named 正方 / 反方 + this, and stage names stop at 40
 
@@ -75,6 +76,7 @@
     if (b.warn !== undefined && !(Array.isArray(b.warn) && b.warn.every(isPosInt))) errs.push('铃声：提示铃点要写成正整数秒');
     if (b.countdown !== undefined && !(Number.isInteger(b.countdown) && b.countdown >= 0 && b.countdown <= 10)) errs.push('铃声：逐秒倒数最多 10 秒');
     if (b.end !== undefined && END_BELLS.indexOf(b.end) < 0) errs.push('铃声：终止铃只能是两声、三声、长鸣或不响');
+    if (b.overtime !== undefined && OVERTIME_BELLS.indexOf(b.overtime) < 0) errs.push('铃声：超时每秒提示只能是开或关');
     return errs;
   }
   function stageErrors(s, i, firstIndexOfId) {

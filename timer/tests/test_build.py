@@ -76,9 +76,24 @@ class ParseTests(unittest.TestCase):
     def test_defaults(self):
         for f in self.all.values():
             self.assertEqual(f["theme"], "hall")
-            self.assertEqual(f["bells"], {"warn": [30], "countdown": 0, "end": "double"})
+            self.assertEqual(f["bells"], {"warn": [30, 5], "countdown": 3, "end": "double", "overtime": "tick"})
             self.assertTrue(f["builtin"])
             self.assertEqual(f["source"], f["id"] + ".md")
+        a, b = list(self.all.values())[:2]
+        self.assertIsNot(a["bells"]["warn"], b["bells"]["warn"], "each format has bells of its own")
+
+    def test_default_bells_match_the_engine(self):
+        # engine.js: const DEFAULT_BELLS = Object.freeze({ warn: Object.freeze([30, 5]), countdown: 3, ... });
+        import re
+        js = (build.SRC / "engine.js").read_text(encoding="utf-8")
+        m = re.search(r"const DEFAULT_BELLS = Object\.freeze\(\{(.*?)\}\);", js)
+        self.assertIsNotNone(m, "DEFAULT_BELLS in engine.js")
+        body = m.group(1)
+        warn = re.search(r"warn: Object\.freeze\(\[([\d,\s]*)\]\)", body).group(1)
+        fields = dict(re.findall(r"(countdown|end|overtime): '?(\w+)'?", body))
+        engine = {"warn": [int(x) for x in warn.split(",") if x.strip()], "countdown": int(fields["countdown"]),
+                  "end": fields["end"], "overtime": fields["overtime"]}
+        self.assertEqual(engine, build.DEFAULT_BELLS)
 
     def test_cn_int(self):
         self.assertEqual([build.cn_int(x) for x in ["一", "两", "三", "十", "2"]], [1, 2, 3, 10, 2])
