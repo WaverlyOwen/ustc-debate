@@ -9,6 +9,7 @@
   const RUNG_MEMORY = 32;       // visual events the projector remembers, so one reported twice plays once
   const MERGE_MS = 1000;        // adjusts of one clock this close together are one undo step (a held arrow key)
   const SAVE_SOON_MS = 300;     // how long a merged adjust waits before it is saved
+  const HIDDEN_TICK_MS = 1000;  // how often the rules and the bell plan move on while the page is hidden (no frames)
   const PROJECTOR_FLAG = 'dt.projector';   // sessionStorage: this tab has a projector window open (§5.11)
   const SIDE_NAME = { pro: '正方', con: '反方' };
   const LAST_MATCH = ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'];   // prefilled next time (§5.9)
@@ -412,6 +413,7 @@
     const pills = { sound: status.querySelector('[data-kind="sound"]'), muted: status.querySelector('[data-kind="muted"]') };
 
     let raf = null, destroyed = false, overlay = null, armed = null, dockTimer = null, dockPinned = false;
+    let hiddenTimer = null;   // the 1 s timer that stands in for the frame loop while the page is hidden
     let desk = null;   // the console's handle while a projector window is open
     let lastAdjust = null, saveTimer = null;   // {key, at} of the last adjust; a save held back while a key repeats
     let checking = false;   // a sound check was started here and may still be playing: leaving the title card stops it
@@ -531,6 +533,7 @@
       }
       save(merged);
       bells.schedule(DT.engine.upcomingBells(session, now), now);
+      watchHidden();   // a clock started or stopped while the page is hidden (a key from the projector window)
       if (session.lastFeedback) toast(session.lastFeedback.message, session.lastFeedback.code === 'locked');
       emit('change', session);
       paint(now);
@@ -738,6 +741,8 @@
     function insertOverlay(body) {
       let sig = null;
       return function refresh(now, v) {
+        // Off the break (→, ←, a row of the stage list, the insert itself) every button could only refuse: it closes.
+        if (DT.engine.insertBlocked(session)) { closeOverlay(); return; }
         const s = JSON.stringify(v.extras);
         if (s === sig) return;
         sig = s;
@@ -1010,28 +1015,52 @@
 
     // ---- frame loop ----
 
-    // One frame: apply the automatic rules, keep what changed, play their visual events, repaint.
+    // The automatic rules up to `now`: keep what changed, plan the bells again, play their visual events.
+    function advance(now) {
+      const out = DT.engine.tick(session, now);
+      if (out.session !== session) {
+        session = out.session;
+        save(false);
+        emit('change', session);
+        // The seconds over are planned only so far ahead (engine OVER_AHEAD); each one that passes changes the
+        // session, so the plan rolls on here while the clock runs over.
+        bells.schedule(DT.engine.upcomingBells(session, now), now);
+      }
+      pulse(out.events);
+    }
+
+    // One frame: the automatic rules, then a repaint.
     // The next frame is asked for first, so one frame that throws cannot stop the display for good.
     function frame() {
       raf = requestAnimationFrame(frame);
       try {
         const now = DT.clock.now();
-        const out = DT.engine.tick(session, now);
-        if (out.session !== session) {
-          session = out.session;
-          save(false);
-          emit('change', session);
-          // The seconds over are planned only so far ahead (engine OVER_AHEAD); each one that passes changes the
-          // session, so the plan rolls on here while the clock runs over.
-          bells.schedule(DT.engine.upcomingBells(session, now), now);
-        }
-        pulse(out.events);
+        advance(now);
         paint(now);
       } catch (e) {
         console.warn('这一帧没画出来：', e);
       }
     }
+
+    // A hidden page gets no frames, so the frame loop stops there; but the seconds over are planned only thirty ahead.
+    // While the page is hidden and a clock runs (the console minimised, or behind another tab while the timekeeper
+    // works from the projector window), a 1 s timer, which a hidden page still gets, moves the rules and the plan on
+    // instead. It paints nothing, since nothing shows, and goes once the page is seen again or the clock stops.
+    function watchHidden() {
+      const st = DT.engine.currentStage(session);
+      const on = !destroyed && document.visibilityState === 'hidden' && !!st && DT.engine.getRun(session).running;
+      if (on && !hiddenTimer) hiddenTimer = setInterval(hiddenTick, HIDDEN_TICK_MS);
+      else if (!on && hiddenTimer) { clearInterval(hiddenTimer); hiddenTimer = null; }
+    }
+
+    function hiddenTick() {
+      try { advance(DT.clock.now()); } catch (e) { console.warn('后台计时出错：', e); }
+      watchHidden();   // a break that ran out has stopped its clock
+    }
+
+    document.addEventListener('visibilitychange', watchHidden);
     frame();
+    watchHidden();   // a page opened, or a match resumed, in a tab not in view
     if (env.console) setConsole(true);
     const bootNow = DT.clock.now();
     bells.schedule(DT.engine.upcomingBells(session, bootNow), bootNow);   // a resumed clock rings on time
@@ -1051,6 +1080,9 @@
         if (desk) setConsole(false);
         destroyed = true;
         cancelAnimationFrame(raf);
+        document.removeEventListener('visibilitychange', watchHidden);
+        clearInterval(hiddenTimer);
+        hiddenTimer = null;
         clearTimeout(dockTimer);
         if (saveTimer) save(false);   // a held-back save goes out now
         window.removeEventListener('keydown', onKeyDown);
