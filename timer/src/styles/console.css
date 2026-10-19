@@ -102,7 +102,11 @@
 .dt-dock[data-pinned] { transition: none; }
 
 .dt-dock-group { display: flex; gap: .15em; }
+.dt-dock-group[hidden] { display: none; }
 .dt-dock-group + .dt-dock-group { padding-left: .3em; border-left: 1px solid var(--panel-line); }
+/* The title card's volume beside 试音 (ui.js DOCK): the console's slider, short, on the dock's row. */
+.dt-dock .dt-volume { flex-basis: auto; gap: .55em; padding: 0 .6em 0 .35em; letter-spacing: .06em; white-space: nowrap; }
+.dt-dock .dt-volume input { flex: none; width: 6.5em; }
 /* 退出 stands apart at the far end, out of reach of a hand going for 全屏: the room split evenly around its divider. */
 .dt-dock-group[data-exit] { margin-left: .45em; padding-left: .75em; }
 

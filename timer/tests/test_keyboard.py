@@ -302,21 +302,30 @@ class TrustedKeyboardTest(unittest.TestCase):
         self.key("Enter")
         self.assertEqual(self.session()["cursor"], 2, "Enter does not click the row again")
 
-    def test_3_refused_insert_is_not_done_by_enter(self):
+    def test_3_insert_menu_closes_off_the_break_and_enter_inserts_nothing(self):
         self.open("")
         self.start_match("ustc-school-cup")
-        self.key("ArrowRight")
-        self.key("Space")
-        self.assertTrue(self.running())
+        for _ in range(5):
+            self.key("ArrowRight")   # the first judges' break, where X opens the menu
+        s = self.session()
+        self.assertEqual(s["timeline"][s["cursor"]]["type"], "break")
+        stages = len(s["timeline"])
         self.key("KeyX")
         self.wait("document.querySelector('.dt-overlay[data-name=insert]')")
-        stages = len(self.session()["timeline"])
         self.click(".dt-overlay[data-name=insert] button[data-side='con'][data-variant='0']")
-        self.assertEqual(len(self.session()["timeline"]), stages, "refused: 先暂停再插入")
-        self.key("Space")
-        self.assertFalse(self.running())
+        self.wait("!document.querySelector('.dt-overlay')")   # on the attack, the menu gone
+        self.assertEqual(len(self.session()["timeline"]), stages + 2, "the attack and the break again")
         self.key("Enter")
-        self.assertEqual(len(self.session()["timeline"]), stages, "Enter does not press the insert button again")
+        self.assertEqual(len(self.session()["timeline"]), stages + 2, "Enter does not press the insert button again")
+        self.key("ArrowRight")   # the break after the attack, where 正方 still has one
+        self.key("KeyX")
+        self.wait("document.querySelector('.dt-overlay[data-name=insert]')")
+        self.key("ArrowRight")   # off the break with the menu open: it closes, since its buttons could only refuse now
+        self.wait("!document.querySelector('.dt-overlay')")
+        self.key("Enter")
+        self.assertEqual(len(self.session()["timeline"]), stages + 2, "nor on the stage after")
+        self.key("Space")
+        self.assertTrue(self.running())
 
     def test_4_space_right_after_closing_the_editor_counts(self):
         self.open("")

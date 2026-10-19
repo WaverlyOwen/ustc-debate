@@ -60,7 +60,8 @@ COLUMNS = {"序": "no", "环节": "name", "时长": "dur", "计时": "timing", "
 NOTE_BOTH = "双边计时：问答共用这一个表"
 NOTE_ONE = "单边计时：只计盘问方，对方回答时按 P 暂停"
 NOTE_DUAL = "A 给正方、L 给反方；一方用完自动转给对方"
-DEFAULT_BELLS = {"warn": [30], "countdown": 0, "end": "double"}
+# Must match DEFAULT_BELLS in src/engine.js (test_build.py checks it): 30 s, 5 s, 3-2-1, the end bell, every second over.
+DEFAULT_BELLS = {"warn": [30, 5], "countdown": 3, "end": "double", "overtime": "tick"}
 
 
 def cn_int(text):
@@ -169,7 +170,8 @@ def parse_format(path):
     if not stages:
         raise FormatError(f"{path.name}: 流程总表里没有环节")
     return {"id": fid, "name": title.group(1).strip(), "builtin": True, "source": path.name,
-            "theme": "hall", "bells": dict(DEFAULT_BELLS), "stages": stages, "extras": extras}
+            "theme": "hall", "bells": {**DEFAULT_BELLS, "warn": list(DEFAULT_BELLS["warn"])},
+            "stages": stages, "extras": extras}
 
 
 def parse_all(formats_dir):

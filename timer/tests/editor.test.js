@@ -204,11 +204,12 @@
     assert.equal(mode.value, 'follow');
     assert.equal(r().querySelector('input[name="warn"]'), null);
     mode.value = 'custom'; mode.dispatchEvent(new Event('change', { bubbles: true }));
-    assert.deepEqual(current(t.state).stages[1].bells, { warn: [30], countdown: 0, end: 'double' });
+    assert.deepEqual(current(t.state).stages[1].bells, { warn: [30, 5], countdown: 3, end: 'double', overtime: 'tick' });
     typeInto(r().querySelector('input[name="warn"]'), '60，30', 'change');
     const cd = r().querySelector('select[name="countdown"]'); cd.value = '5'; cd.dispatchEvent(new Event('change', { bubbles: true }));
     const end = r().querySelector('select[name="end"]'); end.value = 'triple'; end.dispatchEvent(new Event('change', { bubbles: true }));
-    assert.deepEqual(current(t.state).stages[1].bells, { warn: [60, 30], countdown: 5, end: 'triple' });
+    const over = r().querySelector('select[name="overtime"]'); over.value = 'none'; over.dispatchEvent(new Event('change', { bubbles: true }));
+    assert.deepEqual(current(t.state).stages[1].bells, { warn: [60, 30], countdown: 5, end: 'triple', overtime: 'none' });
     assert.equal(r().querySelector('input[name="warn"]').value, '60, 30');
     typeInto(r().querySelector('input[name="warn"]'), '半分钟', 'change');
     assert.ok(r().textContent.indexOf('提示铃点写成秒数') >= 0);
@@ -226,7 +227,46 @@
     const main = $(t, '[data-slot="bells"]').parentNode;
     typeInto(main.querySelector('input[name="warn"]'), '60 30', 'change');
     const end = main.querySelector('select[name="end"]'); end.value = 'long'; end.dispatchEvent(new Event('change', { bubbles: true }));
-    assert.deepEqual(current(t.state).bells, { warn: [60, 30], countdown: 0, end: 'long' });
+    assert.deepEqual(current(t.state).bells, { warn: [60, 30], countdown: 3, end: 'long', overtime: 'tick' });
+    t.h.destroy();
+  });
+
+  // Revised 2026-10-18: the tock every second over is a bell field like the others, on the format and on a stage.
+  DT.test('editor: 超时每秒提示 turns the tock over time off and on, for the format and for one stage', () => {
+    const t = mount();
+    const main = $(t, '[data-slot="bells"]').parentNode;
+    const over = () => main.querySelector('select[name="overtime"]');
+    assert.equal(over().value, 'tick');
+    assert.deepEqual(Array.from(over().options).map(o => [o.value, o.textContent]), [['tick', '开'], ['none', '关']]);
+    assert.equal(over().closest('label').textContent.indexOf('超时每秒提示'), 0);
+    over().value = 'none'; over().dispatchEvent(new Event('change', { bubbles: true }));
+    assert.equal(current(t.state).bells.overtime, 'none');
+    assert.deepEqual(DT.store.validateFormat(current(t.state)), []);
+    assert.equal(over().value, 'none', 'shown as saved');
+    // A single stage follows the format until it has bells of its own; then it can turn the tock back on.
+    const r = () => row(t, 0);
+    r().querySelector('button[data-action="expand"]').click();
+    const mode = r().querySelector('select[name="bells-mode"]');
+    mode.value = 'custom'; mode.dispatchEvent(new Event('change', { bubbles: true }));
+    assert.equal(current(t.state).stages[0].bells.overtime, 'none');
+    const own = r().querySelector('select[name="overtime"]');
+    own.value = 'tick'; own.dispatchEvent(new Event('change', { bubbles: true }));
+    assert.equal(current(t.state).stages[0].bells.overtime, 'tick');
+    assert.equal(DT.engine.effectiveBells(current(t.state), current(t.state).stages[0]).overtime, 'tick');
+    t.h.destroy();
+  });
+
+  DT.test('editor: a break or a free debate with bells of its own has no 超时每秒提示, since it never runs over', () => {
+    const t = mount();
+    const f = current(t.state);
+    [f.stages.findIndex(s => s.type === 'break'), f.stages.findIndex(s => s.type === 'dual')].forEach(i => {
+      row(t, i).querySelector('button[data-action="expand"]').click();
+      const mode = row(t, i).querySelector('select[name="bells-mode"]');
+      mode.value = 'custom'; mode.dispatchEvent(new Event('change', { bubbles: true }));
+      assert.ok(row(t, i).querySelector('select[name="countdown"]'), 'the other bell fields are there');
+      assert.equal(row(t, i).querySelector('select[name="overtime"]'), null);
+    });
+    assert.equal(current(t.state).stages.find(s => s.type === 'break').bells.overtime, 'none');
     t.h.destroy();
   });
 

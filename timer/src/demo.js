@@ -76,6 +76,7 @@
     'seat-right': Object.assign({ seat: 'right' }, DUAL),
     'long': { at: 73, format: longFormat, steps: [[0, 'goto', LONG_NAME], [0, 'toggle']] },
     'dock': Object.assign({ dock: true }, SINGLE),   // the control dock held open over a running stage
+    'dock-title': { dock: true, at: 0, steps: [] },  // the dock on the title card: 试音 and the volume in place of 正方 / 反方
     'help': Object.assign({ overlay: 'help' }, SINGLE),   // the key table (H) over a running stage
     'setup': { setup: true, at: 0, steps: [] },
     'setup-resume': Object.assign({ setup: true }, DUAL),   // the free debate left half way

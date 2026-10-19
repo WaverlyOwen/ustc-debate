@@ -5,9 +5,10 @@
     return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) };
   }
   function fakeBells() {
-    const log = { scheduled: [], played: [], unlocked: 0 };
+    const log = { scheduled: [], played: [], unlocked: 0, demos: 0, stopped: 0 };
     return { log, unlock() { log.unlocked++; }, isUnlocked: () => log.unlocked > 0, schedule(list) { log.scheduled.push(list); },
-      cancelAll() {}, play(s) { log.played.push(s); }, setVolume() {}, setMuted(m) { log.muted = m; } };
+      cancelAll() {}, play(s) { log.played.push(s); }, setVolume() {}, setMuted(m) { log.muted = m; },
+      demo() { log.demos++; log.unlocked++; return true; }, stopDemo() { log.stopped++; } };
   }
   function boot(extra) {
     let now = T0;
@@ -532,19 +533,44 @@
 
   DT.test('ui: B rings the bell and M mutes', () => {
     const t = boot();
+    press('ArrowRight');                                // off the title card, where B is the sound check
     press('KeyB'); assert.deepEqual(t.bells.log.played, ['ding']);
     press('KeyM'); assert.equal(t.bells.log.muted, true);
     assert.equal(JSON.parse(t.storage.getItem('dt.settings.v1')).muted, true);
     t.done();
   });
 
-  DT.test('ui: insert menu adds a surprise attack in the school cup', () => {
+  // Revised 2026-10-18: in the judges' break, X inserts the attack and the break again, and the timer is on the attack.
+  DT.test('ui: X in a break inserts a surprise attack and lands on it, with two more marks on the progress bar', () => {
     const t = boot({ formatId: 'ustc-school-cup' });
-    press('Space'); t.clock.advance(1000); press('Space');
+    const brk = t.c.session().timeline.findIndex(s => s.type === 'break');
+    t.c.act('goto', brk);
+    press('Space'); t.clock.advance(5000);              // the break is running
+    const dock = document.querySelector('.dt-dock');
+    assert.equal(dock.querySelector('button[data-act="insert"]').disabled, false);
+    const segs = () => document.querySelectorAll('.dt-progress > *');
+    const before = segs().length;
     press('KeyX');
     const btn = document.querySelector('.dt-overlay[data-name="insert"] button[data-side="con"][data-variant="0"]');
     assert.ok(btn); btn.click();
-    assert.equal(t.c.session().timeline[1].name, '反方奇袭质询');
+    assert.equal(document.querySelector('.dt-overlay'), null, 'the menu closes');
+    const s = t.c.session();
+    assert.equal(s.cursor, brk + 1);
+    assert.deepEqual(s.timeline.slice(brk + 1, brk + 3).map(x => [x.name, x.type, !!x.extra]),
+      [['反方奇袭质询', 'single', true], ['评委打分', 'break', true]]);
+    assert.equal(DT.engine.getRun(s, s.timeline[brk].id).running, false, 'the break stopped');
+    assert.equal(DT.engine.getRun(s).running, false, 'the attack waits for space');
+    assert.equal(document.querySelector('.dt-title').textContent, '反方奇袭质询');
+    assert.equal(segs().length, before + 2);
+    assert.equal(document.querySelectorAll('.dt-progress > [data-extra]').length, 2);
+    assert.equal(dock.querySelector('button[data-act="insert"]').disabled, true, 'not in the attack itself');
+    t.clock.advance(2000);
+    press('KeyZ');
+    assert.equal(t.c.session().cursor, brk, 'one undo takes it all back');
+    assert.equal(segs().length, before);
+    assert.ok(DT.engine.getRun(t.c.session()).running, 'the break was running, so it runs on');
+    assert.equal(left(t), 23000, 'the time since the insert charged to it');
+    assert.equal(document.querySelector('.dt-title').textContent, '评委打分');
     t.done();
   });
 
@@ -666,13 +692,22 @@
 
   DT.test('ui: insert buttons of a used-up side are disabled and say so', () => {
     const t = boot({ formatId: 'ustc-school-cup' });
-    press('Space'); t.clock.advance(1000); press('Space');
+    const brk = t.c.session().timeline.findIndex(s => s.type === 'break');
+    t.c.act('goto', brk);
     t.c.act('insert', '奇袭', 1, 'pro');
+    t.c.act('goto', brk + 2);                           // the break after the attack
     t.c.openOverlay('insert');
     const btn = document.querySelector('.dt-overlay[data-name="insert"] button[data-side="pro"][data-variant="0"]');
     assert.equal(btn.disabled, true);
     assert.ok(btn.textContent.indexOf('已用') >= 0);
     assert.equal(document.querySelector('.dt-overlay[data-name="insert"] button[data-side="con"][data-variant="0"]').disabled, false);
+    t.c.closeOverlay();
+    const insert = document.querySelector('.dt-dock button[data-act="insert"]');
+    assert.equal(insert.disabled, false, 'the other side still has one');
+    t.c.act('insert', '奇袭', 0, 'con');
+    t.c.act('goto', brk + 4);
+    assert.equal(DT.engine.currentStage(t.c.session()).type, 'break');
+    assert.equal(insert.disabled, true, 'both sides have used theirs');
     t.done();
   });
 
@@ -682,6 +717,138 @@
     assert.equal(document.querySelector('.dt-overlay'), null);
     assert.equal(toastText(), '这个赛制没有可插入的环节');
     t.done();
+  });
+
+  DT.test('ui: X outside a break says where a surprise attack goes instead of opening the menu', () => {
+    const t = boot({ formatId: 'ustc-school-cup' });
+    const insert = document.querySelector('.dt-dock button[data-act="insert"]');
+    assert.equal(insert.hidden, true, 'the title card makes room for the sound check');
+    press('KeyX');
+    assert.equal(document.querySelector('.dt-overlay'), null);
+    assert.equal(toastText(), '奇袭只能在评委打分的间隔里插入');
+    press('Space');                                     // the first stage, running
+    assert.equal(insert.hidden, false);
+    assert.equal(insert.disabled, true);
+    press('KeyX');
+    assert.equal(document.querySelector('.dt-overlay'), null);
+    assert.equal(toastText(), '奇袭只能在评委打分的间隔里插入');
+    assert.equal(t.c.session().timeline.length, 18);
+    assert.ok(DT.engine.getRun(t.c.session()).running, 'and the clock is left alone');
+    t.done();
+  });
+
+  DT.test('ui: the insert menu closes once the stage is no longer a break, and stays open on a refusal in one', () => {
+    const t = boot({ formatId: 'ustc-school-cup' });
+    const brk = t.c.session().timeline.findIndex(s => s.type === 'break');
+    const menu = () => document.querySelector('.dt-overlay[data-name="insert"]');
+    t.c.act('goto', brk);
+    press('KeyX'); assert.ok(menu());
+    press('ArrowRight'); assert.equal(menu(), null, '→ off the break');
+    press('ArrowLeft'); press('KeyX'); assert.ok(menu());
+    press('ArrowLeft'); assert.equal(menu(), null, '← off the break');
+    t.c.act('goto', brk); press('KeyX');
+    t.c.act('goto', 0); assert.equal(menu(), null, 'a row of the stage list');
+    t.c.act('goto', brk); press('KeyX');
+    t.c.act('goto', t.c.session().timeline.length); assert.equal(menu(), null, 'the end card');
+    t.c.act('goto', brk); press('KeyH');
+    press('ArrowRight');
+    assert.ok(document.querySelector('.dt-overlay[data-name="help"]'), 'other overlays stay as they were');
+    t.c.closeOverlay();
+    t.c.act('goto', brk);
+    t.c.act('insert', '奇袭', 0, 'con');
+    t.c.act('goto', brk + 2);                           // the break after the attack
+    press('KeyX');
+    t.c.act('insert', '奇袭', 1, 'con');               // 反方 has used theirs
+    assert.equal(toastText(), '反方的奇袭已经用过了');
+    assert.ok(menu(), 'a refusal in the break leaves the menu open for 正方');
+    document.querySelector('.dt-overlay[data-name="insert"] button[data-side="pro"][data-variant="0"]').click();
+    assert.equal(menu(), null, 'an insert lands on the attack, and the menu is gone');
+    assert.equal(DT.engine.currentStage(t.c.session()).name, '正方奇袭质询');
+    t.done();
+  });
+
+  // ---- the sound check on the title card (revised 2026-10-18) ----
+
+  DT.test('ui: on the title card B and 试音 play the sound check, with the volume beside it', () => {
+    const t = boot();
+    const dock = document.querySelector('.dt-dock');
+    const check = dock.querySelector('[data-check]');
+    const floor = dock.querySelector('button[data-side="pro"]').parentNode;
+    assert.equal(check.hidden, false);
+    assert.equal(floor.hidden, true, '正方 / 反方 make way on the title card');
+    assert.equal(check.querySelector('button[data-act="bell"]').textContent, '试音B');
+    const slider = check.querySelector('input[type="range"][name="volume"]');
+    assert.equal(slider.getAttribute('aria-label'), '音量');
+    assert.equal(slider.closest('label'), null);
+    assert.equal(slider.value, '0.8');
+    press('KeyB');
+    assert.equal(t.bells.log.demos, 1);
+    assert.deepEqual(t.bells.log.played, []);
+    assert.equal(toastText(), '试音：30 秒 → 5 秒 → 3、2、1 → 结束 → 超时');
+    check.querySelector('button[data-act="bell"]').click();
+    assert.equal(t.bells.log.demos, 2, 'pressed again, it starts over');
+    assert.equal(t.c.session().history.length, 0, 'not a timing step');
+    assert.equal(t.bells.log.stopped, 0);
+    press('ArrowRight');
+    assert.equal(t.bells.log.stopped, 1, 'leaving the title card stops it');
+    assert.equal(check.hidden, true);
+    assert.equal(floor.hidden, false);
+    press('KeyB');
+    assert.deepEqual(t.bells.log.played, ['ding'], 'elsewhere B is the hand bell');
+    assert.equal(t.bells.log.demos, 2);
+    t.done();
+  });
+
+  DT.test('ui: the sound check unmutes a muted timer first, and M mutes it again', () => {
+    const storage = memStorage();
+    storage.setItem('dt.settings.v1', JSON.stringify({ volume: 0.5, muted: true }));
+    const t = boot({ storage });
+    const mark = document.querySelector('.dt-pill[data-kind="muted"]');
+    assert.equal(mark.hasAttribute('data-shown'), true);
+    press('KeyB');
+    assert.equal(t.bells.log.demos, 1);
+    assert.equal(t.bells.log.muted, false);
+    assert.equal(JSON.parse(storage.getItem('dt.settings.v1')).muted, false);
+    assert.equal(mark.hasAttribute('data-shown'), false);
+    assert.equal(toastText(), '已取消静音。试音：30 秒 → 5 秒 → 3、2、1 → 结束 → 超时');
+    press('KeyM');
+    assert.equal(t.bells.log.muted, true);
+    assert.equal(mark.hasAttribute('data-shown'), true);
+    t.done();
+  });
+
+  DT.test('ui: the title card\'s volume slider sets the volume through the bells\' master gain, in step with the console\'s', () => {
+    const node = () => ({ frequency: { value: 0 }, gain: { value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} },
+      Q: { value: 0 }, connect() {}, disconnect() {}, start() {}, stop() {} });
+    const ctx = { currentTime: 10, destination: node(), sampleRate: 48000, resume: () => Promise.resolve(),
+      createOscillator: node, createGain: node, createBiquadFilter: node, createBufferSource: node,
+      createBuffer: (ch, len) => ({ getChannelData: () => new Float32Array(len) }) };
+    DT.bells._setContextFactory(() => ctx); DT.bells._resetForTests();
+    const proj = { closed: false, postMessage() {} };
+    const host = { location: { href: 'file:///C:/x/debate-timer.html' }, addEventListener() {}, removeEventListener() {},
+      open: () => proj };
+    const t = boot({ bells: DT.bells, window: host });
+    try {
+      const slider = document.querySelector('.dt-dock [data-check] input[name="volume"]');
+      const move = (input, value) => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); };
+      window.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));   // the first gesture unlocks the audio
+      move(slider, '0.3');
+      assert.near(DT.bells._master().gain.value, 0.3, 1e-9);
+      assert.equal(JSON.parse(t.storage.getItem('dt.settings.v1')).volume, 0.3);
+      press('KeyB');
+      move(slider, '0.6');                              // during the sound check: the master gain is live
+      assert.near(DT.bells._master().gain.value, 0.6, 1e-9);
+      press('KeyO');                                    // the console's slider shows the same level
+      const desk = document.querySelector('.dt-console input[name="volume"]');
+      assert.equal(desk.value, '0.6');
+      assert.equal(document.querySelector('.dt-console button[data-act="bell"]').textContent, '试音B', 'its 敲铃 is 试音 here');
+      move(desk, '0.45');
+      assert.equal(slider.value, '0.45');
+      assert.near(DT.bells._master().gain.value, 0.45, 1e-9);
+    } finally {
+      t.done();
+      DT.bells._setContextFactory(null); DT.bells._resetForTests();
+    }
   });
 
   DT.test('ui: dock buttons follow the stage type and act like the keys', () => {
@@ -792,12 +959,15 @@
     DT.bells._setContextFactory(() => ctx); DT.bells._resetForTests();
     const t = boot({ bells: DT.bells });
     press('Space');
-    const endBell = started.filter(n => n.startAt >= 190 - 0.01);
+    const endBell = started.filter(n => n.startAt >= 190 - 0.01 && n.startAt < 191 - 0.01);
+    const over = started.filter(n => n.startAt >= 191 - 0.01);
     assert.ok(endBell.length > 0, 'the end bell is planned at 180 s');
+    assert.ok(over.length > 0, 'and the seconds over after it');
     t.clock.advance(180400); ctx.currentTime = 190.4;   // between the two strikes of the double bell
     press('Space');
     assert.equal(DT.engine.getRun(t.c.session()).running, false);
     endBell.forEach(n => assert.ok(!(n.stopCalls || []).includes(0) && !n.disconnected, 'the end bell is not cut off'));
+    over.forEach(n => assert.ok(n.stopCalls.includes(0) && n.disconnected, 'the seconds over stop with the clock'));
     t.done();
     DT.bells._setContextFactory(null); DT.bells._resetForTests();
   });
@@ -805,7 +975,22 @@
 
   const run = t => DT.engine.getRun(t.c.session());
   const left = t => DT.engine.remaining(run(t), 'main', DT.clock.now());
+  // Holds the browser's frames for one test and hands them to the frame loop one at a time with step(), so the loop
+  // runs exactly when the test says. Waiting on real frames does not hold up in the runner: its clock is virtual,
+  // leaps from timer to timer while a loaded machine holds frames back (so a deadline on it, or a timer raced against
+  // the frame, can run out before one frame is drawn: both frame tests failed together that way under load), and
+  // ends the page when nothing but a frame is pending (so waiting on frames alone can end the run).
   const later = ms => new Promise(r => setTimeout(r, ms));
+  function holdFrames() {
+    const real = { request: window.requestAnimationFrame, cancel: window.cancelAnimationFrame };
+    let queue = [], id = 0;
+    window.requestAnimationFrame = fn => { queue.push({ id: ++id, fn }); return id; };
+    window.cancelAnimationFrame = n => { queue = queue.filter(q => q.id !== n); };
+    return {
+      step() { const due = queue; queue = []; due.forEach(q => q.fn(performance.now())); },
+      release() { window.requestAnimationFrame = real.request; window.cancelAnimationFrame = real.cancel; },
+    };
+  }
 
   DT.test('ui: clicking the current row of the stage list leaves its running clock alone', () => {
     const t = boot();
@@ -897,24 +1082,89 @@
     assert.equal(saved.runs[stage.id].clocks.main.used, t.c.session().runs[stage.id].clocks.main.used, 'the last step is saved on the way out');
   });
 
-  DT.test('ui: one frame that throws does not stop the frame loop', async () => {
+  DT.test('ui: one frame that throws does not stop the frame loop', () => {
+    const frames = holdFrames();
     const tick = DT.engine.tick;
     let calls = 0;
     DT.engine.tick = function () { if (!calls++) throw new Error('odd data'); return tick.apply(this, arguments); };
     const warn = console.warn;
     console.warn = () => {};
     let t;
-    try { t = boot(); } finally { DT.engine.tick = tick; console.warn = warn; }
+    try { t = boot(); } finally { DT.engine.tick = tick; console.warn = warn; }   // the first frame, at mount, throws
     try {
       press('Space');
       t.clock.advance(5000);
-      // The loop paints on the browser's own frames, which a loaded headless browser can hold back for a while:
-      // wait for the paint itself (up to 3 s), not for a fixed number of frames.
-      const sec = () => document.querySelector('.dt-clock[data-clock="main"] .dt-sec').textContent;
-      const until = Date.now() + 3000;
-      while (sec() !== '55' && Date.now() < until) await Promise.race([new Promise(r => requestAnimationFrame(r)), later(50)]);
-      assert.equal(sec(), '55');
-    } finally { t.done(); }
+      frames.step();                                    // the frame it asked for before it threw
+      assert.equal(document.querySelector('.dt-clock[data-clock="main"] .dt-sec').textContent, '55');
+    } finally { t.done(); frames.release(); }
+  });
+  // The engine plans thirty seconds over ahead; the frame loop plans again as each one passes, beside a projector
+  // window too, and not on a frame where nothing changed.
+  DT.test('ui: the seconds over keep being planned while a stage runs over', () => {
+    [false, true].forEach(desk => {
+      const frames = holdFrames();
+      const t = desk ? bootDesk() : boot();
+      const where = desk ? 'beside a projector' : 'alone';
+      const over = [];
+      t.c.on('events', list => list.forEach(e => { if (e.type === 'over') over.push(e.key); }));
+      try {
+        press('Space');
+        const log = t.bells.log.scheduled;
+        const last = () => log[log.length - 1].filter(b => b.sound === 'tock').map(b => b.at - T0);
+        assert.deepEqual([last().length, last()[0], last()[29]], [30, 181000, 210000], where);
+        t.clock.advance(215500);                        // past the last of them, with no frame in between
+        frames.step();
+        assert.deepEqual([last().length, last()[0], last()[29]], [30, 216000, 245000], where);
+        assert.equal(t.c.session().runs[t.c.session().timeline[0].id].over.main, 35);
+        assert.deepEqual(over, ['o34', 'o35'], 'only the seconds over within the stale window, ' + where);
+        const plans = log.length;
+        frames.step(); frames.step(); frames.step();   // the clock held: nothing changed
+        assert.equal(log.length, plans, 'no plan on a frame where nothing changed, ' + where);
+        t.clock.advance(1000); frames.step();
+        assert.deepEqual([log.length, last()[0]], [plans + 1, 217000], 'one plan for the next second over, ' + where);
+        t.clock.advance(400); frames.step();
+        assert.equal(log.length, plans + 1, 'and none until the one after, ' + where);
+      } finally { t.done(); frames.release(); }
+    });
+  });
+  // A hidden page gets no frames: a 1 s timer moves the rules and the bell plan on instead, until the clock stops or
+  // the page is seen again. Frames are held throughout, so every plan here comes from that timer.
+  DT.test('ui: while the page is hidden a 1 s timer keeps the seconds over planned, with no frames', async () => {
+    const frames = holdFrames();
+    let hidden = false;
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') });
+    const turn = h => { hidden = h; document.dispatchEvent(new Event('visibilitychange')); };
+    const t = boot();
+    try {
+      const log = t.bells.log.scheduled;
+      const first = () => log[log.length - 1].filter(b => b.sound === 'tock').map(b => b.at - T0)[0];
+      turn(true);
+      press('Space');                                   // started with the page hidden (a key from the projector window)
+      t.clock.advance(215500);
+      const plans = log.length;
+      await later(1050);
+      assert.deepEqual([log.length, first()], [plans + 1, 216000], 'a beat of the timer plans the window on');
+      t.clock.advance(1000); await later(1000);
+      assert.deepEqual([log.length, first()], [plans + 2, 217000], 'once a second');
+      await later(1000);
+      assert.equal(log.length, plans + 2, 'the clock held: nothing to plan');
+      press('Space');                                   // paused
+      const paused = log.length;
+      t.clock.advance(3000); await later(3000);
+      assert.equal(log.length, paused, 'the timer goes with the clock');
+      press('Space');                                   // on again, still hidden: 36.5 s over
+      t.clock.advance(1000); await later(1050);
+      assert.deepEqual([log.length, first()], [paused + 2, 221000], 'and comes back with it');
+      turn(false);                                      // seen again: the frame loop takes over
+      t.clock.advance(1000); await later(2100);
+      assert.equal(log.length, paused + 2, 'no timer once the page shows');
+      frames.step();
+      assert.deepEqual([log.length, first()], [paused + 3, 222000]);
+    } finally {
+      t.done();
+      delete document.visibilityState;
+      frames.release();
+    }
   });
   DT.test('ui: the current row of the stage list shows its time behind a dot of its own', () => {
     const t = boot();

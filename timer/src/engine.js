@@ -3,9 +3,14 @@
   'use strict';
   const HISTORY_MAX = 100;
   const STALE_MS = 1500;
-  const DEFAULT_BELLS = Object.freeze({ warn: Object.freeze([30]), countdown: 0, end: 'double' });
-  const BREAK_BELLS = Object.freeze({ warn: Object.freeze([]), countdown: 0, end: 'chime' });
+  // What the school cup asks of a speech (revised 2026-10-18): 30 s, 5 s, 3-2-1, the end bell, then every second over.
+  const DEFAULT_BELLS = Object.freeze({ warn: Object.freeze([30, 5]), countdown: 3, end: 'double', overtime: 'tick' });
+  // A 30 s break has no use for a 30 s warning, and it stops itself at zero, so it never runs over.
+  const BREAK_BELLS = Object.freeze({ warn: Object.freeze([]), countdown: 3, end: 'chime', overtime: 'none' });
   const END_SOUND = { double: 'double', triple: 'triple', long: 'long', chime: 'chime', none: null };
+  const OVER_SOUND = { tick: 'tock', none: null };
+  const OVER_AHEAD = 30;   // overtime seconds upcomingBells plans ahead; the UI plans again as each one passes
+  const NOT_BREAK = '奇袭只能在评委打分的间隔里插入';
   const SIDE_NAME = { pro: '正方', con: '反方' };
   const NOT_DUAL = '这个环节只有一个计时器';
   const clone = v => JSON.parse(JSON.stringify(v));
@@ -19,11 +24,12 @@
   // ---- bells ----
 
   function mergeBells(base, over) {
-    const b = { warn: base.warn.slice(), countdown: base.countdown, end: base.end };
+    const b = { warn: base.warn.slice(), countdown: base.countdown, end: base.end, overtime: base.overtime };
     if (!over) return b;
     if (Array.isArray(over.warn)) b.warn = over.warn.slice();
     if (typeof over.countdown === 'number') b.countdown = over.countdown;
     if (typeof over.end === 'string') b.end = over.end;
+    if (typeof over.overtime === 'string') b.overtime = over.overtime;
     return b;
   }
 
@@ -33,7 +39,8 @@
     return mergeBells(base, stage && stage.bells);
   }
 
-  // Every bell point of one clock, latest-remaining first: w<t>, c<n>…c1, end.
+  // Every bell point of one clock, latest-remaining first: w<t>, c<n>…c1, end. Overtime seconds are not among them:
+  // they never run out, so tick counts them per clock (run.over) instead of keying each into `fired`.
   function bellPoints(bells) {
     const pts = Array.from(new Set(bells.warn || [])).map(t => ({ key: 'w' + t, ms: t * 1000, type: 'warn' }));
     for (let n = bells.countdown || 0; n >= 1; n--) pts.push({ key: 'c' + n, ms: n * 1000, type: 'count' });
@@ -44,6 +51,7 @@
   function soundOf(point, bells) {
     if (point.type === 'warn') return 'ding';
     if (point.type === 'count') return 'tick';
+    if (point.type === 'over') return OVER_SOUND[bells.overtime] || null;
     return Object.prototype.hasOwnProperty.call(END_SOUND, bells.end) ? END_SOUND[bells.end] : 'double';
   }
 
@@ -61,9 +69,14 @@
       locked: { pro: false, con: false },
       yielded: { pro: 0, con: 0 },
       fired: { main: [], pro: [], con: [] },
+      over: { main: 0 },   // whole seconds of overtime already reported (only a single stage runs over)
       done: false,
     };
   }
+
+  // Whether this run rings every whole second it is over: a single stage whose bells say so.
+  const ringsOver = (run, bells) => run.kind === 'single' && !!soundOf({ type: 'over' }, bells);
+  const overSeen = (run, id) => (run.over && run.over[id]) || 0;   // a run saved before run.over existed has none
 
   // Only a single stage runs into overtime; a dual side or a break that ran out before the next tick reads 0.
   function remaining(run, id, now) {
@@ -235,6 +248,9 @@
         if (left > p.ms) { if (i >= 0) fired.splice(i, 1); }
         else if (i < 0) { fired.push(p.key); crossed = p; }
       });
+      // The seconds over that the new time is already past are spent the same way, silently: tick then rings the
+      // next one on time, with no burst for those set behind it. Set back above zero, there are none.
+      if (run.kind === 'single') run.over = Object.assign({}, run.over, { [id]: left < 0 ? Math.floor(-left / 1000) : 0 });
       if (live && crossed) s.lastRung = [rung(crossed, id, bells, now)];
     });
   }
@@ -288,34 +304,52 @@
   function next(session, now) { return goto(session, session.cursor + 1, now); }
   function prev(session, now) { return goto(session, session.cursor - 1, now); }
 
-  // Insert an extra stage right after the current one; the cursor stays where it is.
+  // Why nothing can be inserted on the current card, or null. A surprise attack is launched while the judges score,
+  // so only a break takes one (revised 2026-10-18).
+  function insertBlocked(session) {
+    if (session.cursor >= session.timeline.length) return { code: 'ended', message: '比赛已经结束' };
+    const st = currentStage(session);
+    if (!st || st.type !== 'break') return { code: 'not-break', message: NOT_BREAK };
+    return null;
+  }
+
+  // Insert a surprise attack during a break, as one package (revised 2026-10-18): the attack, then a copy of the
+  // break, right after the current one, and the cursor moves onto the attack, not started. A break that is running
+  // stops here and the rest of it is dropped: the copy after the attack gives the judges their time back. One undo
+  // step takes it all back.
   function insertExtra(session, group, variantIndex, side, now) {
     const g = (session.format.extras || []).find(x => x.group === group);
     const variant = g && g.variants[variantIndex];
     if (!variant || !SIDE_NAME[side]) return noop(session);
-    if (session.cursor >= session.timeline.length) return refuse(session, 'ended', '比赛已经结束');
-    const st = currentStage(session);
-    if (st && getRun(session).running) return refuse(session, 'running', '先暂停再插入');
+    const blocked = insertBlocked(session);
+    if (blocked) return refuse(session, blocked.code, blocked.message);
     const used = (session.extrasUsed[group] || {})[side] || 0;
     if (used >= g.perSide) return refuse(session, 'extra-limit', SIDE_NAME[side] + '的' + group + '已经用过了');
     const s = begin(session);
+    const st = currentStage(s);
+    if (s.runs[st.id]) stop(s.runs[st.id], now);
     const ids = new Set(s.timeline.map(x => x.id));
     let n = 1;
-    while (ids.has('x-' + n)) n++;
-    const stage = Object.assign(clone(variant), {
+    while (ids.has('x-' + n) || ids.has('x-' + n + '-b')) n++;
+    const attack = Object.assign(clone(variant), {
       id: 'x-' + n,
       name: SIDE_NAME[side] + variant.name,
       side: variant.type === 'single' ? side : null,
       extra: true,
     });
-    s.timeline.splice(Math.min(s.cursor + 1, s.timeline.length), 0, stage);
+    const again = { id: 'x-' + n + '-b', name: st.name, type: st.type, side: null, secs: st.secs, extra: true };
+    if (st.bells) again.bells = clone(st.bells);
+    if (st.note) again.note = st.note;
+    s.timeline.splice(s.cursor + 1, 0, attack, again);
+    s.cursor += 1;
     s.extrasUsed[group] = s.extrasUsed[group] || { pro: 0, con: 0 };
     s.extrasUsed[group][side] = used + 1;
     return s;
   }
 
   // "As if that press never happened": the restored clock ran on through the undone moments, so a bell point
-  // it crossed then rings now, late rather than never, unless it already rang before the undo.
+  // it crossed then rings now, late rather than never, unless it already rang before the undo. A second over is not
+  // worth a late ring (it would take the place of a late end bell): the next one comes on time.
   function undo(session, now) {
     const h = session.history || [];
     if (!h.length) return refuse(session, 'nothing-to-undo', '没有可以撤销的操作');
@@ -330,7 +364,8 @@
     const bells = st && effectiveBells(s.format, st);
     const latest = {};
     out.events.forEach(e => {
-      if (e.type === 'switch' || (before && (before.fired[e.clock] || []).indexOf(e.key) >= 0)) return;
+      if (e.type === 'switch' || e.type === 'over') return;
+      if (before && (before.fired[e.clock] || []).indexOf(e.key) >= 0) return;
       latest[e.clock] = e;
     });
     const list = Object.keys(latest).map(id => rung(latest[id], id, bells, now));
@@ -351,7 +386,8 @@
     if (!r0 || !r0.running) return { session, events: [] };
     const run = clone(r0);
     const events = [];
-    const points = bellPoints(effectiveBells(session.format, st));
+    const bells = effectiveBells(session.format, st);
+    const points = bellPoints(bells);
     let changed = false;
     // Loop because a dual stage can hand over and run the second side out within the same tick.
     for (let guard = 0; guard < 3 && run.running; guard++) {
@@ -365,6 +401,17 @@
         changed = true;
         if (now - at <= staleMs) events.push({ type: p.type, clock: id, key: p.key, at });
       });
+      // Second n over rings at exactly endAt + n s. Only those within the stale window are reported; the count
+      // passes over any before it in one step, so a clock left running for hours costs nothing here.
+      const over = Math.floor((now - endAt) / 1000);
+      const seen = overSeen(run, id);
+      if (ringsOver(run, bells) && over > seen) {
+        for (let n = Math.max(seen + 1, Math.ceil((now - staleMs - endAt) / 1000)); n <= over; n++) {
+          events.push({ type: 'over', clock: id, key: 'o' + n, at: endAt + n * 1000 });
+        }
+        run.over = Object.assign({}, run.over, { [id]: over });
+        changed = true;
+      }
       if (endAt > now || run.kind === 'single') break;
       changed = true;
       c.used = c.total;
@@ -387,7 +434,9 @@
     return { session: Object.assign({}, session, { runs }), events };
   }
 
-  // Future bells of the running clock, plus the other side's after a dual handover.
+  // Future bells of the running clock, plus the other side's after a dual handover. A single clock that rings in
+  // overtime adds its next OVER_AHEAD seconds over, from wherever it is: a rolling window, planned again by the UI
+  // whenever the session changes, which it does every second over.
   function upcomingBells(session, now) {
     const st = currentStage(session);
     const run = st && session.runs[st.id];
@@ -405,6 +454,11 @@
     list(run.active, endAt);
     const to = other(run.active);
     if (run.kind === 'dual' && !run.locked[to]) list(to, endAt + run.clocks[to].total - run.clocks[to].used);
+    if (ringsOver(run, bells)) {
+      const sound = soundOf({ type: 'over' }, bells);
+      const first = Math.max(overSeen(run, run.active) + 1, Math.floor((now - endAt) / 1000) + 1);
+      for (let n = first; n < first + OVER_AHEAD; n++) out.push({ at: endAt + n * 1000, sound, clock: run.active });
+    }
     return out;
   }
 
@@ -496,7 +550,7 @@
 
   DT.engine = {
     DEFAULT_BELLS, createSession, currentStage, getRun, remaining, view, toggle, floor, pause, adjust,
-    yieldTime, reset, goto, next, prev, insertExtra, undo, tick, upcomingBells, record, fmt,
+    yieldTime, reset, goto, next, prev, insertExtra, insertBlocked, undo, tick, upcomingBells, record, fmt,
     effectiveBells, bellPoints,
   };
 })(window.DT = window.DT || {});

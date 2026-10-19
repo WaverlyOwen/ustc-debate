@@ -12,6 +12,7 @@
   const SIDES = [['pro', '正', '正方'], ['con', '反', '反方']];
   const COUNTDOWNS = [0, 3, 5, 10];
   const END_NAMES = { double: '两声', triple: '三声', long: '长鸣', chime: '轻铃', none: '不响' };
+  const OVERTIME = [['tick', '开'], ['none', '关']];
   const MSG = {
     secs: '时长写成 3:00 或 180',
     warn: '提示铃点写成秒数，如 30 或 60, 30',
@@ -388,8 +389,9 @@
       return g;
     }
 
-    // Warning bells, countdown and end bell. `set(field, value)` stores one of them.
-    function bellControls(bells, key, slot, set, isBreak) {
+    // Warning bells, countdown, end bell and the tock every second over. `set(field, value)` stores one of them.
+    // `overtime` false leaves the last one out: a free debate side or a break stops at zero and is never over.
+    function bellControls(bells, key, slot, set, isBreak, overtime) {
       const box = el('div', 'dt-ed-bells');
       const warn = parsedField('warn', key + ':warn', bells.warn.join(', '), slot, parseWarn, () => MSG.warn,
         v => { set('warn', v); return v.join(', '); });
@@ -408,6 +410,13 @@
       const end = selectBox('end', key + ':end', ends.map(e => [e, END_NAMES[e]]), bells.end);
       end.addEventListener('change', () => { set('end', end.value); commit(); });
       box.appendChild(field('终止铃', end));
+      if (overtime !== false) {
+        const over = selectBox('overtime', key + ':overtime', OVERTIME, bells.overtime === 'none' ? 'none' : 'tick');
+        over.addEventListener('change', () => { set('overtime', over.value); commit(); });
+        const o = field('超时每秒提示', over);
+        o.title = '单方环节超时后，每过一秒轻响一声，直到暂停或换环节';
+        box.appendChild(o);
+      }
       return box;
     }
 
@@ -558,7 +567,7 @@
       box.appendChild(field('计时员提示', noteBox, 'dt-ed-wide'));
 
       const custom = !!s.bells;
-      const mode = selectBox('bells-mode', k + ':bells-mode', [['follow', s.type === 'break' ? '跟随默认（轻铃一声）' : '跟随赛制'], ['custom', '自定义']],
+      const mode = selectBox('bells-mode', k + ':bells-mode', [['follow', s.type === 'break' ? '跟随默认（3、2、1 后轻铃）' : '跟随赛制'], ['custom', '自定义']],
         custom ? 'custom' : 'follow');
       mode.addEventListener('change', () => {
         if (mode.value === 'custom') s.bells = DT.engine.effectiveBells(draft, Object.assign({}, s, { bells: undefined }));
@@ -572,7 +581,7 @@
       if (custom) {
         bells.appendChild(bellControls(DT.engine.effectiveBells(draft, s), k + ':bells', rowOf(s), (key, v) => {
           s.bells[key] = v;
-        }, s.type === 'break'));
+        }, s.type === 'break', s.type === 'single'));
       }
       box.appendChild(bells);
       return box;

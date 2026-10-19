@@ -9,6 +9,7 @@
   const RUNG_MEMORY = 32;       // visual events the projector remembers, so one reported twice plays once
   const MERGE_MS = 1000;        // adjusts of one clock this close together are one undo step (a held arrow key)
   const SAVE_SOON_MS = 300;     // how long a merged adjust waits before it is saved
+  const HIDDEN_TICK_MS = 1000;  // how often the rules and the bell plan move on while the page is hidden (no frames)
   const PROJECTOR_FLAG = 'dt.projector';   // sessionStorage: this tab has a projector window open (§5.11)
   const SIDE_NAME = { pro: '正方', con: '反方' };
   const LAST_MATCH = ['proMotion', 'conMotion', 'proTeam', 'conTeam', 'proSeat'];   // prefilled next time (§5.9)
@@ -21,6 +22,8 @@
   // but a console opened anew cannot (its O opens a window of its own), so this one is to be closed.
   const CONSOLE_GONE = '控制台已关闭。关掉这个窗口，在主窗口按 O 重新打开投影';
   const CONSOLE_AWAY = '计时员在开赛页，回到计时后继续';         // a key in a projector window while the console is away
+  // The toast of the sound check (B or 试音 on the title card), naming what it plays in order (bells.js DEMO).
+  const SOUND_CHECK = '试音：30 秒 → 5 秒 → 3、2、1 → 结束 → 超时';
   // What ?exportProbe=1 exports, for the end-to-end test (new spec §4.4).
   const PROBE = {
     format: 'ustc-freshman-cup', theme: 'hall',
@@ -40,8 +43,8 @@
     [['Shift+↑', 'Shift+↓'], '当前时钟 +5 / −5 秒'],
     [['R R'], '重置当前环节（连按两次）；其他环节在环节列表（S）里重置'],
     [['G G'], '当前发言方放弃剩余时间（自由辩 / 对辩，连按两次）'],
-    [['B'], '手动敲铃'],
-    [['X'], '插入奇袭（赛制有可插入环节时）'],
+    [['B'], '手动敲铃；开场卡上：试音（整套提示音压缩着放一遍，再按从头再放）'],
+    [['X'], '插入奇袭（评委打分的间隔里，赛制有可插入环节时）；插入后直接进入奇袭'],
     [['S'], '环节列表'],
     [['Shift+S'], '本场记录'],
     [['E'], '编辑赛制（这一场照常进行）'],
@@ -82,6 +85,11 @@
     '<div class="dt-dock-group">' +
     '<button type="button" data-act="floor" data-side="pro"><i class="dt-swatch" data-side="pro"></i><span>正方</span><kbd>A</kbd></button>' +
     '<button type="button" data-act="floor" data-side="con"><i class="dt-swatch" data-side="con"></i><span>反方</span><kbd>L</kbd></button></div>' +
+    // On the title card only, in place of 正方 / 反方 (which no title card uses): the sound check and the volume, so
+    // the level can be set to the room before the match. Not a <label>: see the console's slider.
+    '<div class="dt-dock-group" data-check hidden>' +
+    '<button type="button" data-act="bell"><span class="dt-bell-label">试音</span><kbd>B</kbd></button>' +
+    '<div class="dt-volume"><span>音量</span><input type="range" name="volume" aria-label="音量" min="0" max="1" step="0.05"></div></div>' +
     '<div class="dt-dock-group">' +
     '<button type="button" data-act="undo"><span>撤销</span><kbd>Z</kbd></button>' +
     RESET_BUTTON +
@@ -119,7 +127,7 @@
     RESET_BUTTON +
     '<button type="button" data-act="insert" data-wide><span>插入奇袭</span><kbd>X</kbd></button></div>' +
     '<div class="dt-control-group">' +
-    '<button type="button" data-act="bell"><span>敲铃</span><kbd>B</kbd></button>' +
+    '<button type="button" data-act="bell"><span class="dt-bell-label">敲铃</span><kbd>B</kbd></button>' +
     '<button type="button" data-act="mute" aria-pressed="false"><span class="dt-mute-label">静音</span><kbd>M</kbd></button>' +
     // Not a <label>: a click on 音量 would give the slider focus (new spec §3, P1).
     '<div class="dt-volume"><span>音量</span><input type="range" name="volume" aria-label="音量" min="0" max="1" step="0.05"></div></div>' +
@@ -323,10 +331,12 @@
   function controlSet(box) {
     const b = sel => box.querySelector('button[data-act="' + sel + '"]');
     const toggle = b('toggle');
+    const bell = b('bell');
     return {
       prev: b('prev'), next: b('next'), toggle, new: b('new'), undo: b('undo'), insert: b('insert'), reset: b('reset'),
       pro: box.querySelector('button[data-side="pro"]'), con: box.querySelector('button[data-side="con"]'),
       icon: toggle.querySelector('.dt-icon'), label: toggle.querySelector('.dt-toggle-label'),
+      bell: bell && bell.querySelector('.dt-bell-label'), check: box.querySelector('[data-check]'),
     };
   }
 
@@ -403,8 +413,11 @@
     const pills = { sound: status.querySelector('[data-kind="sound"]'), muted: status.querySelector('[data-kind="muted"]') };
 
     let raf = null, destroyed = false, overlay = null, armed = null, dockTimer = null, dockPinned = false;
+    let hiddenTimer = null;   // the 1 s timer that stands in for the frame loop while the page is hidden
     let desk = null;   // the console's handle while a projector window is open
     let lastAdjust = null, saveTimer = null;   // {key, at} of the last adjust; a save held back while a key repeats
+    let checking = false;   // a sound check was started here and may still be playing: leaving the title card stops it
+    const dockVolume = dock.querySelector('input[name="volume"]');
     const disarms = [];   // one per 重置 / 退出 of the dock and the console, to put its label back when the page goes
 
     function viewAt(now) {
@@ -447,13 +460,29 @@
         btn[side].disabled = !dual || !!(clock && clock.locked);
       });
       btn.undo.disabled = !(session.history && session.history.length);
-      btn.insert.disabled = !v.extras.length || v.mode === 'end';
+      // A surprise attack goes in during a break, while either side still has one to use.
+      btn.insert.disabled = !(st && st.type === 'break' && v.extras.some(g => g.used.pro < g.perSide || g.used.con < g.perSide));
       btn.reset.disabled = !st;
+      const title = v.mode === 'title';
+      if (btn.bell) text(btn.bell, title ? '试音' : '敲铃');   // B, which is the sound check on the title card
+      // The dock makes room for the sound check on the title card, where 正方 / 反方 and 插入奇袭 never apply, so it
+      // stays one row on a 4:3 projector.
+      if (btn.check) {
+        attr(btn.check, 'hidden', !title);
+        attr(btn.pro.parentNode, 'hidden', title);
+        attr(btn.insert, 'hidden', title);
+      }
+    }
+
+    // A volume slider follows the setting, except the one being dragged.
+    function showVolume(input) {
+      if (document.activeElement !== input) input.value = String(settings.volume);
     }
 
     function paintStatus() {
       attr(pills.sound, 'data-shown', !still && !bells.isUnlocked());
       attr(pills.muted, 'data-shown', !!settings.muted);
+      showVolume(dockVolume);
       if (desk) desk.paintSettings();
     }
 
@@ -498,8 +527,13 @@
       if (merged) next = Object.assign({}, next, { history: h1.slice(0, -1) });
       lastAdjust = key && pushed ? { key, at: now } : null;
       session = next;
+      if (checking && session.cursor >= 0) {   // the match is under way: what is left of a sound check would ring over it
+        checking = false;
+        bells.stopDemo();
+      }
       save(merged);
       bells.schedule(DT.engine.upcomingBells(session, now), now);
+      watchHidden();   // a clock started or stopped while the page is hidden (a key from the projector window)
       if (session.lastFeedback) toast(session.lastFeedback.message, session.lastFeedback.code === 'locked');
       emit('change', session);
       paint(now);
@@ -523,6 +557,20 @@
       settings.volume = volume;
       bells.setVolume(volume);
       DT.store.saveSettings(settings);
+      paintStatus();   // the other slider (the dock's or the console's) follows
+    }
+
+    // 试音 (B on the title card, revised 2026-10-18): every sound a stage rings, in order, pressed into nine seconds,
+    // so the volume can be set to the room before the match; the volume slider sits beside the button and a change is
+    // heard on the sounds still to come. Pressing again starts it over, to hear a new level from the top. It is asked
+    // for to be heard, so a muted timer is unmuted first (the 静音 mark goes, and M mutes again).
+    function soundCheck() {
+      const unmute = !!settings.muted;
+      if (unmute) toggleMute();
+      bells.demo();
+      checking = true;
+      paintStatus();   // the check unlocks the audio: the sound hint goes
+      toast((unmute ? '已取消静音。' : '') + SOUND_CHECK);
     }
 
     // Leaving for the setup page (new spec §2.2): the clock is settled and stopped first, so the time spent away is
@@ -540,7 +588,10 @@
       env.onExit(session);
     }
 
-    const OTHER_ACTS = { bell: () => bells.play('ding'), mute: toggleMute, fullscreen: () => toggleFullscreen(root), exit };
+    const OTHER_ACTS = {
+      bell: () => (session.cursor < 0 ? soundCheck() : bells.play('ding')),
+      mute: toggleMute, fullscreen: () => toggleFullscreen(root), exit,
+    };
 
     function act(name) {
       if (destroyed) return false;
@@ -690,6 +741,8 @@
     function insertOverlay(body) {
       let sig = null;
       return function refresh(now, v) {
+        // Off the break (→, ←, a row of the stage list, the insert itself) every button could only refuse: it closes.
+        if (DT.engine.insertBlocked(session)) { closeOverlay(); return; }
         const s = JSON.stringify(v.extras);
         if (s === sig) return;
         sig = s;
@@ -726,7 +779,7 @@
           });
           body.appendChild(sec);
         });
-        body.appendChild(el('p', 'dt-hint', '插在当前环节之后，按 → 进入'));
+        body.appendChild(el('p', 'dt-hint', '插入后直接进入奇袭，按空格开始；奇袭之后再给评委一段同样的间隔'));
       };
     }
 
@@ -800,8 +853,9 @@
         toast('这个赛制没有可插入的环节');
         return false;
       }
-      if (name === 'insert' && session.cursor >= session.timeline.length) {
-        toast('比赛已经结束');
+      const blocked = name === 'insert' && DT.engine.insertBlocked(session);   // only a break takes a surprise attack
+      if (blocked) {
+        toast(blocked.message);
         return false;
       }
       closeOverlay();
@@ -868,6 +922,10 @@
     dock.addEventListener('click', onControlClick);
     confirmControls(dock);
     keepFocus(dock);
+    dockVolume.addEventListener('input', () => setVolume(Number(dockVolume.value)));
+    // Let go of the slider once it is set, or its focus would hold the dock open for good (hideDock waits on focus).
+    // The arrow keys belong to the timer, so the slider is for the mouse only, as on the console.
+    dockVolume.addEventListener('change', () => dockVolume.blur());
     dock.addEventListener('focusin', showDock);
     dock.addEventListener('focusout', showDock);
 
@@ -915,7 +973,7 @@
         paintSettings() {
           attr(mute, 'aria-pressed', settings.muted ? 'true' : 'false');
           text(mute.querySelector('.dt-mute-label'), settings.muted ? '取消静音' : '静音');
-          if (document.activeElement !== volume) volume.value = String(settings.volume);
+          showVolume(volume);
         },
         destroy() {
           root.insertBefore(stage.el, root.firstChild);
@@ -957,25 +1015,52 @@
 
     // ---- frame loop ----
 
-    // One frame: apply the automatic rules, keep what changed, play their visual events, repaint.
+    // The automatic rules up to `now`: keep what changed, plan the bells again, play their visual events.
+    function advance(now) {
+      const out = DT.engine.tick(session, now);
+      if (out.session !== session) {
+        session = out.session;
+        save(false);
+        emit('change', session);
+        // The seconds over are planned only so far ahead (engine OVER_AHEAD); each one that passes changes the
+        // session, so the plan rolls on here while the clock runs over.
+        bells.schedule(DT.engine.upcomingBells(session, now), now);
+      }
+      pulse(out.events);
+    }
+
+    // One frame: the automatic rules, then a repaint.
     // The next frame is asked for first, so one frame that throws cannot stop the display for good.
     function frame() {
       raf = requestAnimationFrame(frame);
       try {
         const now = DT.clock.now();
-        const out = DT.engine.tick(session, now);
-        if (out.session !== session) {
-          session = out.session;
-          save(false);
-          emit('change', session);
-        }
-        pulse(out.events);
+        advance(now);
         paint(now);
       } catch (e) {
         console.warn('这一帧没画出来：', e);
       }
     }
+
+    // A hidden page gets no frames, so the frame loop stops there; but the seconds over are planned only thirty ahead.
+    // While the page is hidden and a clock runs (the console minimised, or behind another tab while the timekeeper
+    // works from the projector window), a 1 s timer, which a hidden page still gets, moves the rules and the plan on
+    // instead. It paints nothing, since nothing shows, and goes once the page is seen again or the clock stops.
+    function watchHidden() {
+      const st = DT.engine.currentStage(session);
+      const on = !destroyed && document.visibilityState === 'hidden' && !!st && DT.engine.getRun(session).running;
+      if (on && !hiddenTimer) hiddenTimer = setInterval(hiddenTick, HIDDEN_TICK_MS);
+      else if (!on && hiddenTimer) { clearInterval(hiddenTimer); hiddenTimer = null; }
+    }
+
+    function hiddenTick() {
+      try { advance(DT.clock.now()); } catch (e) { console.warn('后台计时出错：', e); }
+      watchHidden();   // a break that ran out has stopped its clock
+    }
+
+    document.addEventListener('visibilitychange', watchHidden);
     frame();
+    watchHidden();   // a page opened, or a match resumed, in a tab not in view
     if (env.console) setConsole(true);
     const bootNow = DT.clock.now();
     bells.schedule(DT.engine.upcomingBells(session, bootNow), bootNow);   // a resumed clock rings on time
@@ -995,6 +1080,9 @@
         if (desk) setConsole(false);
         destroyed = true;
         cancelAnimationFrame(raf);
+        document.removeEventListener('visibilitychange', watchHidden);
+        clearInterval(hiddenTimer);
+        hiddenTimer = null;
         clearTimeout(dockTimer);
         if (saveTimer) save(false);   // a held-back save goes out now
         window.removeEventListener('keydown', onKeyDown);

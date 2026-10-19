@@ -53,6 +53,8 @@
     assert.deepEqual(S.validateFormat(f), ['第 2 个环节：先发言的一方只能是正方或反方']);
     assert.deepEqual(S.validateFormat(Object.assign(good(), { bells: { warn: [30], countdown: 11, end: 'double' } })), ['铃声：逐秒倒数最多 10 秒']);
     assert.deepEqual(S.validateFormat(withStage({ bells: { warn: [-5] } })), ['第 1 个环节：铃声：提示铃点要写成正整数秒']);
+    assert.deepEqual(S.validateFormat(withStage({ bells: { overtime: 'tock' } })), ['第 1 个环节：铃声：超时每秒提示只能是开或关']);
+    assert.deepEqual(S.validateFormat(Object.assign(good(), { bells: { overtime: 'none' } })), []);
     assert.deepEqual(S.validateFormat(Object.assign(good(), { extras: [{ group: '奇袭', perSide: 0, variants: [{ name: 'x', type: 'single', secs: 60 }] }] })),
       ['可插入环节「奇袭」：每方次数至少 1 次']);
     assert.deepEqual(S.validateFormat(null), ['这不是一个赛制']);
@@ -81,6 +83,20 @@
     assert.equal(again[0].name, '改过的');
     assert.equal(again[again.length - 1].id, 'u-x');
     const restored = S.restoreBuiltin(again, DT.BUILTIN_FORMATS[0].id);
+    assert.ok(S.isPristine(restored[0]));
+  });
+
+  // Revised 2026-10-18: a built-in edited before the new default bells keeps the bells it was saved with (no 5 s, no
+  // 3-2-1) and takes the tock over time from the new default, which it does not name; 恢复默认 brings the new sequence.
+  DT.test('store: an edited built-in saved with the old bells loads, rings them plus the tock over time, and restores to the new ones', () => {
+    const st = memStorage(); S.useStorage(st);
+    const old = Object.assign(JSON.parse(JSON.stringify(DT.BUILTIN_FORMATS[0])), { name: '改过的', bells: { warn: [30], countdown: 0, end: 'double' } });
+    st.setItem('dt.formats.v1', JSON.stringify({ schema: 1, formats: [old] }));
+    const list = S.loadFormats();
+    assert.equal(list[0].name, '改过的');
+    assert.deepEqual(DT.engine.effectiveBells(list[0], list[0].stages[0]), { warn: [30], countdown: 0, end: 'double', overtime: 'tick' });
+    const restored = S.restoreBuiltin(list, list[0].id);
+    assert.deepEqual(restored[0].bells, DT.engine.DEFAULT_BELLS);
     assert.ok(S.isPristine(restored[0]));
   });
 

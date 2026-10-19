@@ -206,6 +206,37 @@
     } finally { t.done(); }
   });
 
+  // Revised 2026-10-18: a surprise attack goes in as a package and the console moves onto it; the projector needs
+  // nothing of its own for that, only the state the console sends.
+  DT.test('sync: a surprise attack inserted on the console reaches the projector, on the attack', () => {
+    const t = bootConsole({ formatId: 'ustc-school-cup' });
+    let sent;
+    try {
+      press('KeyO');
+      const brk = t.c.session().timeline.findIndex(s => s.type === 'break');
+      t.c.act('goto', brk);
+      t.c.act('toggle');
+      t.advance(4000);
+      t.c.act('insert', '奇袭', 1, 'con');
+      sent = t.states().pop();
+      assert.equal(sent.session.cursor, brk + 1);
+      assert.deepEqual(sent.session.timeline.slice(brk, brk + 3).map(x => x.id),
+        [t.c.session().timeline[brk].id, 'x-1', 'x-1-b']);
+      assert.equal(t.root.querySelectorAll('.dt-console-list button[data-index]').length, 20, 'the console list shows both');
+    } finally { t.done(); }
+    const box = document.getElementById('sandbox'); box.innerHTML = '<div></div>';
+    const me = fakeWin();
+    me.opener = fakeWin();
+    DT.clock.set(() => T0 + 4000);
+    const c = DT.app.boot({ root: box.firstChild, route: 'projector', window: me, storage: memStorage(), bells: fakeBells() });
+    try {
+      me.emit('message', { data: sent });
+      assert.equal(box.querySelector('.dt-title').textContent, '反方奇袭申论');
+      assert.equal(box.querySelectorAll('.dt-progress > [data-extra]').length, 2);
+      assert.deepEqual(c.view().clocks.map(x => x.text), ['2:00']);
+    } finally { c.destroy(); DT.clock.reset(); }
+  });
+
   DT.test('sync: keys pressed in the projector window drive the console', () => {
     const t = bootConsole();
     try {
