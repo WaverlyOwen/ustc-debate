@@ -276,4 +276,65 @@
     assert.deepEqual(list.filter(f => /^ustc-school-cup/.test(f.id)).map(f => f.name), ['新的']);
     assert.equal(list.length, DT.BUILTIN_FORMATS.length);
   });
+
+  // ---- an extra group's insertion rules (revised 2026-10-21) ----
+
+  const rules = patch => Object.assign({ group: '奇袭', perSide: 1, variants: [{ name: '奇袭质询', type: 'single', secs: 150 }] }, patch);
+  const rulesErrs = patch => S.validateFormat(Object.assign(good(), { extras: [rules(patch)] }));
+
+  DT.test('store: an extra group goes in during a break or after any stage, and nothing else', () => {
+    assert.deepEqual(rulesErrs({}), [], 'both may be missing');
+    assert.deepEqual(rulesErrs({ where: 'break' }), []);
+    assert.deepEqual(rulesErrs({ where: 'any' }), []);
+    ['anywhere', '', null, 1].forEach(where => assert.deepEqual(rulesErrs({ where }),
+      ['可插入环节「奇袭」：插入时机只能是间隔里或任意环节之后'], String(where)));
+  });
+
+  DT.test('store: the break after an extra group is none, or has a name and a length', () => {
+    assert.deepEqual(rulesErrs({ after: null }), []);
+    assert.deepEqual(rulesErrs({ after: { name: '评委打分', secs: 30 } }), []);
+    assert.deepEqual(rulesErrs({ after: { name: '评委打分', secs: 30, bells: { countdown: 5 } } }), [], 'bells of its own');
+    const p = '可插入环节「奇袭」：插入后的间隔';
+    assert.deepEqual(rulesErrs({ after: { name: '  ', secs: 30 } }), [p + '名称不能为空']);
+    assert.deepEqual(rulesErrs({ after: { secs: 30 } }), [p + '名称不能为空']);
+    assert.deepEqual(rulesErrs({ after: { name: '长'.repeat(41), secs: 30 } }), [p + '名称最多 40 个字']);
+    assert.deepEqual(rulesErrs({ after: { name: '评委打分', secs: 0 } }), [p + '时长要大于 0 秒']);
+    assert.deepEqual(rulesErrs({ after: { name: '评委打分', secs: 1.5 } }), [p + '时长要大于 0 秒']);
+    assert.deepEqual(rulesErrs({ after: { name: '评委打分', secs: '30' } }), [p + '时长要大于 0 秒']);
+    assert.deepEqual(rulesErrs({ after: { name: '评委打分' } }), [p + '时长要大于 0 秒']);
+    assert.deepEqual(rulesErrs({ after: { name: '评委打分', secs: 3601 } }), [p + '时长不能超过 60 分钟']);
+    assert.deepEqual(rulesErrs({ after: { name: '评委打分', secs: 30, bells: { end: 'gong' } } }),
+      [p + '铃声：终止铃只能是两声、三声、长鸣或不响']);
+    ['评委打分', 30, []].forEach(after => assert.deepEqual(rulesErrs({ after }), [p + '格式不对'], JSON.stringify(after)));
+  });
+
+  DT.test('store: a format saved before the insertion rules loads with them filled in', () => {
+    const st = memStorage(); S.useStorage(st);
+    const old = Object.assign(good(), { extras: [rules({})] });
+    const cup = JSON.parse(JSON.stringify(DT.BUILTIN_FORMATS.find(f => f.id === 'ustc-school-cup')));
+    delete cup.extras[0].where; delete cup.extras[0].after;
+    const own = Object.assign(good(), { id: 'u-any', extras: [rules({ where: 'any', after: { name: '休息', secs: 60 } })] });
+    st.setItem('dt.formats.v1', JSON.stringify({ schema: 1, formats: [old, cup, own] }));
+    const list = S.loadFormats();
+    const g = id => list.find(f => f.id === id).extras[0];
+    assert.equal(g('u-x').where, 'break');
+    assert.equal(g('u-x').after, null);
+    assert.deepEqual([g('ustc-school-cup').where, g('ustc-school-cup').after], ['break', null], 'an edit of the cup, too');
+    assert.deepEqual([g('u-any').where, g('u-any').after], ['any', { name: '休息', secs: 60 }], 'what is there stays');
+    assert.ok(!S.isPristine(list.find(f => f.id === 'ustc-school-cup')), 'unlike the cup as built, it has no break after');
+    assert.deepEqual(list.find(f => f.id === 'recruit-1v1').extras, [], 'formats without extras are left alone');
+    const imp = S.parseImport(JSON.stringify(Object.assign(good(), { extras: [rules({})] })));
+    assert.deepEqual(imp.errors, []);
+    assert.deepEqual([imp.formats[0].extras[0].where, imp.formats[0].extras[0].after], ['break', null], 'an import, too');
+    const bad = S.parseImport(JSON.stringify(Object.assign(good(), { extras: [rules({ where: 'sometimes' })] })));
+    assert.deepEqual(bad.errors, ['「周末模辩」：可插入环节「奇袭」：插入时机只能是间隔里或任意环节之后']);
+  });
+
+  DT.test('store: the built-in formats carry their insertion rules', () => {
+    DT.BUILTIN_FORMATS.forEach(f => f.extras.forEach(x => {
+      assert.ok(x.where === 'break' || x.where === 'any', f.id);
+      assert.ok(x.after === null || (typeof x.after.name === 'string' && Number.isInteger(x.after.secs)), f.id);
+    }));
+    assert.deepEqual(S.validateFormat(DT.BUILTIN_FORMATS.find(f => f.id === 'ustc-school-cup')), []);
+  });
 })();

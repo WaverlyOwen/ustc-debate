@@ -69,6 +69,27 @@ class ParseTests(unittest.TestCase):
                          [("奇袭质询", "single", 150), ("奇袭申论", "single", 120)])
         self.assertIn("双边计时", ex["variants"][0]["note"])
 
+    def test_school_cup_surprise_attack_goes_in_a_break_with_the_judges_break_after_it(self):
+        # Revised 2026-10-21: the insertion rules are data; `after` copies the format's own 评委打分 break.
+        f = self.all["ustc-school-cup"]
+        ex = f["extras"][0]
+        self.assertEqual(ex["where"], "break")
+        self.assertEqual(ex["after"], {"name": "评委打分", "secs": 30})
+        self.assertEqual(list(ex), ["group", "perSide", "where", "after", "variants"])
+        judges = next(s for s in f["stages"] if s["type"] == "break" and s["name"] == "评委打分")
+        self.assertEqual(ex["after"], {"name": judges["name"], "secs": judges["secs"]})
+
+    def test_after_is_none_without_a_judges_break_and_follows_its_length(self):
+        src = (FORMATS / "ustc-school-cup.md").read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "x.md"
+            p.write_text(src.replace("| 评委打分 | 30 秒 |", "| 评委打分 | 45 秒 |", 1), encoding="utf-8")
+            self.assertEqual(build.parse_format(p)["extras"][0]["after"], {"name": "评委打分", "secs": 45},
+                             "the first 评委打分 break")
+            p.write_text(src.replace("评委打分", "中场休息"), encoding="utf-8")
+            ex = build.parse_format(p)["extras"][0]
+            self.assertEqual((ex["where"], ex["after"]), ("break", None))
+
     def test_school_cup_name_has_no_year(self):
         f = self.all["ustc-school-cup"]
         self.assertEqual(f["name"], "中国科学技术大学校赛")

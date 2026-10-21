@@ -13,11 +13,17 @@
         { id: 's3', name: '自由辩论', type: 'dual', side: null, secs: 240, first: 'pro', block: 'D' },
         { id: 's4', name: '反方四辩结辩', type: 'single', side: 'con', secs: 210, block: 'E', bells: { countdown: 5 } },
       ],
-      extras: [{ group: '奇袭', perSide: 1, variants: [
+      extras: [{ group: '奇袭', perSide: 1, where: 'break', after: { name: '评委打分', secs: 30 }, variants: [
         { name: '奇袭质询', type: 'single', secs: 150 }, { name: '奇袭申论', type: 'single', secs: 120 }] }],
     };
   }
   function at(i, now) { return E.goto(E.createSession(fx(), MATCH, T0), i, now === undefined ? T0 : now); }
+  // The fixture with its extra group's rules changed (revised 2026-10-21), on stage i.
+  function atWith(rules, i, now) {
+    const f = fx();
+    Object.assign(f.extras[0], rules);
+    return E.goto(E.createSession(f, MATCH, T0), i, now === undefined ? T0 : now);
+  }
   const rem = (s, clock, now, id) => E.remaining(E.getRun(s, id), clock, now);
 
   DT.test('engine: createSession copies the format and starts at the title card', () => {
@@ -337,33 +343,107 @@
     assert.ok(E.getRun(s).running, 'space starts it');
   });
 
-  DT.test('engine: the break after a surprise attack is a copy of the break it went into', () => {
+  // Revised 2026-10-21: the break after the attack is the group's `after`, no longer a copy of the current break.
+  DT.test('engine: the break after a surprise attack is the group\'s own, not a copy of the break it went into', () => {
     const f = fx();
     f.stages[2].bells = { countdown: 5 };
     f.stages[2].note = '评委打分时只看表';
+    f.extras[0].after = { name: '评委补分', secs: 45 };
     let s = E.goto(E.createSession(f, MATCH, T0), 2, T0);           // in the break, not started
     s = E.insertExtra(s, '奇袭', 1, 'pro', T0);
-    const copy = s.timeline[4];
-    assert.deepEqual([copy.id, copy.name, copy.type, copy.secs, copy.note], ['x-1-b', '评委打分', 'break', 30, '评委打分时只看表']);
-    assert.deepEqual(copy.bells, { countdown: 5 });
-    assert.deepEqual(E.effectiveBells(s.format, copy), E.effectiveBells(s.format, s.timeline[2]));
+    const brk = s.timeline[4];
+    assert.deepEqual(brk, { id: 'x-1-b', name: '评委补分', type: 'break', side: null, secs: 45, extra: true },
+      'neither the current break\'s bells nor its note');
+    assert.deepEqual(E.effectiveBells(s.format, brk), { warn: [], countdown: 3, end: 'chime', overtime: 'none' }, 'BREAK_BELLS');
     assert.equal(s.timeline[3].name, '正方奇袭申论');
     assert.equal(s.timeline[3].secs, 120);
     assert.equal(E.getRun(s, 'b1').running, false);
     assert.equal(Object.keys(s.runs).length, 0, 'a break never started is left without a run');
+    f.extras[0].after = { name: '评委打分', secs: 30, bells: { countdown: 5 } };
+    const own = E.insertExtra(E.goto(E.createSession(f, MATCH, T0), 2, T0), '奇袭', 0, 'con', T0).timeline[4];
+    assert.deepEqual(own.bells, { countdown: 5 }, 'bells of its own when `after` has them');
+    assert.equal(E.effectiveBells(f, own).countdown, 5);
+  });
+
+  DT.test('engine: a group without a break after it inserts the stage alone', () => {
+    [null, undefined].forEach(after => {
+      let s = E.toggle(atWith({ after }, 2), T0);
+      s = E.insertExtra(s, '奇袭', 0, 'con', T0 + 5000);
+      assert.deepEqual(s.timeline.map(x => x.id), ['s1', 's2', 'b1', 'x-1', 's3', 's4'], String(after));
+      assert.equal(s.cursor, 3);
+      assert.equal(E.getRun(s, 'b1').running, false, 'the break stops, and the rest of it is dropped');
+      assert.equal(E.view(s, T0 + 5000).next.name, '自由辩论');
+      const u = E.undo(s, T0 + 6000);
+      assert.deepEqual(u.timeline.map(x => x.id), ['s1', 's2', 'b1', 's3', 's4']);
+      assert.equal(u.cursor, 2);
+    });
   });
 
   DT.test('engine: a surprise attack is refused outside a break', () => {
     const title = E.createSession(fx(), MATCH, T0);
     [title, at(0), E.toggle(at(0), T0), at(3), E.toggle(at(3), T0), at(4)].forEach((s, i) => {
       const r = E.insertExtra(s, '奇袭', 0, 'pro', T0 + 1000);
-      assert.deepEqual(r.lastFeedback, { code: 'not-break', message: '奇袭只能在评委打分的间隔里插入' }, 'case ' + i);
+      assert.deepEqual(r.lastFeedback, { code: 'not-break', message: '奇袭只能在间隔里插入' }, 'case ' + i);
       assert.equal(r.timeline.length, s.timeline.length);
       assert.equal(r.cursor, s.cursor);
       assert.equal(r.history.length, s.history.length, 'nothing to undo');
     });
-    assert.deepEqual(E.insertBlocked(at(2)), null);
-    assert.equal(E.insertBlocked(title).code, 'not-break');
+    const g = fx().extras[0];
+    assert.deepEqual(E.insertBlocked(at(2), g), null);
+    assert.deepEqual(E.insertBlocked(E.toggle(at(2), T0), g), null, 'a running break takes one');
+    assert.equal(E.insertBlocked(title, g).code, 'not-break');
+    assert.deepEqual(E.insertBlocked(at(0), Object.assign({}, g, { group: '突袭' })),
+      { code: 'not-break', message: '突袭只能在间隔里插入' }, 'the refusal names the group');
+    assert.equal(E.insertBlocked(at(0), { group: '奇袭', perSide: 1, variants: [] }).code, 'not-break',
+      'a group saved before `where` existed goes in during a break');
+  });
+
+  // Revised 2026-10-21: a group with where 'any' goes in after any stage that is not running, as before 2026-10-18,
+  // but as a package with the cursor on it, like a 'break' group.
+  DT.test('engine: an any-stage group is refused while a clock runs, on the end card and on the title card', () => {
+    const cases = [
+      [atWith({ where: 'any' }, -1), 'not-started', '比赛还没开始'],
+      [E.toggle(atWith({ where: 'any' }, 0), T0), 'running', '先暂停再插入'],
+      [E.toggle(atWith({ where: 'any' }, 2), T0), 'running', '先暂停再插入'],
+      [E.toggle(atWith({ where: 'any' }, 3), T0), 'running', '先暂停再插入'],
+      [atWith({ where: 'any' }, 5), 'ended', '比赛已经结束'],
+    ];
+    cases.forEach(([s, code, message], i) => {
+      const r = E.insertExtra(s, '奇袭', 0, 'pro', T0 + 1000);
+      assert.deepEqual(r.lastFeedback, { code, message }, 'case ' + i);
+      assert.deepEqual(E.insertBlocked(s, s.format.extras[0]), { code, message }, 'case ' + i);
+      assert.equal(r.timeline.length, s.timeline.length);
+      assert.equal(r.history.length, s.history.length, 'nothing to undo');
+      if (code === 'running') assert.ok(E.getRun(r).running, 'the clock is left alone');
+    });
+  });
+
+  DT.test('engine: an any-stage group goes in after a paused stage, with its break, and the cursor on it', () => {
+    let s = E.toggle(atWith({ where: 'any' }, 0), T0);
+    s = E.pause(s, T0 + 100000);                                   // 正方一辩, paused at 1:20 left
+    s = E.insertExtra(s, '奇袭', 0, 'con', T0 + 101000);
+    assert.equal(s.lastFeedback, null);
+    assert.equal(s.cursor, 1);
+    assert.deepEqual(s.timeline.slice(0, 4).map(x => [x.id, x.name, x.type, x.side, x.secs, !!x.extra]), [
+      ['s1', '正方一辩开篇立论', 'single', 'pro', 180, false],
+      ['x-1', '反方奇袭质询', 'single', 'con', 150, true],
+      ['x-1-b', '评委打分', 'break', null, 30, true],
+      ['s2', '反方四辩质询正方一辩', 'single', 'con', 120, false]]);
+    assert.equal(E.getRun(s).running, false, 'not started');
+    assert.equal(rem(s, 'main', T0 + 200000, 's1'), 80000, 'the paused speech keeps its time');
+    assert.deepEqual(s.extrasUsed['奇袭'], { pro: 0, con: 1 });
+    const u = E.undo(s, T0 + 102000);
+    assert.equal(u.cursor, 0);
+    assert.deepEqual(u.timeline.map(x => x.id), ['s1', 's2', 'b1', 's3', 's4']);
+    assert.deepEqual(u.extrasUsed['奇袭'], { pro: 0, con: 0 });
+    assert.equal(E.getRun(u).running, false, 'paused, as it was');
+    // A dual stage never started, and a paused break, take one too; without `after` the stage goes in alone.
+    const d = E.insertExtra(atWith({ where: 'any', after: null }, 3), '奇袭', 1, 'pro', T0);
+    assert.deepEqual(d.timeline.map(x => x.id), ['s1', 's2', 'b1', 's3', 'x-1', 's4']);
+    assert.equal(E.currentStage(d).name, '正方奇袭申论');
+    const b = E.insertExtra(E.pause(E.toggle(atWith({ where: 'any' }, 2), T0), T0 + 4000), '奇袭', 1, 'pro', T0 + 5000);
+    assert.deepEqual(b.timeline.slice(2, 5).map(x => x.id), ['b1', 'x-1', 'x-1-b']);
+    assert.equal(rem(b, 'main', T0 + 9000, 'b1'), 26000, 'the paused break keeps the rest of its time');
   });
 
   DT.test('engine: each side has its surprise attacks per group, and a second package gets ids of its own', () => {

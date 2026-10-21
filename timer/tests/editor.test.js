@@ -366,7 +366,7 @@
     const group = () => $(t, '[data-extra-index="0"]');
     typeInto(group().querySelector('input[name="group"]'), '突袭');
     group().querySelector('button[data-action="add-variant"]').click();
-    typeInto(group().querySelectorAll('input[name="secs"]')[1], '1:00', 'change');
+    typeInto(group().querySelectorAll('.dt-ed-variant input[name="secs"]')[1], '1:00', 'change');
     g = current(t.state).extras[0];
     assert.equal(g.group, '突袭'); assert.equal(g.variants.length, 2); assert.equal(g.variants[1].secs, 60);
     typeInto(group().querySelector('input[name="perSide"]'), '0', 'change');
@@ -378,6 +378,96 @@
     assert.equal(current(t.state).extras[0].perSide, 2);
     group().querySelector('button[data-action="remove-extra"]').click();
     assert.deepEqual(current(t.state).extras, []);
+    t.h.destroy();
+  });
+
+  // ---- the insertion rules of an extra group (revised 2026-10-21) ----
+
+  const cup = st => st.list.find(f => f.id === 'ustc-school-cup');
+  const rules = t => {
+    const g = $(t, '[data-extra-index="0"]');
+    return { g, where: g.querySelector('select[name="where"]'), after: g.querySelector('input[name="after"]'),
+      name: g.querySelector('input[name="after-name"]'), secs: g.querySelector('[data-key="x:0:after:secs"]') };
+  };
+
+  DT.test('editor: a new extra group goes in during a break, with a 30 s judges\' break after it', () => {
+    const t = mount();
+    $(t, 'button[data-action="add-extra"]').click();
+    const g = current(t.state).extras[0];
+    assert.equal(g.where, 'break');
+    assert.deepEqual(g.after, { name: '评委打分', secs: 30 });
+    const r = rules(t);
+    assert.equal(r.where.value, 'break');
+    assert.deepEqual(Array.from(r.where.options).map(o => o.textContent), ['只在间隔里（评委打分）', '任意环节之后']);
+    assert.equal(r.after.checked, true);
+    assert.equal(r.after.closest('label').textContent, '插入后接一段间隔');
+    assert.equal(r.name.value, '评委打分');
+    assert.equal(r.secs.value, '0:30');
+    assert.ok($(t, '.dt-ed-extra').closest('.dt-ed-section').querySelector('.dt-ed-meta').textContent.indexOf('间隔里或任意环节之后') >= 0);
+    t.h.destroy();
+  });
+
+  DT.test('editor: the insertion rules show from the format and every change to them saves', () => {
+    const t = mount({ selectedId: 'ustc-school-cup' });
+    let r = rules(t);
+    assert.equal(r.where.value, 'break');
+    assert.equal(r.after.checked, true);
+    assert.equal(r.name.value, '评委打分');
+    assert.equal(r.secs.value, '0:30');
+    r.where.value = 'any'; r.where.dispatchEvent(new Event('change', { bubbles: true }));
+    assert.equal(cup(t.state).extras[0].where, 'any');
+    r = rules(t);
+    assert.ok(r.name && r.secs, 'the break after it stays on offer in either mode');
+    typeInto(r.name, '评委补分');
+    typeInto(r.secs, '45', 'change');
+    assert.deepEqual(cup(t.state).extras[0].after, { name: '评委补分', secs: 45 });
+    assert.equal(r.secs.value, '0:45');
+    assert.deepEqual(DT.store.validateFormat(cup(t.state)), []);
+    r.after.checked = false; r.after.dispatchEvent(new Event('change', { bubbles: true }));
+    assert.equal(cup(t.state).extras[0].after, null);
+    r = rules(t);
+    assert.equal(r.name, null, 'unticked, the name and the length go');
+    assert.equal(r.secs, null);
+    r.after.checked = true; r.after.dispatchEvent(new Event('change', { bubbles: true }));
+    assert.deepEqual(cup(t.state).extras[0].after, { name: '评委打分', secs: 30 });
+    r = rules(t);
+    r.where.value = 'break'; r.where.dispatchEvent(new Event('change', { bubbles: true }));
+    assert.ok(DT.store.isPristine(cup(t.state)), 'back as built');
+    t.h.destroy();
+  });
+
+  DT.test('editor: the break after an extra group needs a name and a length, and says so in the group', () => {
+    const t = mount({ selectedId: 'ustc-school-cup' });
+    const changes = t.state.changes;
+    const msg = () => rules(t).g.querySelector('.dt-ed-msg').textContent;
+    typeInto(rules(t).name, '  ', 'change');
+    assert.equal(msg(), '插入后的间隔名称不能为空');
+    assert.equal(t.state.changes, changes, 'not saved');
+    typeInto(rules(t).name, '评委打分', 'change');
+    assert.equal(msg(), '');
+    typeInto(rules(t).secs, '三十秒', 'change');
+    assert.equal(msg(), '时长写成 3:00 或 180');
+    assert.equal(rules(t).secs.value, '三十秒', 'the text is kept to put right');
+    typeInto(rules(t).secs, '0', 'change');
+    assert.equal(msg(), '时长要大于 0 秒');
+    assert.equal(cup(t.state).extras[0].after.secs, 30, 'still the last good length');
+    typeInto(rules(t).secs, '1:00', 'change');
+    assert.equal(msg(), '');
+    assert.equal(cup(t.state).extras[0].after.secs, 60);
+    typeInto(rules(t).secs, '三十秒', 'change');
+    rules(t).after.checked = false; rules(t).after.dispatchEvent(new Event('change', { bubbles: true }));
+    assert.equal(msg(), '', 'unticking drops the mistyped length with the break');
+    assert.equal(cup(t.state).extras[0].after, null);
+    t.h.destroy();
+  });
+
+  DT.test('editor: closing with the follow-up box focused does not reset the break after the group', async () => {
+    const t = mount({ selectedId: 'ustc-school-cup' });
+    typeInto(rules(t).name, '评委补分', 'change');
+    rules(t).after.focus();
+    $(t, 'button[data-action="close"]').click();       // flush() sends the focused box a change event
+    assert.deepEqual(cup(t.state).extras[0].after, { name: '评委补分', secs: 30 });
+    await later(400);
     t.h.destroy();
   });
 

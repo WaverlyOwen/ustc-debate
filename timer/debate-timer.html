@@ -1065,6 +1065,13 @@ body {
   letter-spacing: .06em;
   color: var(--ink-dim);
 }
+/* Under the group's name: the break that follows the inserted stage, or why the group cannot go in here. */
+.dt-extra-meta {
+  margin: -.2em 0 .6em;
+  font-size: .86em;
+  letter-spacing: .06em;
+  color: var(--ink-dim);
+}
 .dt-extra-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto auto;
@@ -2082,6 +2089,11 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-ed-extra-head .dt-ed-grow { flex-basis: 16em; }
 .dt-ed-extra-head [data-action="remove-extra"] { margin-left: auto; padding: .38em 1em; font-size: .9em; }
 .dt-ed-extra-head [data-action="remove-extra"]:hover { color: var(--ed-error); }
+/* When the group goes in, and the break after it: a checkbox that shows its name and length when ticked. */
+.dt-ed-extra-rules { display: flex; flex-wrap: wrap; align-items: center; gap: .6em 2em; margin-top: .8em; }
+.dt-ed-checkfield { cursor: pointer; }
+.dt-ed-check { width: 1.05em; height: 1.05em; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.dt-ed-mid { width: 8em; }
 .dt-ed-variants { display: flex; flex-direction: column; gap: .4em; margin-top: .8em; }
 .dt-ed-variant { display: grid; grid-template-columns: minmax(8em, 1fr) 5.4em minmax(8em, 1.4fr) 2em; align-items: center; gap: .55em; }
 .dt-ed-variant .dt-input { padding: .36em .6em; }
@@ -6216,6 +6228,11 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       {
         "group": "奇袭",
         "perSide": 1,
+        "where": "break",
+        "after": {
+          "name": "评委打分",
+          "secs": 30
+        },
         "variants": [
           {
             "name": "奇袭质询",
@@ -6248,7 +6265,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   const END_SOUND = { double: 'double', triple: 'triple', long: 'long', chime: 'chime', none: null };
   const OVER_SOUND = { tick: 'tock', none: null };
   const OVER_AHEAD = 30;   // overtime seconds upcomingBells plans ahead; the UI plans again as each one passes
-  const NOT_BREAK = '奇袭只能在评委打分的间隔里插入';
+  const NOT_BREAK = '只能在间隔里插入';   // after the group's name: 奇袭只能在间隔里插入 (revised 2026-10-21)
   const SIDE_NAME = { pro: '正方', con: '反方' };
   const NOT_DUAL = '这个环节只有一个计时器';
   const clone = v => JSON.parse(JSON.stringify(v));
@@ -6542,24 +6559,37 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   function next(session, now) { return goto(session, session.cursor + 1, now); }
   function prev(session, now) { return goto(session, session.cursor - 1, now); }
 
-  // Why nothing can be inserted on the current card, or null. A surprise attack is launched while the judges score,
-  // so only a break takes one (revised 2026-10-18).
-  function insertBlocked(session) {
+  // When an extra group goes in, from its `where` (revised 2026-10-21); a group saved before `where` existed is a
+  // 'break' one.
+  const whereOf = group => (group && group.where === 'any' ? 'any' : 'break');
+
+  // Why `group` cannot be inserted on the current card, or null: the one place these refusals are worded, for
+  // insertExtra and for the UI (the dock's 插入奇袭, X and the insert menu). The group's `where` decides (revised
+  // 2026-10-21): a 'break' group goes in while a break is current, running or not (a surprise attack is launched while
+  // the judges score); an 'any' group goes in after any stage that is not running, as before 2026-10-18. Neither goes
+  // in on the end card, and an 'any' group not on the title card either, which is no stage to go in after.
+  function insertBlocked(session, group) {
     if (session.cursor >= session.timeline.length) return { code: 'ended', message: '比赛已经结束' };
     const st = currentStage(session);
-    if (!st || st.type !== 'break') return { code: 'not-break', message: NOT_BREAK };
+    if (whereOf(group) === 'any') {
+      if (!st) return { code: 'not-started', message: '比赛还没开始' };
+      if (getRun(session).running) return { code: 'running', message: '先暂停再插入' };
+      return null;
+    }
+    const name = (group && group.group) || '可插入环节';
+    if (!st || st.type !== 'break') return { code: 'not-break', message: name + NOT_BREAK };
     return null;
   }
 
-  // Insert a surprise attack during a break, as one package (revised 2026-10-18): the attack, then a copy of the
-  // break, right after the current one, and the cursor moves onto the attack, not started. A break that is running
-  // stops here and the rest of it is dropped: the copy after the attack gives the judges their time back. One undo
-  // step takes it all back.
+  // Insert an extra stage as one package (revised 2026-10-18; its rules come from the group since 2026-10-21): the
+  // stage, then the group's `after` break when it has one, right after the current stage, and the cursor moves onto
+  // the inserted stage, not started. A break that is running (only a 'break' group goes in then) stops here and the
+  // rest of it is dropped: the `after` break gives the judges their time back. One undo step takes it all back.
   function insertExtra(session, group, variantIndex, side, now) {
     const g = (session.format.extras || []).find(x => x.group === group);
     const variant = g && g.variants[variantIndex];
     if (!variant || !SIDE_NAME[side]) return noop(session);
-    const blocked = insertBlocked(session);
+    const blocked = insertBlocked(session, g);
     if (blocked) return refuse(session, blocked.code, blocked.message);
     const used = (session.extrasUsed[group] || {})[side] || 0;
     if (used >= g.perSide) return refuse(session, 'extra-limit', SIDE_NAME[side] + '的' + group + '已经用过了');
@@ -6569,16 +6599,20 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     const ids = new Set(s.timeline.map(x => x.id));
     let n = 1;
     while (ids.has('x-' + n) || ids.has('x-' + n + '-b')) n++;
-    const attack = Object.assign(clone(variant), {
+    const pkg = [Object.assign(clone(variant), {
       id: 'x-' + n,
       name: SIDE_NAME[side] + variant.name,
       side: variant.type === 'single' ? side : null,
       extra: true,
-    });
-    const again = { id: 'x-' + n + '-b', name: st.name, type: st.type, side: null, secs: st.secs, extra: true };
-    if (st.bells) again.bells = clone(st.bells);
-    if (st.note) again.note = st.note;
-    s.timeline.splice(s.cursor + 1, 0, attack, again);
+    })];
+    // The break after it is the group's own, not a copy of the current stage (which in 'any' mode is no break): it
+    // rings BREAK_BELLS unless `after` carries bells of its own. A group saved before `after` existed has none.
+    if (g.after) {
+      const brk = { id: 'x-' + n + '-b', name: g.after.name, type: 'break', side: null, secs: g.after.secs, extra: true };
+      if (g.after.bells) brk.bells = clone(g.after.bells);
+      pkg.push(brk);
+    }
+    s.timeline.splice.apply(s.timeline, [s.cursor + 1, 0].concat(pkg));
     s.cursor += 1;
     s.extrasUsed[group] = s.extrasUsed[group] || { pro: 0, con: 0 };
     s.extrasUsed[group][side] = used + 1;
@@ -6736,7 +6770,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         state: i < cur ? 'done' : i === cur ? 'current' : 'todo',
       })),
       extras: (session.format.extras || []).map(g => ({
-        group: g.group, perSide: g.perSide,
+        group: g.group, perSide: g.perSide, where: whereOf(g), after: g.after ? clone(g.after) : null,
         used: Object.assign({ pro: 0, con: 0 }, session.extrasUsed[g.group]),
         variants: clone(g.variants),
       })),
@@ -6804,6 +6838,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   let KEYS = PLAIN_KEYS;
   const END_BELLS = ['double', 'triple', 'long', 'none', 'chime'];
   const OVERTIME_BELLS = ['tick', 'none'];
+  const WHERE = ['break', 'any'];   // when an extra group goes in: during a break, or after any stage (engine insertBlocked)
   const HISTORY_LIMIT = 20;
   const VARIANT_NAME_MAX = 38;   // an inserted stage is named 正方 / 反方 + this, and stage names stop at 40
 
@@ -6908,7 +6943,28 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         if (!isObj(v) || secsError(v.secs)) errs.push(q + '时长要大于 0 秒');
       });
     }
+    // When it goes in and the break after it (revised 2026-10-21); either may be missing, and is filled in on load.
+    if (g.where !== undefined && WHERE.indexOf(g.where) < 0) errs.push(p + '：插入时机只能是间隔里或任意环节之后');
+    const a = g.after;
+    if (a !== undefined && a !== null && !isObj(a)) errs.push(p + '：插入后的间隔格式不对');
+    else if (isObj(a)) {
+      if (typeof a.name !== 'string' || !a.name.trim()) errs.push(p + '：插入后的间隔名称不能为空');
+      else if (a.name.length > 40) errs.push(p + '：插入后的间隔名称最多 40 个字');
+      const se = secsError(a.secs);
+      if (se) errs.push(p + '：插入后的间隔' + se);
+      if (a.bells !== undefined && a.bells !== null) bellsErrors(a.bells).forEach(e => errs.push(p + '：插入后的间隔' + e));
+    }
     return errs;
+  }
+  // The rules an extra group gets when it has none of its own: a format saved before 2026-10-21 goes in during a
+  // break, as it did then, with no break after it.
+  function withExtraDefaults(f) {
+    if (isObj(f) && Array.isArray(f.extras)) f.extras.forEach(g => {
+      if (!isObj(g)) return;
+      if (g.where === undefined) g.where = 'break';
+      if (g.after === undefined) g.after = null;
+    });
+    return f;
   }
   function validateFormat(f) {
     if (!isObj(f)) return ['这不是一个赛制'];
@@ -6991,8 +7047,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     if (skipped.length) console.warn('有 ' + skipped.length + ' 个保存的赛制读不出来，已跳过（仍然保留在存储里）');
     const byId = {};
     stored.forEach(f => { byId[f.id] = f; });
-    const out = DT.BUILTIN_FORMATS.map(b => clone(byId[b.id] || b));
-    stored.forEach(f => { if (!builtinById(f.id)) out.push(f); });
+    const out = DT.BUILTIN_FORMATS.map(b => withExtraDefaults(clone(byId[b.id] || b)));
+    stored.forEach(f => { if (!builtinById(f.id)) out.push(withExtraDefaults(f)); });
     return out;
   }
   function saveFormats(list) {
@@ -7035,6 +7091,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     if (!o.theme) o.theme = 'hall';
     if (!o.bells) o.bells = clone(DT.engine.DEFAULT_BELLS);
     if (!o.extras) o.extras = [];
+    withExtraDefaults(o);
     if (Array.isArray(o.stages)) o.stages.forEach(s => { if (isObj(s) && !s.id) s.id = uid('s'); });
     return o;
   }
@@ -9015,6 +9072,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   const COUNTDOWNS = [0, 3, 5, 10];
   const END_NAMES = { double: '两声', triple: '三声', long: '长鸣', chime: '轻铃', none: '不响' };
   const OVERTIME = [['tick', '开'], ['none', '关']];
+  // When an extra group goes in (engine insertBlocked), and the break a new group, or a box ticked on, starts with.
+  const WHERE = [['break', '只在间隔里（评委打分）'], ['any', '任意环节之后']];
+  const AFTER = Object.freeze({ name: '评委打分', secs: 30 });
   const MSG = {
     secs: '时长写成 3:00 或 180',
     warn: '提示铃点写成秒数，如 30 或 60, 30',
@@ -9649,6 +9709,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       });
       head.appendChild(drop);
       box.appendChild(head);
+      box.appendChild(extraRules(g, k, gi));
       const rows = el('div', 'dt-ed-variants');
       g.variants.forEach((v, vi) => {
         const vk = k + ':' + vi;
@@ -9687,13 +9748,51 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       return box;
     }
 
+    // When the group goes in, and the break that follows what it inserts (revised 2026-10-21). The break's fields
+    // show in either mode: after a speech, too, the judges may want time to score.
+    function extraRules(g, k, gi) {
+      const box = el('div', 'dt-ed-extra-rules');
+      const where = selectBox('where', k + ':where', WHERE, g.where === 'any' ? 'any' : 'break');
+      where.addEventListener('change', () => { g.where = where.value; commit(); });
+      const w = field('插入时机', where);
+      w.title = '只在间隔里：当前环节是间隔时才能插，间隔在走也行；任意环节之后：当前环节没在走时就能插';
+      box.appendChild(w);
+      const after = el('input', 'dt-ed-check');
+      after.type = 'checkbox';
+      after.name = 'after';
+      after.dataset.key = k + ':after';
+      after.checked = !!g.after;
+      // Only a real change counts: closing the editor sends the focused box a change event (flush) as well.
+      after.addEventListener('change', () => {
+        if (after.checked === !!g.after) return;
+        g.after = after.checked ? clone(AFTER) : null;
+        Object.keys(bad).forEach(key => { if (key.indexOf(k + ':after:') === 0) delete bad[key]; });
+        renderForm();
+        commit();
+      });
+      const a = el('label', 'dt-ed-field dt-ed-checkfield');
+      a.appendChild(after);
+      a.appendChild(el('span', 'dt-ed-label', '插入后接一段间隔'));
+      a.title = '插入的环节后面再接一段间隔，比如给评委打分';
+      box.appendChild(a);
+      if (g.after) {
+        const name = textField('after-name', k + ':after:name', g.after, 'name', 'dt-ed-mid');
+        name.setAttribute('aria-label', '插入后间隔的名称');
+        box.appendChild(field('名称', name));
+        const secs = secsField(k + ':after:secs', g.after, 'extra:' + gi);
+        secs.setAttribute('aria-label', '插入后间隔的时长');
+        box.appendChild(field('时长', secs));
+      }
+      return box;
+    }
+
     function clearExtraBad() { Object.keys(bad).forEach(key => { if (key.indexOf('x:') === 0) delete bad[key]; }); }
 
     function extrasSection() {
       const sec = el('section', 'dt-ed-section');
       const head = el('div', 'dt-ed-section-head');
       head.appendChild(el('h2', 'dt-ed-h2', '可插入环节'));
-      head.appendChild(el('span', 'dt-ed-meta', '比赛中可以插在任意环节之后，每方限次，如奇袭'));
+      head.appendChild(el('span', 'dt-ed-meta', '每方限次，如奇袭：按插入时机在间隔里或任意环节之后插入，插完直接进入，后面可再接一段间隔'));
       sec.appendChild(head);
       const groups = draft.extras || (draft.extras = []);
       groups.forEach((g, gi) => sec.appendChild(extraGroup(g, gi, groups)));
@@ -9702,7 +9801,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         const taken = groups.map(g => g.group);
         let name = '奇袭', n = 1;
         while (taken.indexOf(name) >= 0) name = '可插入环节 ' + (++n);
-        groups.push({ group: name, perSide: 1, variants: [{ name: '奇袭质询', type: 'single', secs: 150 }] });
+        groups.push({ group: name, perSide: 1, where: 'break', after: clone(AFTER), variants: [{ name: '奇袭质询', type: 'single', secs: 150 }] });
         renderForm();
         commit();
       });
@@ -10364,7 +10463,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     [['R R'], '重置当前环节（连按两次）；其他环节在环节列表（S）里重置'],
     [['G G'], '当前发言方放弃剩余时间（自由辩 / 对辩，连按两次）'],
     [['B'], '手动敲铃；开场卡上：试音（整套提示音压缩着放一遍，再按从头再放）'],
-    [['X'], '插入奇袭（评委打分的间隔里，赛制有可插入环节时）；插入后直接进入奇袭'],
+    [['X'], '插入奇袭（赛制有可插入环节时，按赛制的插入时机：间隔里或任意环节之后）；插入后直接进入奇袭'],
     [['S'], '环节列表'],
     [['Shift+S'], '本场记录'],
     [['E'], '编辑赛制（这一场照常进行）'],
@@ -10780,8 +10879,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         btn[side].disabled = !dual || !!(clock && clock.locked);
       });
       btn.undo.disabled = !(session.history && session.history.length);
-      // A surprise attack goes in during a break, while either side still has one to use.
-      btn.insert.disabled = !(st && st.type === 'break' && v.extras.some(g => g.used.pro < g.perSide || g.used.con < g.perSide));
+      // Live while some group can go in here (its `where`, engine insertBlocked) and either side still has one to use.
+      const usesLeft = g => g.used.pro < g.perSide || g.used.con < g.perSide;
+      btn.insert.disabled = !v.extras.some(g => usesLeft(g) && !DT.engine.insertBlocked(session, g));
       btn.reset.disabled = !st;
       const title = v.mode === 'title';
       if (btn.bell) text(btn.bell, title ? '试音' : '敲铃');   // B, which is the sound check on the title card
@@ -11061,17 +11161,22 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     function insertOverlay(body) {
       let sig = null;
       return function refresh(now, v) {
-        // Off the break (→, ←, a row of the stage list, the insert itself) every button could only refuse: it closes.
-        if (DT.engine.insertBlocked(session)) { closeOverlay(); return; }
-        const s = JSON.stringify(v.extras);
+        // Once no group can go in here (off the break for a 'break' group: →, ←, a row of the stage list, the insert
+        // itself; a clock started for an 'any' group) every button could only refuse: it closes.
+        const why = v.extras.map(g => DT.engine.insertBlocked(session, g));
+        if (why.every(Boolean)) { closeOverlay(); return; }
+        const s = JSON.stringify([v.extras, why]);
         if (s === sig) return;
         sig = s;
         body.textContent = '';
-        v.extras.forEach(g => {
+        v.extras.forEach((g, gi) => {
           const sec = el('section', 'dt-extra');
           const h = el('h3', null, g.group);
           h.appendChild(el('small', null, '每方 ' + g.perSide + ' 次'));
           sec.appendChild(h);
+          // What follows the inserted stage, and why a group of another `where` cannot go in here (its buttons are off).
+          if (g.after) sec.appendChild(el('p', 'dt-extra-meta', '插入后接 ' + g.after.name + ' ' + DT.engine.fmt(g.after.secs * 1000)));
+          if (why[gi]) sec.appendChild(el('p', 'dt-extra-meta', why[gi].message));
           g.variants.forEach((variant, k) => {
             const row = el('div', 'dt-extra-row');
             const name = el('div', 'dt-extra-name', variant.name);
@@ -11085,7 +11190,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
               b.dataset.group = g.group;
               b.dataset.variant = String(k);
               b.dataset.side = side;
-              b.disabled = used;
+              b.disabled = used || !!why[gi];
               b.appendChild(el('i', 'dt-swatch'));
               b.lastChild.dataset.side = side;
               b.appendChild(el('span', null, SIDE_NAME[side] + (used ? ' 已用' : '')));
@@ -11099,7 +11204,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
           });
           body.appendChild(sec);
         });
-        body.appendChild(el('p', 'dt-hint', '插入后直接进入奇袭，按空格开始；奇袭之后再给评委一段同样的间隔'));
+        body.appendChild(el('p', 'dt-hint', '插入后直接进入，按空格开始'));
       };
     }
 
@@ -11173,9 +11278,10 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         toast('这个赛制没有可插入的环节');
         return false;
       }
-      const blocked = name === 'insert' && DT.engine.insertBlocked(session);   // only a break takes a surprise attack
-      if (blocked) {
-        toast(blocked.message);
+      // Where no group can go in (each by its own `where`), the first group's reason instead of a menu of refusals.
+      const why = name === 'insert' ? session.format.extras.map(g => DT.engine.insertBlocked(session, g)) : [];
+      if (why.length && why.every(Boolean)) {
+        toast(why[0].message);
         return false;
       }
       closeOverlay();

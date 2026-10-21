@@ -8,6 +8,7 @@
   let KEYS = PLAIN_KEYS;
   const END_BELLS = ['double', 'triple', 'long', 'none', 'chime'];
   const OVERTIME_BELLS = ['tick', 'none'];
+  const WHERE = ['break', 'any'];   // when an extra group goes in: during a break, or after any stage (engine insertBlocked)
   const HISTORY_LIMIT = 20;
   const VARIANT_NAME_MAX = 38;   // an inserted stage is named 正方 / 反方 + this, and stage names stop at 40
 
@@ -112,7 +113,28 @@
         if (!isObj(v) || secsError(v.secs)) errs.push(q + '时长要大于 0 秒');
       });
     }
+    // When it goes in and the break after it (revised 2026-10-21); either may be missing, and is filled in on load.
+    if (g.where !== undefined && WHERE.indexOf(g.where) < 0) errs.push(p + '：插入时机只能是间隔里或任意环节之后');
+    const a = g.after;
+    if (a !== undefined && a !== null && !isObj(a)) errs.push(p + '：插入后的间隔格式不对');
+    else if (isObj(a)) {
+      if (typeof a.name !== 'string' || !a.name.trim()) errs.push(p + '：插入后的间隔名称不能为空');
+      else if (a.name.length > 40) errs.push(p + '：插入后的间隔名称最多 40 个字');
+      const se = secsError(a.secs);
+      if (se) errs.push(p + '：插入后的间隔' + se);
+      if (a.bells !== undefined && a.bells !== null) bellsErrors(a.bells).forEach(e => errs.push(p + '：插入后的间隔' + e));
+    }
     return errs;
+  }
+  // The rules an extra group gets when it has none of its own: a format saved before 2026-10-21 goes in during a
+  // break, as it did then, with no break after it.
+  function withExtraDefaults(f) {
+    if (isObj(f) && Array.isArray(f.extras)) f.extras.forEach(g => {
+      if (!isObj(g)) return;
+      if (g.where === undefined) g.where = 'break';
+      if (g.after === undefined) g.after = null;
+    });
+    return f;
   }
   function validateFormat(f) {
     if (!isObj(f)) return ['这不是一个赛制'];
@@ -195,8 +217,8 @@
     if (skipped.length) console.warn('有 ' + skipped.length + ' 个保存的赛制读不出来，已跳过（仍然保留在存储里）');
     const byId = {};
     stored.forEach(f => { byId[f.id] = f; });
-    const out = DT.BUILTIN_FORMATS.map(b => clone(byId[b.id] || b));
-    stored.forEach(f => { if (!builtinById(f.id)) out.push(f); });
+    const out = DT.BUILTIN_FORMATS.map(b => withExtraDefaults(clone(byId[b.id] || b)));
+    stored.forEach(f => { if (!builtinById(f.id)) out.push(withExtraDefaults(f)); });
     return out;
   }
   function saveFormats(list) {
@@ -239,6 +261,7 @@
     if (!o.theme) o.theme = 'hall';
     if (!o.bells) o.bells = clone(DT.engine.DEFAULT_BELLS);
     if (!o.extras) o.extras = [];
+    withExtraDefaults(o);
     if (Array.isArray(o.stages)) o.stages.forEach(s => { if (isObj(s) && !s.id) s.id = uid('s'); });
     return o;
   }
