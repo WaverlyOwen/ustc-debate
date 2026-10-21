@@ -821,6 +821,11 @@
       {
         "group": "奇袭",
         "perSide": 1,
+        "where": "break",
+        "after": {
+          "name": "评委打分",
+          "secs": 30
+        },
         "variants": [
           {
             "name": "奇袭质询",

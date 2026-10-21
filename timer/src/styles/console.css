@@ -344,6 +344,13 @@
   letter-spacing: .06em;
   color: var(--ink-dim);
 }
+/* Under the group's name: the break that follows the inserted stage, or why the group cannot go in here. */
+.dt-extra-meta {
+  margin: -.2em 0 .6em;
+  font-size: .86em;
+  letter-spacing: .06em;
+  color: var(--ink-dim);
+}
 .dt-extra-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto auto;

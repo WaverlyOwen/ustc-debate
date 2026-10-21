@@ -10,7 +10,7 @@
   const END_SOUND = { double: 'double', triple: 'triple', long: 'long', chime: 'chime', none: null };
   const OVER_SOUND = { tick: 'tock', none: null };
   const OVER_AHEAD = 30;   // overtime seconds upcomingBells plans ahead; the UI plans again as each one passes
-  const NOT_BREAK = '奇袭只能在评委打分的间隔里插入';
+  const NOT_BREAK = '只能在间隔里插入';   // after the group's name: 奇袭只能在间隔里插入 (revised 2026-10-21)
   const SIDE_NAME = { pro: '正方', con: '反方' };
   const NOT_DUAL = '这个环节只有一个计时器';
   const clone = v => JSON.parse(JSON.stringify(v));
@@ -304,24 +304,37 @@
   function next(session, now) { return goto(session, session.cursor + 1, now); }
   function prev(session, now) { return goto(session, session.cursor - 1, now); }
 
-  // Why nothing can be inserted on the current card, or null. A surprise attack is launched while the judges score,
-  // so only a break takes one (revised 2026-10-18).
-  function insertBlocked(session) {
+  // When an extra group goes in, from its `where` (revised 2026-10-21); a group saved before `where` existed is a
+  // 'break' one.
+  const whereOf = group => (group && group.where === 'any' ? 'any' : 'break');
+
+  // Why `group` cannot be inserted on the current card, or null: the one place these refusals are worded, for
+  // insertExtra and for the UI (the dock's 插入奇袭, X and the insert menu). The group's `where` decides (revised
+  // 2026-10-21): a 'break' group goes in while a break is current, running or not (a surprise attack is launched while
+  // the judges score); an 'any' group goes in after any stage that is not running, as before 2026-10-18. Neither goes
+  // in on the end card, and an 'any' group not on the title card either, which is no stage to go in after.
+  function insertBlocked(session, group) {
     if (session.cursor >= session.timeline.length) return { code: 'ended', message: '比赛已经结束' };
     const st = currentStage(session);
-    if (!st || st.type !== 'break') return { code: 'not-break', message: NOT_BREAK };
+    if (whereOf(group) === 'any') {
+      if (!st) return { code: 'not-started', message: '比赛还没开始' };
+      if (getRun(session).running) return { code: 'running', message: '先暂停再插入' };
+      return null;
+    }
+    const name = (group && group.group) || '可插入环节';
+    if (!st || st.type !== 'break') return { code: 'not-break', message: name + NOT_BREAK };
     return null;
   }
 
-  // Insert a surprise attack during a break, as one package (revised 2026-10-18): the attack, then a copy of the
-  // break, right after the current one, and the cursor moves onto the attack, not started. A break that is running
-  // stops here and the rest of it is dropped: the copy after the attack gives the judges their time back. One undo
-  // step takes it all back.
+  // Insert an extra stage as one package (revised 2026-10-18; its rules come from the group since 2026-10-21): the
+  // stage, then the group's `after` break when it has one, right after the current stage, and the cursor moves onto
+  // the inserted stage, not started. A break that is running (only a 'break' group goes in then) stops here and the
+  // rest of it is dropped: the `after` break gives the judges their time back. One undo step takes it all back.
   function insertExtra(session, group, variantIndex, side, now) {
     const g = (session.format.extras || []).find(x => x.group === group);
     const variant = g && g.variants[variantIndex];
     if (!variant || !SIDE_NAME[side]) return noop(session);
-    const blocked = insertBlocked(session);
+    const blocked = insertBlocked(session, g);
     if (blocked) return refuse(session, blocked.code, blocked.message);
     const used = (session.extrasUsed[group] || {})[side] || 0;
     if (used >= g.perSide) return refuse(session, 'extra-limit', SIDE_NAME[side] + '的' + group + '已经用过了');
@@ -331,16 +344,20 @@
     const ids = new Set(s.timeline.map(x => x.id));
     let n = 1;
     while (ids.has('x-' + n) || ids.has('x-' + n + '-b')) n++;
-    const attack = Object.assign(clone(variant), {
+    const pkg = [Object.assign(clone(variant), {
       id: 'x-' + n,
       name: SIDE_NAME[side] + variant.name,
       side: variant.type === 'single' ? side : null,
       extra: true,
-    });
-    const again = { id: 'x-' + n + '-b', name: st.name, type: st.type, side: null, secs: st.secs, extra: true };
-    if (st.bells) again.bells = clone(st.bells);
-    if (st.note) again.note = st.note;
-    s.timeline.splice(s.cursor + 1, 0, attack, again);
+    })];
+    // The break after it is the group's own, not a copy of the current stage (which in 'any' mode is no break): it
+    // rings BREAK_BELLS unless `after` carries bells of its own. A group saved before `after` existed has none.
+    if (g.after) {
+      const brk = { id: 'x-' + n + '-b', name: g.after.name, type: 'break', side: null, secs: g.after.secs, extra: true };
+      if (g.after.bells) brk.bells = clone(g.after.bells);
+      pkg.push(brk);
+    }
+    s.timeline.splice.apply(s.timeline, [s.cursor + 1, 0].concat(pkg));
     s.cursor += 1;
     s.extrasUsed[group] = s.extrasUsed[group] || { pro: 0, con: 0 };
     s.extrasUsed[group][side] = used + 1;
@@ -498,7 +515,7 @@
         state: i < cur ? 'done' : i === cur ? 'current' : 'todo',
       })),
       extras: (session.format.extras || []).map(g => ({
-        group: g.group, perSide: g.perSide,
+        group: g.group, perSide: g.perSide, where: whereOf(g), after: g.after ? clone(g.after) : null,
         used: Object.assign({ pro: 0, con: 0 }, session.extrasUsed[g.group]),
         variants: clone(g.variants),
       })),

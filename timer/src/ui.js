@@ -44,7 +44,7 @@
     [['R R'], '重置当前环节（连按两次）；其他环节在环节列表（S）里重置'],
     [['G G'], '当前发言方放弃剩余时间（自由辩 / 对辩，连按两次）'],
     [['B'], '手动敲铃；开场卡上：试音（整套提示音压缩着放一遍，再按从头再放）'],
-    [['X'], '插入奇袭（评委打分的间隔里，赛制有可插入环节时）；插入后直接进入奇袭'],
+    [['X'], '插入奇袭（赛制有可插入环节时，按赛制的插入时机：间隔里或任意环节之后）；插入后直接进入奇袭'],
     [['S'], '环节列表'],
     [['Shift+S'], '本场记录'],
     [['E'], '编辑赛制（这一场照常进行）'],
@@ -460,8 +460,9 @@
         btn[side].disabled = !dual || !!(clock && clock.locked);
       });
       btn.undo.disabled = !(session.history && session.history.length);
-      // A surprise attack goes in during a break, while either side still has one to use.
-      btn.insert.disabled = !(st && st.type === 'break' && v.extras.some(g => g.used.pro < g.perSide || g.used.con < g.perSide));
+      // Live while some group can go in here (its `where`, engine insertBlocked) and either side still has one to use.
+      const usesLeft = g => g.used.pro < g.perSide || g.used.con < g.perSide;
+      btn.insert.disabled = !v.extras.some(g => usesLeft(g) && !DT.engine.insertBlocked(session, g));
       btn.reset.disabled = !st;
       const title = v.mode === 'title';
       if (btn.bell) text(btn.bell, title ? '试音' : '敲铃');   // B, which is the sound check on the title card
@@ -741,17 +742,22 @@
     function insertOverlay(body) {
       let sig = null;
       return function refresh(now, v) {
-        // Off the break (→, ←, a row of the stage list, the insert itself) every button could only refuse: it closes.
-        if (DT.engine.insertBlocked(session)) { closeOverlay(); return; }
-        const s = JSON.stringify(v.extras);
+        // Once no group can go in here (off the break for a 'break' group: →, ←, a row of the stage list, the insert
+        // itself; a clock started for an 'any' group) every button could only refuse: it closes.
+        const why = v.extras.map(g => DT.engine.insertBlocked(session, g));
+        if (why.every(Boolean)) { closeOverlay(); return; }
+        const s = JSON.stringify([v.extras, why]);
         if (s === sig) return;
         sig = s;
         body.textContent = '';
-        v.extras.forEach(g => {
+        v.extras.forEach((g, gi) => {
           const sec = el('section', 'dt-extra');
           const h = el('h3', null, g.group);
           h.appendChild(el('small', null, '每方 ' + g.perSide + ' 次'));
           sec.appendChild(h);
+          // What follows the inserted stage, and why a group of another `where` cannot go in here (its buttons are off).
+          if (g.after) sec.appendChild(el('p', 'dt-extra-meta', '插入后接 ' + g.after.name + ' ' + DT.engine.fmt(g.after.secs * 1000)));
+          if (why[gi]) sec.appendChild(el('p', 'dt-extra-meta', why[gi].message));
           g.variants.forEach((variant, k) => {
             const row = el('div', 'dt-extra-row');
             const name = el('div', 'dt-extra-name', variant.name);
@@ -765,7 +771,7 @@
               b.dataset.group = g.group;
               b.dataset.variant = String(k);
               b.dataset.side = side;
-              b.disabled = used;
+              b.disabled = used || !!why[gi];
               b.appendChild(el('i', 'dt-swatch'));
               b.lastChild.dataset.side = side;
               b.appendChild(el('span', null, SIDE_NAME[side] + (used ? ' 已用' : '')));
@@ -779,7 +785,7 @@
           });
           body.appendChild(sec);
         });
-        body.appendChild(el('p', 'dt-hint', '插入后直接进入奇袭，按空格开始；奇袭之后再给评委一段同样的间隔'));
+        body.appendChild(el('p', 'dt-hint', '插入后直接进入，按空格开始'));
       };
     }
 
@@ -853,9 +859,10 @@
         toast('这个赛制没有可插入的环节');
         return false;
       }
-      const blocked = name === 'insert' && DT.engine.insertBlocked(session);   // only a break takes a surprise attack
-      if (blocked) {
-        toast(blocked.message);
+      // Where no group can go in (each by its own `where`), the first group's reason instead of a menu of refusals.
+      const why = name === 'insert' ? session.format.extras.map(g => DT.engine.insertBlocked(session, g)) : [];
+      if (why.length && why.every(Boolean)) {
+        toast(why[0].message);
         return false;
       }
       closeOverlay();

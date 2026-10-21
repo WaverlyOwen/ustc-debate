@@ -115,7 +115,16 @@ def _extra_group(path, no, name, dur):
         if "双边" in seg:
             v["note"] = NOTE_BOTH
         variants.append(v)
-    return {"group": group, "perSide": cn_int(per.group(1)) if per else 1, "variants": variants}
+    # Inserted in the judges' break (revised 2026-10-21, engine insertBlocked); parse_format fills in `after` once it has
+    # seen every stage.
+    return {"group": group, "perSide": cn_int(per.group(1)) if per else 1, "where": "break", "after": None,
+            "variants": variants}
+
+
+def _judges_break(stages):
+    """What follows an inserted stage: the format's own first 评委打分 break (its name and length), or None."""
+    judges = next((s for s in stages if s["type"] == "break" and "评委打分" in s["name"]), None)
+    return {"name": judges["name"], "secs": judges["secs"]} if judges else None
 
 
 def parse_format(path):
@@ -169,6 +178,8 @@ def parse_format(path):
         stages.append(stage)
     if not stages:
         raise FormatError(f"{path.name}: 流程总表里没有环节")
+    for g in extras:
+        g["after"] = _judges_break(stages)
     return {"id": fid, "name": title.group(1).strip(), "builtin": True, "source": path.name,
             "theme": "hall", "bells": {**DEFAULT_BELLS, "warn": list(DEFAULT_BELLS["warn"])},
             "stages": stages, "extras": extras}

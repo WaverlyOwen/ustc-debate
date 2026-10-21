@@ -13,6 +13,9 @@
   const COUNTDOWNS = [0, 3, 5, 10];
   const END_NAMES = { double: '两声', triple: '三声', long: '长鸣', chime: '轻铃', none: '不响' };
   const OVERTIME = [['tick', '开'], ['none', '关']];
+  // When an extra group goes in (engine insertBlocked), and the break a new group, or a box ticked on, starts with.
+  const WHERE = [['break', '只在间隔里（评委打分）'], ['any', '任意环节之后']];
+  const AFTER = Object.freeze({ name: '评委打分', secs: 30 });
   const MSG = {
     secs: '时长写成 3:00 或 180',
     warn: '提示铃点写成秒数，如 30 或 60, 30',
@@ -647,6 +650,7 @@
       });
       head.appendChild(drop);
       box.appendChild(head);
+      box.appendChild(extraRules(g, k, gi));
       const rows = el('div', 'dt-ed-variants');
       g.variants.forEach((v, vi) => {
         const vk = k + ':' + vi;
@@ -685,13 +689,51 @@
       return box;
     }
 
+    // When the group goes in, and the break that follows what it inserts (revised 2026-10-21). The break's fields
+    // show in either mode: after a speech, too, the judges may want time to score.
+    function extraRules(g, k, gi) {
+      const box = el('div', 'dt-ed-extra-rules');
+      const where = selectBox('where', k + ':where', WHERE, g.where === 'any' ? 'any' : 'break');
+      where.addEventListener('change', () => { g.where = where.value; commit(); });
+      const w = field('插入时机', where);
+      w.title = '只在间隔里：当前环节是间隔时才能插，间隔在走也行；任意环节之后：当前环节没在走时就能插';
+      box.appendChild(w);
+      const after = el('input', 'dt-ed-check');
+      after.type = 'checkbox';
+      after.name = 'after';
+      after.dataset.key = k + ':after';
+      after.checked = !!g.after;
+      // Only a real change counts: closing the editor sends the focused box a change event (flush) as well.
+      after.addEventListener('change', () => {
+        if (after.checked === !!g.after) return;
+        g.after = after.checked ? clone(AFTER) : null;
+        Object.keys(bad).forEach(key => { if (key.indexOf(k + ':after:') === 0) delete bad[key]; });
+        renderForm();
+        commit();
+      });
+      const a = el('label', 'dt-ed-field dt-ed-checkfield');
+      a.appendChild(after);
+      a.appendChild(el('span', 'dt-ed-label', '插入后接一段间隔'));
+      a.title = '插入的环节后面再接一段间隔，比如给评委打分';
+      box.appendChild(a);
+      if (g.after) {
+        const name = textField('after-name', k + ':after:name', g.after, 'name', 'dt-ed-mid');
+        name.setAttribute('aria-label', '插入后间隔的名称');
+        box.appendChild(field('名称', name));
+        const secs = secsField(k + ':after:secs', g.after, 'extra:' + gi);
+        secs.setAttribute('aria-label', '插入后间隔的时长');
+        box.appendChild(field('时长', secs));
+      }
+      return box;
+    }
+
     function clearExtraBad() { Object.keys(bad).forEach(key => { if (key.indexOf('x:') === 0) delete bad[key]; }); }
 
     function extrasSection() {
       const sec = el('section', 'dt-ed-section');
       const head = el('div', 'dt-ed-section-head');
       head.appendChild(el('h2', 'dt-ed-h2', '可插入环节'));
-      head.appendChild(el('span', 'dt-ed-meta', '比赛中可以插在任意环节之后，每方限次，如奇袭'));
+      head.appendChild(el('span', 'dt-ed-meta', '每方限次，如奇袭：按插入时机在间隔里或任意环节之后插入，插完直接进入，后面可再接一段间隔'));
       sec.appendChild(head);
       const groups = draft.extras || (draft.extras = []);
       groups.forEach((g, gi) => sec.appendChild(extraGroup(g, gi, groups)));
@@ -700,7 +742,7 @@
         const taken = groups.map(g => g.group);
         let name = '奇袭', n = 1;
         while (taken.indexOf(name) >= 0) name = '可插入环节 ' + (++n);
-        groups.push({ group: name, perSide: 1, variants: [{ name: '奇袭质询', type: 'single', secs: 150 }] });
+        groups.push({ group: name, perSide: 1, where: 'break', after: clone(AFTER), variants: [{ name: '奇袭质询', type: 'single', secs: 150 }] });
         renderForm();
         commit();
       });

@@ -712,6 +712,11 @@
 .dt-ed-extra-head .dt-ed-grow { flex-basis: 16em; }
 .dt-ed-extra-head [data-action="remove-extra"] { margin-left: auto; padding: .38em 1em; font-size: .9em; }
 .dt-ed-extra-head [data-action="remove-extra"]:hover { color: var(--ed-error); }
+/* When the group goes in, and the break after it: a checkbox that shows its name and length when ticked. */
+.dt-ed-extra-rules { display: flex; flex-wrap: wrap; align-items: center; gap: .6em 2em; margin-top: .8em; }
+.dt-ed-checkfield { cursor: pointer; }
+.dt-ed-check { width: 1.05em; height: 1.05em; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.dt-ed-mid { width: 8em; }
 .dt-ed-variants { display: flex; flex-direction: column; gap: .4em; margin-top: .8em; }
 .dt-ed-variant { display: grid; grid-template-columns: minmax(8em, 1fr) 5.4em minmax(8em, 1.4fr) 2em; align-items: center; gap: .55em; }
 .dt-ed-variant .dt-input { padding: .36em .6em; }

@@ -725,13 +725,13 @@
     assert.equal(insert.hidden, true, 'the title card makes room for the sound check');
     press('KeyX');
     assert.equal(document.querySelector('.dt-overlay'), null);
-    assert.equal(toastText(), '奇袭只能在评委打分的间隔里插入');
+    assert.equal(toastText(), '奇袭只能在间隔里插入');
     press('Space');                                     // the first stage, running
     assert.equal(insert.hidden, false);
     assert.equal(insert.disabled, true);
     press('KeyX');
     assert.equal(document.querySelector('.dt-overlay'), null);
-    assert.equal(toastText(), '奇袭只能在评委打分的间隔里插入');
+    assert.equal(toastText(), '奇袭只能在间隔里插入');
     assert.equal(t.c.session().timeline.length, 18);
     assert.ok(DT.engine.getRun(t.c.session()).running, 'and the clock is left alone');
     t.done();
@@ -764,6 +764,84 @@
     document.querySelector('.dt-overlay[data-name="insert"] button[data-side="pro"][data-variant="0"]').click();
     assert.equal(menu(), null, 'an insert lands on the attack, and the menu is gone');
     assert.equal(DT.engine.currentStage(t.c.session()).name, '正方奇袭质询');
+    t.done();
+  });
+
+  // Revised 2026-10-21: the insertion rules are the format's. A stored school cup whose groups say otherwise.
+  function bootRules(groups) {
+    const storage = memStorage();
+    DT.store.useStorage(storage);
+    const cup = JSON.parse(JSON.stringify(DT.BUILTIN_FORMATS.find(f => f.id === 'ustc-school-cup')));
+    cup.extras = groups(cup.extras[0]);
+    storage.setItem('dt.formats.v1', JSON.stringify({ schema: 1, formats: [cup] }));
+    return boot({ formatId: 'ustc-school-cup', storage });
+  }
+
+  DT.test('ui: the insert menu names the break that follows the inserted stage', () => {
+    const t = boot({ formatId: 'ustc-school-cup' });
+    t.c.act('goto', t.c.session().timeline.findIndex(s => s.type === 'break'));
+    press('KeyX');
+    const meta = Array.from(document.querySelectorAll('.dt-overlay[data-name="insert"] .dt-extra-meta')).map(p => p.textContent);
+    assert.deepEqual(meta, ['插入后接 评委打分 0:30']);
+    assert.equal(document.querySelector('.dt-overlay[data-name="insert"] .dt-hint').textContent, '插入后直接进入，按空格开始');
+    t.done();
+  });
+
+  DT.test('ui: an any-stage group goes in after a paused speech; X while it runs says to pause first', () => {
+    const t = bootRules(g => [Object.assign(g, { where: 'any', after: null })]);
+    const insert = document.querySelector('.dt-dock button[data-act="insert"]');
+    const menu = () => document.querySelector('.dt-overlay[data-name="insert"]');
+    t.c.act('next');                                    // 正方一辩, not started
+    assert.equal(insert.disabled, false, 'live on a speech');
+    press('KeyX'); assert.ok(menu());
+    assert.equal(document.querySelectorAll('.dt-overlay[data-name="insert"] .dt-extra-meta').length, 0, 'no break after it');
+    t.c.act('toggle');
+    assert.equal(menu(), null, 'a clock started: every button could only refuse, so it closes');
+    assert.equal(insert.disabled, true);
+    press('KeyX');
+    assert.equal(menu(), null);
+    assert.equal(toastText(), '先暂停再插入');
+    t.clock.advance(4000);
+    t.c.act('pause');
+    assert.equal(insert.disabled, false);
+    press('KeyX');
+    document.querySelector('.dt-overlay[data-name="insert"] button[data-side="con"][data-variant="1"]').click();
+    const s = t.c.session();
+    assert.equal(menu(), null);
+    assert.equal(s.cursor, 1);
+    assert.deepEqual(s.timeline.slice(0, 3).map(x => x.name), ['正方一辩开篇立论', '反方奇袭申论', '反方二辩质询正方一辩']);
+    assert.equal(document.querySelector('.dt-title').textContent, '反方奇袭申论');
+    t.c.act('goto', s.timeline.length);
+    press('KeyX');
+    assert.equal(toastText(), '比赛已经结束');
+    t.done();
+  });
+
+  DT.test('ui: with groups of both kinds, the menu turns off the one that cannot go in here and says why', () => {
+    const t = bootRules(g => [g, { group: '申论', perSide: 1, where: 'any', after: null,
+      variants: [{ name: '加时申论', type: 'single', secs: 60 }] }]);
+    const insert = document.querySelector('.dt-dock button[data-act="insert"]');
+    const sec = i => document.querySelectorAll('.dt-overlay[data-name="insert"] .dt-extra')[i];
+    t.c.act('next');                                    // a speech: only the any-stage group
+    assert.equal(insert.disabled, false);
+    press('KeyX');
+    assert.equal(sec(0).querySelector('button[data-side="pro"]').disabled, true);
+    assert.ok(sec(0).textContent.indexOf('奇袭只能在间隔里插入') >= 0);
+    assert.equal(sec(1).querySelector('button[data-side="pro"]').disabled, false);
+    const brk = t.c.session().timeline.findIndex(s => s.type === 'break');
+    t.c.act('goto', brk);
+    assert.equal(sec(0).querySelector('button[data-side="pro"]').disabled, false, 'in a break both go in');
+    assert.equal(sec(1).querySelector('button[data-side="pro"]').disabled, false);
+    t.c.act('toggle');                                  // the break running: only the break group
+    assert.equal(sec(0).querySelector('button[data-side="pro"]').disabled, false);
+    assert.equal(sec(1).querySelector('button[data-side="pro"]').disabled, true);
+    assert.ok(sec(1).textContent.indexOf('先暂停再插入') >= 0);
+    t.c.closeOverlay();
+    t.c.act('next'); t.c.act('toggle');                 // a speech running: neither
+    assert.equal(insert.disabled, true);
+    press('KeyX');
+    assert.equal(document.querySelector('.dt-overlay'), null);
+    assert.equal(toastText(), '奇袭只能在间隔里插入', 'the first group\'s reason');
     t.done();
   });
 
