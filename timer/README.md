@@ -1,6 +1,6 @@
 # 辩论计时器
 
-一个 HTML 文件的华语辩论计时器：选赛制、开赛、计时、投影，全部离线完成。双击 `timer/debate-timer.html`，用 Edge 打开即可，不需要联网，也不需要装任何东西。要拷给别人，只拷这一个文件。
+华语辩论计时器支持在线和离线开赛、计时与投影。打开[网页版](https://waverlyowen.github.io/ustc-debate/)即可使用。开赛页的「下载离线版」指向最新正式版的 `ustc-debate-timer.html`。把这一个文件拷到比赛电脑上，用 Edge 双击打开即可。[查看正式版本](https://github.com/WaverlyOwen/ustc-debate/releases)
 
 ## 开一场
 
@@ -36,7 +36,7 @@
 - **当普通计时器用**：在开场卡上按 Esc 或 Shift+E，进入普通的开赛页。赛制库、音量和静音设置与普通计时器共用。开赛页上的「放弃并新开」在导出的文件里会回到这一场全新的开场卡；从开赛页另开的一场，结束卡上的按钮仍是「新的一场」
 - **存储分开**：导出的文件有自己的场次存储，普通计时器里没打完的一场不会出现在它里面，反过来也不会。这一场的赛制只属于这个文件，不会进到赛制库
 - 导出的文件是完整的计时器，可以再导出一次（换一场），新的一场会替换旧的，不会叠加。文件如果被改坏了，会退回普通计时器，不会白屏
-- 「导出这一场」只在构建好的 `debate-timer.html` 里可用；开发用的 `src/index.html` 里按钮是灰的
+- 网页版和 `ustc-debate-timer.html` 都能导出可离线打开的比赛文件。开发用的 `src/index.html` 里按钮是灰的
 
 ## 键位
 
@@ -139,7 +139,7 @@
 python timer/build.py
 ```
 
-内置赛制就更新了，并重新生成 `debate-timer.html`。
+两个版本的内置赛制都会更新。
 
 流程总表可加「计时员提示」列来指定环节提示。奇袭形式的时长后可用全角括号写该形式的提示。「插入后间隔」列可写 `奇袭后休息 30 秒` 指定后续间隔，省略时沿用赛制的第一段评委打分。重霄杯采用前者，校赛沿用评委打分。
 
@@ -249,8 +249,10 @@ python timer/tests/screenshots.py --theme mytheme --size 1366x768
 
 ```
 timer/
-├── build.py                 # 解析赛制库 → src/builtin-formats.js；把 src/ 内联成 debate-timer.html
-├── debate-timer.html        # 产物，提交进仓库
+├── build.py                 # 解析赛制库，构建网页版与单 HTML 离线版
+├── ustc-debate-timer.html   # 随源码更新的离线产物，提交进仓库
+├── dist/pages/              # 网页版构建产物，由 GitHub Pages 部署
+├── web/                     # 网页版专用入口 main.js 与资源
 ├── src/
 │   ├── index.html           # 开发用外壳，可直接双击调试
 │   ├── builtin-formats.js   # 生成文件，不要手改
@@ -260,11 +262,16 @@ timer/
 └── tests/                   # JS 测试、Python 测试、截图脚本
 ```
 
-脚本都是经典脚本（不用 `import`），加载顺序以 `build.py` 里的 `ORDER` 为准。改了 `src/` 下任何东西，都要重新生成并把新的 `debate-timer.html` 一起提交。
+两个版本共享 `src/` 中的计时逻辑、主题和赛制，脚本顺序由 `build.py` 中的 `ORDER` 决定。网页版还加载 `web/main.js`。以后添加仅在线使用的 3D 模块、模型或贴图，可放入 `web/`，从线上入口按需加载。离线版把共用脚本与样式全部内联进一个 HTML。
+
+每次推送 `main`，GitHub Actions 重新构建并部署 Pages。如果仓库中的离线文件或开发用生成文件有变化，工作流会把更新提交回 `main`。推送形如 `v1.2.3` 的正式版本标签时，另一条工作流从该标签构建离线版，并以 `ustc-debate-timer.html` 为附件发布 GitHub Release。首次发布前，网页版开赛页会显示「离线版尚未发布」。
 
 ```
-python timer/build.py                        # 生成
+python timer/build.py                        # 同时生成网页版与离线版
+python timer/build.py --target web           # 只构建网页版
+python timer/build.py --target offline       # 只构建单 HTML 离线版
 python timer/build.py --check                # 只检查产物与源码是否一致，不一致退出 1
+python -m http.server 8000 --directory timer/dist/pages  # 浏览器打开 http://localhost:8000/
 python timer/tests/run_js_tests.py           # JS 测试（用系统自带的 Edge 跑，不需要 Node）
 python -m unittest discover -s timer/tests -p "test_*.py"   # Python 测试（含 --check，以及 test_keyboard.py：无头 Edge 注入真实键盘鼠标）
 python timer/tests/screenshots.py            # 截图，1920x1080，存到 timer/tests/out/1920x1080/
@@ -279,7 +286,7 @@ python timer/tests/frames.py --theme chalk --size 1024x768                   # 4
 python timer/tests/frames.py --theme riso --demo dual --skip 1200 --key KeyG,KeyG   # 放弃（G G）
 ```
 
-截图用的是 `?demo=<名字>` 的固定场景（标题、单方、超时、双方、间隔、结束卡、长名字、控制条、开场卡上的控制条（`dock-title`，试音与音量）、键位帮助、开赛页、编辑器、操作台等；加 `&theme=<id>` 换主题），可以直接在浏览器里打开 `debate-timer.html?demo=long` 看。
+截图用的是 `?demo=<名字>` 的固定场景（标题、单方、超时、双方、间隔、结束卡、长名字、控制条、开场卡上的控制条（`dock-title`，试音与音量）、键位帮助、开赛页、编辑器、操作台等；加 `&theme=<id>` 换主题），可以直接在浏览器里打开 `ustc-debate-timer.html?demo=long` 看。
 
 `frames.py` 打开不冻结的 `?demo=<名字>&theme=<id>`，把页面时钟停住，`--skip` 先把时钟拨快若干毫秒，`--key` 再按一个键（逗号隔开可以连按几个，`--key-gap` 是两次之间的页面时间，默认 400 毫秒，G G 这类确认的第二下要在 1.5 秒内），然后每隔 `--step` 毫秒（页面时间）截一帧，共 `--count` 帧，存到 `timer/tests/out/frames/<宽>x<高>/<主题>/<演示态>[-<键>][-skip<毫秒>]/000.png…`；装了 ffmpeg 时旁边还有一张 `sheet.png`，每行四帧、按时间顺序排开，一眼看出一个时刻里色场、文字、铃各自什么时候动。终端每帧一行：时间、`data-phase`、`data-side`、`data-kind`、是否还在入场。几点要注意：
 

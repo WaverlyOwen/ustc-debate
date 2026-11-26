@@ -86,6 +86,7 @@
   background: linear-gradient(var(--pro) 50%, var(--con) 50%);
 }
 .dt-setup-head p { color: var(--ink-dim); letter-spacing: .14em; }
+.dt-offline-download { margin-inline-start: auto; color: var(--ink); text-underline-offset: .2em; }
 
 .dt-setup-label {
   font-size: .8em;

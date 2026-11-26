@@ -1,7 +1,7 @@
 (function () {
   function fakeWin() {
     const listeners = {}; const sent = [];
-    return { sent, closed: false, location: { href: 'file:///C:/x/debate-timer.html?demo=1#abc', hash: '' },
+    return { sent, closed: false, location: { href: 'file:///C:/x/ustc-debate-timer.html?demo=1#abc', hash: '' },
       addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); },
       removeEventListener: (t, fn) => { listeners[t] = (listeners[t] || []).filter(f => f !== fn); },
       emit: (t, ev) => (listeners[t] || []).forEach(fn => fn(ev)),
@@ -9,7 +9,7 @@
   }
   DT.test('sync: openProjector strips query and hash', () => {
     const w = fakeWin(); DT.sync.openProjector(w);
-    assert.equal(w.opened[0], 'file:///C:/x/debate-timer.html#projector');
+    assert.equal(w.opened[0], 'file:///C:/x/ustc-debate-timer.html#projector');
     assert.equal(w.opened[1], 'dt-projector');
   });
   DT.test('sync: projector applies state and forwards keys except F', () => {

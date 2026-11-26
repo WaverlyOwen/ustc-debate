@@ -167,15 +167,49 @@ class MissingDirTests(unittest.TestCase):
 
 class CheckTests(unittest.TestCase):
     def test_check_passes_on_a_fresh_build_and_fails_after_an_edit(self):
-        original = build.BUILTIN_JS.read_text(encoding="utf-8")
+        original = build.BUILTIN_JS.read_bytes()
         try:
             with redirect_stdout(io.StringIO()):
-                self.assertEqual(build.main(["--check"]), 0)
-            build.BUILTIN_JS.write_text(original + "\n// edited\n", encoding="utf-8")
+                self.assertEqual(build.main(["--target", "offline", "--check"]), 0)
+            build.BUILTIN_JS.write_bytes(original + b"\n// edited\n")
             with redirect_stdout(io.StringIO()):
-                self.assertEqual(build.main(["--check"]), 1)
+                self.assertEqual(build.main(["--target", "offline", "--check"]), 1)
         finally:
-            build.BUILTIN_JS.write_text(original, encoding="utf-8", newline="\n")
+            build.BUILTIN_JS.write_bytes(original)
+
+
+class TargetTests(unittest.TestCase):
+    def test_pages_has_its_own_entry_and_shares_the_offline_runtime(self):
+        from html.parser import HTMLParser
+        self.assertEqual(build.OUT.name, "ustc-debate-timer.html")
+        formats = build.parse_all(FORMATS)
+        site = build.web_outputs(formats)
+        root = build.PAGES
+        index = site[root / "index.html"]
+        offline = build.inline_html(formats)
+        self.assertEqual(site[root / "debate-timer.html"], index)
+        self.assertIn("web/main.js", index)
+        self.assertIn("assets/timer.js", index)
+        self.assertIn("assets/timer.css", index)
+        self.assertNotIn("web/main.js", offline)
+        self.assertIn(site[root / "assets/timer.js"], offline)
+        self.assertIn(site[root / "assets/timer.css"], offline)
+
+        class Resources(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+                data = dict(attrs)
+                if tag == "script" and "src" in data:
+                    self.paths.append(data["src"])
+                if tag == "link" and data.get("rel") == "stylesheet":
+                    self.paths.append(data["href"])
+
+        resources = Resources()
+        resources.paths = []
+        resources.feed(index)
+        self.assertTrue(resources.paths)
+        for url in resources.paths:
+            self.assertFalse(url.startswith(("/", "http:", "https:")), url)
+            self.assertIn(root / url.split("?")[0], site, url)
 
 
 class MissingSourceTests(unittest.TestCase):

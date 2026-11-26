@@ -52,7 +52,7 @@
   // The console beside a projector window, opened with O in a stand-in window.
   function bootDesk() {
     const proj = { closed: false, postMessage() {} };
-    const host = { location: { href: 'file:///C:/x/debate-timer.html' }, addEventListener() {}, removeEventListener() {},
+    const host = { location: { href: 'file:///C:/x/ustc-debate-timer.html' }, addEventListener() {}, removeEventListener() {},
       open: () => proj };
     const t = boot({ window: host });
     press('KeyO');
@@ -903,7 +903,7 @@
       createBuffer: (ch, len) => ({ getChannelData: () => new Float32Array(len) }) };
     DT.bells._setContextFactory(() => ctx); DT.bells._resetForTests();
     const proj = { closed: false, postMessage() {} };
-    const host = { location: { href: 'file:///C:/x/debate-timer.html' }, addEventListener() {}, removeEventListener() {},
+    const host = { location: { href: 'file:///C:/x/ustc-debate-timer.html' }, addEventListener() {}, removeEventListener() {},
       open: () => proj };
     const t = boot({ bells: DT.bells, window: host });
     try {

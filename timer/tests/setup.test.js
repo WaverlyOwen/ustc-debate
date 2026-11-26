@@ -317,7 +317,7 @@
     const t = mount({ canExport: false, onExport: () => { throw new Error('should not run'); } });
     const b = t.box.querySelector('button[data-action="export"]');
     assert.ok(b.disabled);
-    assert.ok(b.title.indexOf('debate-timer.html') >= 0);
+    assert.ok(b.title.indexOf('ustc-debate-timer.html') >= 0);
     t.h.destroy();
   });
   DT.test('setup: 导出这一场 is a plain button just left of 开始这一场, and the page can show a notice', () => {

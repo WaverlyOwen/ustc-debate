@@ -1,0 +1,46 @@
+name: Offline release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build the offline timer from the tag
+        run: |
+          python3 timer/build.py --target offline
+          python3 timer/build.py --target offline --check
+          python3 -m unittest discover -s timer/tests -p test_build.py
+      - name: Publish the single HTML attachment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          file=timer/ustc-debate-timer.html
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes
+          fi
+          # Resume an interrupted release and preserve already-published asset contents.
+          release=$(gh release view "$TAG" --json assets,isDraft,isPrerelease)
+          if jq -e '.isPrerelease' <<<"$release" >/dev/null; then
+            echo "The version tag already has a prerelease." >&2
+            exit 1
+          fi
+          if jq -e --arg name "${file##*/}" 'any(.assets[]; .name == $name)' <<<"$release" >/dev/null; then
+            gh release download "$TAG" --pattern "${file##*/}" --dir "$RUNNER_TEMP"
+            cmp "$file" "$RUNNER_TEMP/${file##*/}"
+          else
+            gh release upload "$TAG" "$file"
+          fi
+          if jq -e '.isDraft' <<<"$release" >/dev/null; then
+            gh release edit "$TAG" --draft=false
+          fi

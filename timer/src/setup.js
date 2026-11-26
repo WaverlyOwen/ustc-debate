@@ -14,7 +14,7 @@
     stages: [{ id: 'dt-sample-1', name: SAMPLE.stage, type: 'single', side: 'pro', secs: 180, speaker: '正一' }],
   };
   const NOTICE_MS = 6000;   // how long a notice stays up
-  const NO_EXPORT = '在构建好的 debate-timer.html 里才能导出';
+  const NO_EXPORT = '请在网页版或离线文件 ustc-debate-timer.html 中导出';
   let mounts = 0;   // keeps option ids unique if the page is mounted again
 
   // Static markup only; format names and match text go in through textContent and value.
@@ -135,6 +135,7 @@
     const page = el('div', 'dt-setup');
     page.innerHTML = TEMPLATE;
     const $ = sel => page.querySelector(sel);
+    if (DT.web) DT.web.addDownloadLink($('.dt-setup-head'));
     const list = $('.dt-setup-list');
     const field = name => $('input[name="' + name + '"]');
     const texts = TEXT_FIELDS.map(field);
@@ -327,7 +328,7 @@
     }
     $('button[data-action="start"]').addEventListener('click', start);
 
-    // 导出这一场: a quiet button beside 开始这一场. Only the built single file has its own source to copy.
+    // 导出这一场: a quiet button beside 开始这一场.
     if (o.onExport) {
       const exp = button('导出这一场', 'export');
       if (!o.canExport) {

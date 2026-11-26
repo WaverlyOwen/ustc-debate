@@ -225,7 +225,7 @@ def main(argv=None):
     ap.add_argument("--key-gap", type=int, default=400, help="连按几个键时两次之间隔多少毫秒（页面时间），默认 400")
     ap.add_argument("--count", type=int, default=16, help="截几帧")
     ap.add_argument("--step", type=int, default=50, help="帧间隔，毫秒")
-    ap.add_argument("--html", default=str(HERE.parent / "debate-timer.html"))
+    ap.add_argument("--html", default=str(HERE.parent / "ustc-debate-timer.html"))
     args = ap.parse_args(argv)
     try:
         w, h = (int(x) for x in args.size.lower().split("x"))

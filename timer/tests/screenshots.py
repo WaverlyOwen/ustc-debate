@@ -2,7 +2,7 @@
 """Screenshot every demo scene of the built timer with headless Edge (or Chrome).
 
 Usage:
-    python timer/tests/screenshots.py [--size 1920x1080] [--only 名字,名字] [--theme id] [--html timer/debate-timer.html]
+    python timer/tests/screenshots.py [--size 1920x1080] [--only 名字,名字] [--theme id] [--html timer/ustc-debate-timer.html]
 
 Each scene opens as <html>?demo=<名字>&frozen=1 and is saved to timer/tests/out/<W>x<H>/<名字>.png.
 With --theme, every scene is shown in that theme (&theme=<id>) and saved to timer/tests/out/<W>x<H>/<id>/<名字>.png.
@@ -33,7 +33,7 @@ def main(argv=None):
     ap.add_argument("--size", default="1920x1080", help="窗口大小，如 1366x768")
     ap.add_argument("--only", default="", help="只截这些演示态，逗号分隔")
     ap.add_argument("--theme", default="", help="每个演示态都换成这个主题")
-    ap.add_argument("--html", default=str(HERE.parent / "debate-timer.html"))
+    ap.add_argument("--html", default=str(HERE.parent / "ustc-debate-timer.html"))
     args = ap.parse_args(argv)
     try:
         w, h = (int(x) for x in args.size.lower().split("x"))

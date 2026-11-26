@@ -1463,6 +1463,7 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   background: linear-gradient(var(--pro) 50%, var(--con) 50%);
 }
 .dt-setup-head p { color: var(--ink-dim); letter-spacing: .14em; }
+.dt-offline-download { margin-inline-start: auto; color: var(--ink); text-underline-offset: .2em; }
 
 .dt-setup-label {
   font-size: .8em;
@@ -8858,7 +8859,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     stages: [{ id: 'dt-sample-1', name: SAMPLE.stage, type: 'single', side: 'pro', secs: 180, speaker: '正一' }],
   };
   const NOTICE_MS = 6000;   // how long a notice stays up
-  const NO_EXPORT = '在构建好的 debate-timer.html 里才能导出';
+  const NO_EXPORT = '请在网页版或离线文件 ustc-debate-timer.html 中导出';
   let mounts = 0;   // keeps option ids unique if the page is mounted again
 
   // Static markup only; format names and match text go in through textContent and value.
@@ -8979,6 +8980,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     const page = el('div', 'dt-setup');
     page.innerHTML = TEMPLATE;
     const $ = sel => page.querySelector(sel);
+    if (DT.web) DT.web.addDownloadLink($('.dt-setup-head'));
     const list = $('.dt-setup-list');
     const field = name => $('input[name="' + name + '"]');
     const texts = TEXT_FIELDS.map(field);
@@ -9171,7 +9173,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     }
     $('button[data-action="start"]').addEventListener('click', start);
 
-    // 导出这一场: a quiet button beside 开始这一场. Only the built single file has its own source to copy.
+    // 导出这一场: a quiet button beside 开始这一场.
     if (o.onExport) {
       const exp = button('导出这一场', 'export');
       if (!o.canExport) {
@@ -10647,7 +10649,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   // Used when build.py has not injected DT.THEMES (the test page loads the sources directly).
   const FALLBACK_THEMES = [{ id: 'hall', name: '堂' }, { id: 'daylight', name: '昼' }, { id: 'chroma', name: '绿幕' }];
   const EXPORTED = '已导出。把这个文件拷到比赛用的电脑上，双击就能直接开始这一场';
-  const EXPORT_FAILED = '没能导出这个文件：浏览器没有让它下载。再试一次，或换一个浏览器';
+  const EXPORT_FAILED = '没能导出这个文件。请重试，并确认浏览器允许下载';
   const RESTART_LABEL = '重新开始这一场';   // 新的一场 on the end card of a match file (new spec §4.1)
   // A key in a projector window whose console tab was closed. A refreshed console finds this window again by name,
   // but a console opened anew cannot (its O opens a window of its own), so this one is to be closed.
@@ -12086,13 +12088,14 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         lastMatch: typed || DT.store.loadLastMatch(),
         resumable: saved ? resumeInfo(saved) : null,
         themes: themeList(),
-        canExport: !!DT.preset.sourceParts(),
+        canExport: !!(DT.preset.sourceParts() || DT.web),
         // The download is handed to the browser; what it does next (a save dialog the timekeeper may cancel) the page
         // cannot see, so the notice says only whether the file was handed over.
-        onExport(format, match, theme) {
+        async onExport(format, match, theme) {
           try {
             const p = DT.preset.make(format, match, theme, DT.clock.now());
-            DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(DT.preset.sourceParts(), p), 'text/html');
+            const parts = DT.preset.sourceParts() || await DT.web.exportSource();
+            DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(parts, p), 'text/html');
           } catch (e) {
             console.warn('导出失败：', e);
             handle.toast(EXPORT_FAILED);
@@ -12185,9 +12188,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 
   // ?exportProbe=1: no app, just the page a fixed match would export, as the text of the pre #export-probe,
   // for tests/test_export.py to open in its turn.
-  function exportProbe() {
+  async function exportProbe() {
     const format = DT.BUILTIN_FORMATS.find(f => f.id === PROBE.format);
-    const parts = DT.preset.sourceParts();
+    const parts = DT.preset.sourceParts() || (DT.web && await DT.web.exportSource());
     const pre = el('pre');
     pre.id = 'export-probe';
     pre.textContent = parts ? DT.preset.buildHtml(parts, DT.preset.make(format, PROBE.match, PROBE.theme, DT.clock.now())) : '';

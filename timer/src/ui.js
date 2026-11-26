@@ -16,7 +16,7 @@
   // Used when build.py has not injected DT.THEMES (the test page loads the sources directly).
   const FALLBACK_THEMES = [{ id: 'hall', name: '堂' }, { id: 'daylight', name: '昼' }, { id: 'chroma', name: '绿幕' }];
   const EXPORTED = '已导出。把这个文件拷到比赛用的电脑上，双击就能直接开始这一场';
-  const EXPORT_FAILED = '没能导出这个文件：浏览器没有让它下载。再试一次，或换一个浏览器';
+  const EXPORT_FAILED = '没能导出这个文件。请重试，并确认浏览器允许下载';
   const RESTART_LABEL = '重新开始这一场';   // 新的一场 on the end card of a match file (new spec §4.1)
   // A key in a projector window whose console tab was closed. A refreshed console finds this window again by name,
   // but a console opened anew cannot (its O opens a window of its own), so this one is to be closed.
@@ -1455,13 +1455,14 @@
         lastMatch: typed || DT.store.loadLastMatch(),
         resumable: saved ? resumeInfo(saved) : null,
         themes: themeList(),
-        canExport: !!DT.preset.sourceParts(),
+        canExport: !!(DT.preset.sourceParts() || DT.web),
         // The download is handed to the browser; what it does next (a save dialog the timekeeper may cancel) the page
         // cannot see, so the notice says only whether the file was handed over.
-        onExport(format, match, theme) {
+        async onExport(format, match, theme) {
           try {
             const p = DT.preset.make(format, match, theme, DT.clock.now());
-            DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(DT.preset.sourceParts(), p), 'text/html');
+            const parts = DT.preset.sourceParts() || await DT.web.exportSource();
+            DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(parts, p), 'text/html');
           } catch (e) {
             console.warn('导出失败：', e);
             handle.toast(EXPORT_FAILED);
@@ -1554,9 +1555,9 @@
 
   // ?exportProbe=1: no app, just the page a fixed match would export, as the text of the pre #export-probe,
   // for tests/test_export.py to open in its turn.
-  function exportProbe() {
+  async function exportProbe() {
     const format = DT.BUILTIN_FORMATS.find(f => f.id === PROBE.format);
-    const parts = DT.preset.sourceParts();
+    const parts = DT.preset.sourceParts() || (DT.web && await DT.web.exportSource());
     const pre = el('pre');
     pre.id = 'export-probe';
     pre.textContent = parts ? DT.preset.buildHtml(parts, DT.preset.make(format, PROBE.match, PROBE.theme, DT.clock.now())) : '';

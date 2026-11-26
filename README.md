@@ -50,18 +50,19 @@
     └── evals.json                   # 测试用例（全套、部分请求、未抽签、校赛、陪练、压字数）
 
 timer/
-├── debate-timer.html                # 计时器，唯一需要拷走的文件
-├── build.py                         # 从赛制库与 src/ 生成上面这个文件
+├── ustc-debate-timer.html           # 离线计时器，双击即可使用
+├── build.py                         # 构建网页版与单 HTML 离线版
 ├── README.md                        # 计时器的使用说明、键位、加赛制、加主题
 ├── src/                             # 计时器源码与主题
+├── web/                             # 网页版专用入口与资源
 └── tests/                           # 计时器的测试与截图脚本
 ```
 
 ## 计时器
 
-`timer/debate-timer.html` 是配套的比赛计时器：一个文件，双击用 Edge 打开，不用联网。赛制取自上面 `references/formats/` 里的赛制库，也可以在界面里自己编辑赛制、导入导出。支持单屏和双窗口投影、三种计时方式、30 秒提示铃与终止铃、8 个全由代码生成的主题（暗场、亮场、直播抠像各有适用的）。开赛页的「导出这一场」能把一场比赛存成单独的 html，拷到比赛电脑上双击就进开场卡。用法、键位、加赛制与加主题的办法见 [`timer/README.md`](timer/README.md)。
+打开[网页版计时器](https://waverlyowen.github.io/ustc-debate/)即可开赛。比赛电脑需要离线使用时，在网页版开赛页点击「下载离线版」，从正式 Release 取得 `ustc-debate-timer.html`，拷走这一个文件，用 Edge 双击打开即可。网页版和仓库内的离线文件随每次 `main` 推送更新，正式版按版本标签发布。[查看正式版本](https://github.com/WaverlyOwen/ustc-debate/releases)
 
-不想下载也可以直接打开线上版：<https://waverlyowen.github.io/ustc-debate/>（GitHub Pages，推送到 main 后自动更新）。投影电脑没有网络时仍然用下载的单文件。
+两个版本都使用 `references/formats/` 中的赛制库，支持编辑与导入导出赛制、单屏和双窗口投影、三种计时方式、30 秒提示铃与终止铃，以及 8 个主题。也可以用开赛页的「导出这一场」保存已填好的比赛，拷到比赛电脑上双击就进开场卡。[使用说明与开发指南](timer/README.md)
 
 ## 使用方法
 

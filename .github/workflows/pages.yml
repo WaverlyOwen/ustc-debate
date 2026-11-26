@@ -1,5 +1,3 @@
-# Publish the debate timer to GitHub Pages: the site is the single-file timer, served as index.html.
-# Runs on every push to main, and on demand (Actions → Pages → Run workflow).
 name: Pages
 
 on:
@@ -9,37 +7,46 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Assemble the site
+      - name: Build the Pages site and the working copy of the offline timer
+        run: python3 timer/build.py
+      - name: Check both builds
+        run: python3 timer/build.py --check
+      - name: Refresh tracked artifacts on main
         run: |
-          mkdir _site
-          cp timer/debate-timer.html _site/index.html
-          cp timer/debate-timer.html _site/debate-timer.html
-          touch _site/.nojekyll
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
+          git add -- timer/ustc-debate-timer.html timer/src/builtin-formats.js timer/src/index.html
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Refresh generated timer files'
+            git push origin HEAD:refs/heads/main
+          fi
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: timer/dist/pages
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - id: deployment
         uses: actions/deploy-pages@v4

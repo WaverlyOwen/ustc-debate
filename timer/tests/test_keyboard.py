@@ -4,7 +4,7 @@ Launches its own headless Edge with --remote-debugging-port and drives it with t
 DevTools protocol (Input.dispatchMouseEvent / Input.dispatchKeyEvent). Only the
 browser this test started is terminated. Skipped when no Edge/Chrome is installed.
 
-The page is the built timer/debate-timer.html opened with ?test=1, which gives it a
+The page is the built timer/ustc-debate-timer.html opened with ?test=1, which gives it a
 read-only window.__dtTest (route(), session()) to read the match back from.
 """
 import base64
@@ -26,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from run_js_tests import find_browser  # noqa: E402
 
-PAGE = (HERE.parent / "debate-timer.html").resolve().as_uri()
+PAGE = (HERE.parent / "ustc-debate-timer.html").resolve().as_uri()
 PROFILES = HERE / "out" / "kbd-tests"
 
 # CDP key descriptions: code, key, Windows virtual key code, and the text a press types.
