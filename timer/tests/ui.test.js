@@ -159,7 +159,7 @@
       press('KeyQ');
       assert.equal(t.c.route(), 'setup');
       const banner = t.box.querySelector('.dt-setup-resume');
-      assert.ok(banner && banner.textContent.indexOf('这一场暂停了：中国科学技术大学新生辩论赛，停在第 1 个环节（正方一辩开篇立论）。') >= 0,
+      assert.ok(banner && banner.textContent.indexOf('这一场暂停了：中国科学技术大学 新生辩论赛，停在第 1 个环节（正方一辩开篇立论）。') >= 0,
         'the resume banner is shown, saying the match was paused here: ' + (banner && banner.textContent));
       assert.equal(savedRun(storage).running, false);
       assert.equal(savedRun(storage).clocks.main.used, 5000);
@@ -365,7 +365,7 @@
       assert.equal(t.c.route(), 'setup');
       const banner = t.box.querySelector('.dt-setup-resume');
       assert.ok(banner, 'the end card can be gone back to (2026-10-03 spec §5.3)');
-      assert.ok(banner.textContent.indexOf('这一场已经打完：中国科学技术大学新生辩论赛，停在结束卡。') >= 0, banner.textContent);
+      assert.ok(banner.textContent.indexOf('这一场已经打完：中国科学技术大学 新生辩论赛，停在结束卡。') >= 0, banner.textContent);
       banner.querySelector('button[data-action="resume"]').click();
       assert.equal(t.c.route(), 'timer');
       assert.equal(t.c.view().mode, 'end');

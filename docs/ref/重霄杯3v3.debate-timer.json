@@ -1,0 +1,182 @@
+{
+  "kind": "debate-timer-formats",
+  "schema": 1,
+  "formats": [
+    {
+      "id": "chongxiao-cup-3-3v3",
+      "name": "中国科学技术大学 重霄杯",
+      "builtin": false,
+      "theme": "hall",
+      "bells": {
+        "warn": [
+          30,
+          5
+        ],
+        "countdown": 3,
+        "end": "double",
+        "overtime": "tick"
+      },
+      "stages": [
+        {
+          "id": "chongxiao-1",
+          "name": "正方一辩立论陈词",
+          "secs": 210,
+          "type": "single",
+          "side": "pro",
+          "speaker": "正一"
+        },
+        {
+          "id": "chongxiao-2",
+          "name": "反方三辩质询正方一辩",
+          "secs": 60,
+          "type": "single",
+          "side": "con",
+          "speaker": "反三问，正一答",
+          "note": "只计提问方时间。对方回答时按 P 暂停，提问恢复时再按 P。"
+        },
+        {
+          "id": "chongxiao-3",
+          "name": "反方一辩立论陈词",
+          "secs": 210,
+          "type": "single",
+          "side": "con",
+          "speaker": "反一"
+        },
+        {
+          "id": "chongxiao-4",
+          "name": "正方三辩质询反方一辩",
+          "secs": 60,
+          "type": "single",
+          "side": "pro",
+          "speaker": "正三问，反一答",
+          "note": "只计提问方时间。对方回答时按 P 暂停，提问恢复时再按 P。"
+        },
+        {
+          "id": "chongxiao-5",
+          "name": "休息",
+          "secs": 60,
+          "type": "break",
+          "side": null,
+          "note": "本次休息可按 X 申请奇袭。先申请方选形式，另一队限选剩余形式；同时申请按赛前数字之和，奇数正方先，偶数反方先。"
+        },
+        {
+          "id": "chongxiao-6",
+          "name": "正方二辩驳论",
+          "secs": 120,
+          "type": "single",
+          "side": "pro",
+          "speaker": "正二"
+        },
+        {
+          "id": "chongxiao-7",
+          "name": "反方二辩驳论",
+          "secs": 120,
+          "type": "single",
+          "side": "con",
+          "speaker": "反二"
+        },
+        {
+          "id": "chongxiao-8",
+          "name": "正方二辩质询反方三辩",
+          "secs": 120,
+          "type": "single",
+          "side": "pro",
+          "speaker": "正二问，反三答",
+          "note": "只计提问方时间。对方回答时按 P 暂停，提问恢复时再按 P。"
+        },
+        {
+          "id": "chongxiao-9",
+          "name": "反方二辩质询正方三辩",
+          "secs": 120,
+          "type": "single",
+          "side": "con",
+          "speaker": "反二问，正三答",
+          "note": "只计提问方时间。对方回答时按 P 暂停，提问恢复时再按 P。"
+        },
+        {
+          "id": "chongxiao-10",
+          "name": "正方一辩小结",
+          "secs": 90,
+          "type": "single",
+          "side": "pro",
+          "speaker": "正一"
+        },
+        {
+          "id": "chongxiao-11",
+          "name": "反方一辩小结",
+          "secs": 90,
+          "type": "single",
+          "side": "con",
+          "speaker": "反一"
+        },
+        {
+          "id": "chongxiao-12",
+          "name": "休息",
+          "secs": 60,
+          "type": "break",
+          "side": null,
+          "note": "本次休息可按 X 申请奇袭。先申请方选形式，另一队限选剩余形式；同时申请按赛前数字之和，奇数正方先，偶数反方先。"
+        },
+        {
+          "id": "chongxiao-13",
+          "name": "自由辩论",
+          "secs": 240,
+          "type": "dual",
+          "side": null,
+          "first": "pro",
+          "speaker": "双方辩手",
+          "note": "每方 4 分钟。章程未指定先发方，请听主席确认。A 切给正方，L 切给反方。"
+        },
+        {
+          "id": "chongxiao-14",
+          "name": "休息",
+          "secs": 60,
+          "type": "break",
+          "side": null,
+          "note": "本次休息可按 X 申请奇袭。先申请方选形式，另一队限选剩余形式；同时申请按赛前数字之和，奇数正方先，偶数反方先。"
+        },
+        {
+          "id": "chongxiao-15",
+          "name": "反方三辩总结陈词",
+          "secs": 180,
+          "type": "single",
+          "side": "con",
+          "speaker": "反三"
+        },
+        {
+          "id": "chongxiao-16",
+          "name": "正方三辩总结陈词",
+          "secs": 180,
+          "type": "single",
+          "side": "pro",
+          "speaker": "正三"
+        }
+      ],
+      "extras": [
+        {
+          "group": "奇袭",
+          "perSide": 1,
+          "where": "break",
+          "after": {
+            "name": "奇袭后休息",
+            "secs": 30
+          },
+          "variants": [
+            {
+              "name": "奇袭申论",
+              "type": "single",
+              "secs": 120,
+              "note": "申请方申论。若先申请方选申论，另一队仅可选奇袭质询。"
+            },
+            {
+              "name": "奇袭质询",
+              "type": "single",
+              "secs": 90,
+              "note": "限对方一人回答，可打断，回答方有 5 秒保护。章程并列“单边”和“双方共同计时”，依主席确认：共用则连续走表，单边则回答时按 P 暂停。"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

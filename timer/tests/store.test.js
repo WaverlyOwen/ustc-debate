@@ -86,6 +86,21 @@
     assert.ok(S.isPristine(restored[0]));
   });
 
+  DT.test('store: an edited cup picks up its new default name and keeps its timing', () => {
+    S.useStorage(memStorage());
+    const list = S.loadFormats();
+    const cup = list.find(f => f.id === 'ustc-chongxiao-cup');
+    cup.name = '中国科学技术大学重霄杯辩论赛';
+    cup.stages[0].secs = 195;
+    S.saveFormats(list);
+    const restored = S.loadFormats().find(f => f.id === cup.id);
+    assert.equal(restored.name, '中国科学技术大学 重霄杯');
+    assert.equal(restored.stages[0].secs, 195);
+    restored.name = '院内练习';
+    S.saveFormats([restored]);
+    assert.equal(S.loadFormats().find(f => f.id === cup.id).name, '院内练习');
+  });
+
   // Revised 2026-10-18: a built-in edited before the new default bells keeps the bells it was saved with (no 5 s, no
   // 3-2-1) and takes the tock over time from the new default, which it does not name; 恢复默认 brings the new sequence.
   DT.test('store: an edited built-in saved with the old bells loads, rings them plus the tock over time, and restores to the new ones', () => {

@@ -189,6 +189,11 @@
   // Builtin ids that changed, old -> new (the school cup dropped its year). A stored edit or a last match
   // under an old id carries over to the new one.
   const RENAMED = { 'ustc-school-cup-2025': 'ustc-school-cup' };
+  const PREVIOUS_NAMES = {
+    'ustc-freshman-cup': '中国科学技术大学新生辩论赛',
+    'ustc-school-cup': '中国科学技术大学校赛',
+    'ustc-chongxiao-cup': '中国科学技术大学重霄杯辩论赛',
+  };
   function renamed(id) { return Object.prototype.hasOwnProperty.call(RENAMED, id) ? RENAMED[id] : null; }
   function migrateIds(list) {
     const ids = {};
@@ -217,7 +222,11 @@
     if (skipped.length) console.warn('有 ' + skipped.length + ' 个保存的赛制读不出来，已跳过（仍然保留在存储里）');
     const byId = {};
     stored.forEach(f => { byId[f.id] = f; });
-    const out = DT.BUILTIN_FORMATS.map(b => withExtraDefaults(clone(byId[b.id] || b)));
+    const out = DT.BUILTIN_FORMATS.map(b => {
+      const format = withExtraDefaults(clone(byId[b.id] || b));
+      if (format.name === PREVIOUS_NAMES[b.id]) format.name = b.name;
+      return format;
+    });
     stored.forEach(f => { if (!builtinById(f.id)) out.push(withExtraDefaults(f)); });
     return out;
   }

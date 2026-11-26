@@ -69,7 +69,7 @@
   DT.test('editor: export hands a named JSON file to saveFile', () => {
     const t = mount();
     t.box.querySelector('button[data-action="export"]').click();
-    assert.equal(t.state.saved[0][0], '中国科学技术大学新生辩论赛.debate-timer.json');
+    assert.equal(t.state.saved[0][0], '中国科学技术大学 新生辩论赛.debate-timer.json');
     assert.equal(DT.store.parseImport(t.state.saved[0][1]).formats[0].id, 'ustc-freshman-cup');
     t.h.destroy();
   });
@@ -108,7 +108,7 @@
     assert.equal(items.length, DT.BUILTIN_FORMATS.length + 1);
     assert.equal(items[items.length - 1].dataset.formatId, 'u-weekend');
     assert.equal($(t, '[data-format-id][aria-current="true"]').dataset.formatId, 'ustc-freshman-cup');
-    assert.equal($(t, 'input[name="format-name"]').value, '中国科学技术大学新生辩论赛');
+    assert.equal($(t, 'input[name="format-name"]').value, '中国科学技术大学 新生辩论赛');
     $(t, '[data-format-id="u-weekend"]').click();
     assert.equal($(t, 'input[name="format-name"]').value, '周末模辩');
     assert.equal(t.box.querySelectorAll('[data-stage-index]').length, 1);
@@ -311,7 +311,7 @@
     t.h.select('ustc-freshman-cup');
     $(t, 'button[data-action="duplicate"]').click();
     const copy = t.state.list[t.state.list.length - 1];
-    assert.equal(copy.name, '中国科学技术大学新生辩论赛（副本）');
+    assert.equal(copy.name, '中国科学技术大学 新生辩论赛（副本）');
     assert.equal(copy.stages.length, current(t.state).stages.length);
     assert.equal($(t, '[data-format-id][aria-current="true"]').dataset.formatId, copy.id);
     t.h.destroy();
@@ -340,12 +340,12 @@
     $(t, 'button[data-action="import"]').click();
     await later(20);
     const dialog = $(t, '[role="alertdialog"]');
-    assert.ok(dialog.textContent.indexOf('已经有一个叫「中国科学技术大学新生辩论赛」的赛制') >= 0);
+    assert.ok(dialog.textContent.indexOf('已经有一个叫「中国科学技术大学 新生辩论赛」的赛制') >= 0);
     assert.deepEqual(Array.from(dialog.querySelectorAll('button')).map(b => b.textContent), ['覆盖', '另存一份']);
     dialog.querySelector('button[data-answer="copy"]').click();
     await later(20);
     assert.equal(current(t.state).stages[0].secs, 180, 'the original is kept');
-    assert.ok(t.state.list.some(f => f.name === '中国科学技术大学新生辩论赛（导入）' && f.stages[0].secs === 200));
+    assert.ok(t.state.list.some(f => f.name === '中国科学技术大学 新生辩论赛（导入）' && f.stages[0].secs === 200));
     t.state.files = [DT.store.exportFormats([theirs])];
     $(t, 'button[data-action="import"]').click();
     await later(20);
@@ -353,7 +353,7 @@
     await later(20);
     assert.equal(current(t.state).stages[0].secs, 200);
     assert.equal(current(t.state).builtin, true, 'still restorable');
-    assert.equal($(t, 'input[name="format-name"]').value, '中国科学技术大学新生辩论赛');
+    assert.equal($(t, 'input[name="format-name"]').value, '中国科学技术大学 新生辩论赛');
     assert.equal(row(t, 0).querySelector('input[name="secs"]').value, '3:20');
     t.h.destroy();
   });
@@ -554,7 +554,7 @@
     assert.ok(dialog() && dialog().textContent.indexOf('还有 1 处没改好') >= 0);
     dialog().querySelector('button[data-answer="stay"]').click();
     await later(0);
-    assert.equal($(t, 'input[name="format-name"]').value, '中国科学技术大学新生辩论赛');
+    assert.equal($(t, 'input[name="format-name"]').value, '中国科学技术大学 新生辩论赛');
     assert.equal(row(t, 0).querySelector('input[name="secs"]').value, '三分半');
     assert.ok(row(t, 0).textContent.indexOf('时长写成 3:00 或 180') >= 0);
     $(t, '[data-format-id="u-weekend"]').click();

@@ -12,7 +12,13 @@
   DT.test('setup: lists every format with its stage count', () => {
     const t = mount();
     assert.equal(t.box.querySelectorAll('[data-format-id]').length, DT.BUILTIN_FORMATS.length);
-    assert.ok(t.box.textContent.indexOf('中国科学技术大学新生辩论赛') >= 0);
+    [
+      ['ustc-freshman-cup', '中国科学技术大学 新生辩论赛'],
+      ['ustc-school-cup', '中国科学技术大学 校赛'],
+      ['ustc-chongxiao-cup', '中国科学技术大学 重霄杯'],
+    ].forEach(([id, name]) => {
+      assert.ok(t.box.querySelector('[data-format-id="' + id + '"]').textContent.includes(name), name);
+    });
     t.h.destroy();
   });
   DT.test('setup: prefills the last match and starts with the chosen format', () => {

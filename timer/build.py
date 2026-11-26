@@ -94,7 +94,10 @@ def _table_rows(path, lines):
         if want not in names:
             raise FormatError(f"{path.name}:{head + 1}: 流程总表缺少「{want}」列")
         keys[key] = names.index(want)
-    keys["block"] = len(names) - 1
+    keys["block"] = next((i for i, name in enumerate(names) if name in ("打分块", "段")), len(names) - 1)
+    for label, key in (("计时员提示", "note"), ("插入后间隔", "after")):
+        if label in names:
+            keys[key] = names.index(label)
     rows = []
     i = head + 2  # skip the |---| separator
     while i < len(lines) and lines[i].lstrip().startswith("|"):
@@ -103,7 +106,7 @@ def _table_rows(path, lines):
     return keys, rows
 
 
-def _extra_group(path, no, name, dur):
+def _extra_group(path, no, name, dur, after):
     group = re.match(r"([^（(]+)", name).group(1).strip()
     per = re.search(r"每方([一二两三四五六七八九十\d]+)次", name)
     variants = []
@@ -112,12 +115,19 @@ def _extra_group(path, no, name, dur):
         if not m:
             raise FormatError(f"{path.name}:{no}: 看不懂奇袭的时长「{seg.strip()}」")
         v = {"name": group + m.group(1), "type": "single", "secs": int(m.group(2))}
-        if "双边" in seg:
+        note = re.search(r"（(.+)）\s*$", seg)
+        if note:
+            v["note"] = note.group(1)
+        elif "双边" in seg:
             v["note"] = NOTE_BOTH
         variants.append(v)
-    # Inserted in the judges' break (revised 2026-10-21, engine insertBlocked); parse_format fills in `after` once it has
-    # seen every stage.
-    return {"group": group, "perSide": cn_int(per.group(1)) if per else 1, "where": "break", "after": None,
+    following_break = None
+    if after and after != "—":
+        timing = re.fullmatch(r"(.+?)\s+([1-9]\d*)\s*秒", after)
+        if not timing:
+            raise FormatError(f"{path.name}:{no}: 插入后间隔应写成「名称 30 秒」，实际为「{after}」")
+        following_break = {"name": timing.group(1), "secs": int(timing.group(2))}
+    return {"group": group, "perSide": cn_int(per.group(1)) if per else 1, "where": "break", "after": following_break,
             "variants": variants}
 
 
@@ -142,7 +152,7 @@ def parse_format(path):
         get = {k: cells[i] for k, i in keys.items()}
         name, dur, timing = get["name"], get["dur"], get["timing"]
         if get["no"] == "—" and timing != "—":
-            extras.append(_extra_group(path, no, name, dur))
+            extras.append(_extra_group(path, no, name, dur, get.get("after")))
             continue
         m = re.search(r"\d+", dur)
         if not m:
@@ -175,11 +185,14 @@ def parse_format(path):
                 note = NOTE_DUAL
             if note:
                 stage["note"] = note
+        if get.get("note") and get["note"] != "—":
+            stage["note"] = get["note"]
         stages.append(stage)
     if not stages:
         raise FormatError(f"{path.name}: 流程总表里没有环节")
     for g in extras:
-        g["after"] = _judges_break(stages)
+        if g["after"] is None:
+            g["after"] = _judges_break(stages)
     return {"id": fid, "name": title.group(1).strip(), "builtin": True, "source": path.name,
             "theme": "hall", "bells": {**DEFAULT_BELLS, "warn": list(DEFAULT_BELLS["warn"])},
             "stages": stages, "extras": extras}

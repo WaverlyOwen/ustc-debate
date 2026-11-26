@@ -79,7 +79,7 @@
   DT.test('preset: file names follow title, then motion, then format', () => {
     assert.equal(P.fileName(P.make(F(), MATCH, 'hall', 1)), '新生赛决赛.html');
     assert.equal(P.fileName(P.make(F(), Object.assign({}, MATCH, { title: '' }), 'hall', 1)), '大学生应该优先发展兴趣.html');
-    assert.equal(P.fileName(P.make(F(), Object.assign({}, MATCH, { title: '', proMotion: '' }), 'hall', 1)), '中国科学技术大学新生辩论赛.html');
+    assert.equal(P.fileName(P.make(F(), Object.assign({}, MATCH, { title: '', proMotion: '' }), 'hall', 1)), '中国科学技术大学 新生辩论赛.html');
     assert.equal(P.fileName(P.make(F(), Object.assign({}, MATCH, { title: 'a/b:c*' }), 'hall', 1)), 'a_b_c_.html');
   });
 

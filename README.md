@@ -1,6 +1,6 @@
 # ustc-debate
 
-面向中国科学技术大学新生辩论赛的华语辩论备赛 Skill（Claude Code / Claude 通用）。
+面向中国科学技术大学 新生辩论赛的华语辩论备赛 Skill（Claude Code / Claude 通用）。
 
 给它一道辩题（可选题解、赛制），它会**始终为正反双方对称备赛**，并交付三类文档，源文件是 LaTeX（`.tex`，写在自带的 `debate.cls` 之上），用 XeLaTeX 编译成 PDF：
 
