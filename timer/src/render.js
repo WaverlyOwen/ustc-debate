@@ -194,6 +194,7 @@
     let paint = null;       // while that theme has a painter: its canvas, context, instance and frame bookkeeping
     let lastView = null, lastSig = null;
     let painterWarned = false;
+    let chalkSignObserver = null;
 
     function later(fn, ms) {
       const id = setTimeout(() => { timers.delete(id); fn(); }, ms);
@@ -437,6 +438,27 @@
     }
     stage.ownerDocument.addEventListener('visibilitychange', onVisible);
 
+    // Keep the chalk loop and its reveal mask centred on the hanging + and the time.
+    // The glyph can change width when the projector resizes or its font finishes loading.
+    function watchChalkSign(over) {
+      if (!over) {
+        if (chalkSignObserver) chalkSignObserver.disconnect();
+        chalkSignObserver = null;
+        return;
+      }
+      if (chalkSignObserver) return;
+      const sign = clocks.main.sign[0];
+      const measure = () => {
+        const margin = parseFloat(getComputedStyle(sign).marginRight) || 0;
+        cssVar(stage, '--chalk-sign-span', (sign.offsetWidth + margin) + 'px');
+      };
+      measure();
+      if (typeof ResizeObserver === 'function') {
+        chalkSignObserver = new ResizeObserver(measure);
+        chalkSignObserver.observe(sign);
+      }
+    }
+
     function update(v) {
       if (destroyed || !v) return;
       const st = v.mode === 'stage' ? v.stage : null;
@@ -479,6 +501,7 @@
       text(els.speaker, st ? st.speaker : '');
 
       if (st && kind !== 'dual') paintClock(clocks.main, active, kind);
+      watchChalkSign(themeId === 'chalk' && kind === 'single' && active.phase === 'over');
       if (kind === 'dual') {
         attr(els.halves, 'data-idle', idle);
         const leftSide = seat === 'left' ? 'pro' : 'con';
@@ -630,6 +653,7 @@
     function destroy() {
       destroyed = true;
       stage.ownerDocument.removeEventListener('visibilitychange', onVisible);
+      if (chalkSignObserver) chalkSignObserver.disconnect();
       stopPainter();
       timers.forEach(id => clearTimeout(id));
       timers.clear();

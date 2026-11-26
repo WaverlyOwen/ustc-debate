@@ -73,17 +73,32 @@
     while ((m = re.exec(value))) out.push({ color: m[1], x: Number(m[2]), y: Number(m[3]) });
     return out;
   }
+  // Read one background layer on one axis. Edge may serialize an end-relative position as
+  // "right -12px" or "calc(100% + 12px)"; both place the image -12px from the right.
+  function layerPosition(style, layer, vertical) {
+    const start = vertical ? 'top' : 'left', end = vertical ? 'bottom' : 'right';
+    const axis = vertical ? style.backgroundPositionY : style.backgroundPositionX;
+    const value = axis.split(',')[layer].trim();
+    const named = /^(left|right|top|bottom)(?:\s+(-?[\d.]+)px)?$/.exec(value);
+    if (named) return { from: named[1], offset: Number(named[2] || 0) };
+
+    const terms = CSSNumericValue.parse(value).toSum('percent', 'px').values;
+    let percent = 0, pixels = 0;
+    for (const term of terms) {
+      if (term.unit === 'percent') percent = term.value;
+      if (term.unit === 'px') pixels = term.value;
+    }
+    assert.ok(percent === 0 || percent === 100, 'expected a position relative to an edge: ' + value);
+    return percent === 100 ? { from: end, offset: -pixels } : { from: start, offset: pixels };
+  }
   // A halftone's ramp, its second image (black to the threshold's grey over the image's first 40th, then white), as
   // placed from its seat: the edge it is placed from, how far behind the seat it starts, how far from the seat it
   // reaches the grey (where the dots die out), and the grey it passes the seat at (0 black, .5 the threshold).
-  // Positions read "-12px 0px", "right -12px top 0px" or "left 0px bottom -12px".
   function ramp(cs, vertical) {
     const size = cs.backgroundSize.split(',')[1].trim().split(/\s+/);
-    const pos = cs.backgroundPosition.split(',')[1].trim().split(/\s+/);
     const len = px(size[vertical ? 1 : 0]) / 40;
-    const four = pos.length === 4;
-    const from = four ? pos[vertical ? 2 : 0] : (vertical ? 'top' : 'left');
-    const back = -px(four ? pos[vertical ? 3 : 1] : pos[vertical ? 1 : 0]);
+    const { from, offset } = layerPosition(cs, 1, vertical);
+    const back = -offset;
     return { from, back, reach: len - back, grey: 0.5 * back / len };
   }
   const inkOf = side => (side === 'pro' ? RED : BLUE);
@@ -465,12 +480,14 @@
     [0.01, 0.0025, 0].forEach(q => {
       f.style.setProperty('--remain-q', String(q));
       const cs = pseudo(f, '::before'), r = ramp(cs, true);
-      const sizes = cs.backgroundSize.split(','), pos = cs.backgroundPosition.split(',');
+      const sizes = cs.backgroundSize.split(',');
       const top = r.reach + 39 * (r.reach + r.back);   // the ramp image's white runs up to here
-      const white = /^left 0px bottom (-?[\d.]+)px$/.exec(pos[2].trim());
-      assert.ok(white && sizes[2].trim() === '100% 100%', q + ': a sheet of white: ' + pos[2] + ' / ' + sizes[2]);
-      assert.ok(Number(white[1]) <= Math.max(top, 0) + 0.5, q + ': it starts below the ramp\'s own white ends: ' + white[1] + ' / ' + top);
-      assert.ok(Number(white[1]) >= r.reach - 0.5, q + ': and above the dots: ' + white[1] + ' / ' + r.reach);
+      assert.equal(sizes[2].trim(), '100% 100%', q + ': a sheet of white');
+      assert.deepEqual(layerPosition(cs, 2, false), { from: 'left', offset: 0 }, q + ': flush left');
+      const white = layerPosition(cs, 2, true);
+      assert.equal(white.from, 'bottom', q + ': measured from the floor');
+      assert.ok(white.offset <= Math.max(top, 0) + 0.5, q + ': it starts below the ramp\'s own white ends: ' + white.offset + ' / ' + top);
+      assert.ok(white.offset >= r.reach - 0.5, q + ': and above the dots: ' + white.offset + ' / ' + r.reach);
       assert.ok(top < H || q > 0.005, q + ': (the ramp alone would not reach the top: ' + top + ' / ' + H + ')');
     });
     stage.destroy();

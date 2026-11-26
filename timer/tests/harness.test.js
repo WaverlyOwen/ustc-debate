@@ -4,6 +4,8 @@ DT.test('harness: deepEqual ignores key order', () => {
 DT.test('harness: throws and near', () => {
   assert.throws(() => { throw new Error('x'); });
   assert.near(0.1 + 0.2, 0.3, 1e-9);
+  assert.throws(() => assert.near(NaN, 1, 0.1));
+  assert.throws(() => assert.near(1, NaN, 0.1));
 });
 DT.test('harness: async tests are awaited', async () => {
   const v = await new Promise(r => setTimeout(() => r(7), 5));

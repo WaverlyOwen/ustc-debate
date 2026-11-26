@@ -69,10 +69,12 @@
   --chalk-stroke: url(#dt-chalk-stroke-xl);
   --chalk-grain: url(#dt-chalk-grain-xl);
   --chalk-write: url(#dt-chalk-write-xl);
-  /* How far the overtime loop sits left of the digits' centre: stage.css hangs the + to their left (with its margin
-     .614 of their size), so the loop moves by half of that and rings +0:07 as a whole; on a stage too narrow to move
-     it that far (4:3) it moves only until its left end reaches the edge. */
-  --chalk-loop-shift: clamp(0px, 50cqw - 63cqh, min(38cqh, 30cqw) * .307);
+  /* The + hangs left of the digits. Shift the loop by half its measured span, up to the board's edge. */
+  --chalk-loop-shift: clamp(0px, 50cqw - 63cqh, var(--chalk-sign-span, 0px) / 2);
+}
+@container (max-aspect-ratio: 3/2) {
+  /* At +10:00 stage.css puts the sign in the centred row. */
+  .dt-stage[data-theme="chalk"]:has(> .dt-clock[data-clock="main"][data-long]) { --chalk-loop-shift: 0px; }
 }
 .dt-stage[data-theme="chalk"][data-side="pro"] { --side-color: var(--pro-hatch); --side-chalk: var(--pro); --hatch-angle: var(--pro-angle); }
 .dt-stage[data-theme="chalk"][data-side="con"] { --side-color: var(--con-hatch); --side-chalk: var(--con); --hatch-angle: var(--con-angle); }

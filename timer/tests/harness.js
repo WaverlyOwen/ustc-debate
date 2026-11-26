@@ -21,7 +21,7 @@
     },
     ok(v, msg) { if (!v) fail(msg, 'expected truthy, got ' + JSON.stringify(v)); },
     throws(fn, msg) { let threw = false; try { fn(); } catch (e) { threw = true; } if (!threw) fail(msg, 'expected an exception'); },
-    near(a, b, eps, msg) { if (Math.abs(a - b) > eps) fail(msg, 'expected ' + b + ' ± ' + eps + ', got ' + a); },
+    near(a, b, eps, msg) { if (!(Math.abs(a - b) <= eps)) fail(msg, 'expected ' + b + ' ± ' + eps + ', got ' + a); },
   };
   async function run(filter) {
     const results = [];

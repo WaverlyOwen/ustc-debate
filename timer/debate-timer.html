@@ -2205,10 +2205,12 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   --chalk-stroke: url(#dt-chalk-stroke-xl);
   --chalk-grain: url(#dt-chalk-grain-xl);
   --chalk-write: url(#dt-chalk-write-xl);
-  /* How far the overtime loop sits left of the digits' centre: stage.css hangs the + to their left (with its margin
-     .614 of their size), so the loop moves by half of that and rings +0:07 as a whole; on a stage too narrow to move
-     it that far (4:3) it moves only until its left end reaches the edge. */
-  --chalk-loop-shift: clamp(0px, 50cqw - 63cqh, min(38cqh, 30cqw) * .307);
+  /* The + hangs left of the digits. Shift the loop by half its measured span, up to the board's edge. */
+  --chalk-loop-shift: clamp(0px, 50cqw - 63cqh, var(--chalk-sign-span, 0px) / 2);
+}
+@container (max-aspect-ratio: 3/2) {
+  /* At +10:00 stage.css puts the sign in the centred row. */
+  .dt-stage[data-theme="chalk"]:has(> .dt-clock[data-clock="main"][data-long]) { --chalk-loop-shift: 0px; }
 }
 .dt-stage[data-theme="chalk"][data-side="pro"] { --side-color: var(--pro-hatch); --side-chalk: var(--pro); --hatch-angle: var(--pro-angle); }
 .dt-stage[data-theme="chalk"][data-side="con"] { --side-color: var(--con-hatch); --side-chalk: var(--con); --hatch-angle: var(--con-angle); }
@@ -7891,6 +7893,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     let paint = null;       // while that theme has a painter: its canvas, context, instance and frame bookkeeping
     let lastView = null, lastSig = null;
     let painterWarned = false;
+    let chalkSignObserver = null;
 
     function later(fn, ms) {
       const id = setTimeout(() => { timers.delete(id); fn(); }, ms);
@@ -8134,6 +8137,27 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     }
     stage.ownerDocument.addEventListener('visibilitychange', onVisible);
 
+    // Keep the chalk loop and its reveal mask centred on the hanging + and the time.
+    // The glyph can change width when the projector resizes or its font finishes loading.
+    function watchChalkSign(over) {
+      if (!over) {
+        if (chalkSignObserver) chalkSignObserver.disconnect();
+        chalkSignObserver = null;
+        return;
+      }
+      if (chalkSignObserver) return;
+      const sign = clocks.main.sign[0];
+      const measure = () => {
+        const margin = parseFloat(getComputedStyle(sign).marginRight) || 0;
+        cssVar(stage, '--chalk-sign-span', (sign.offsetWidth + margin) + 'px');
+      };
+      measure();
+      if (typeof ResizeObserver === 'function') {
+        chalkSignObserver = new ResizeObserver(measure);
+        chalkSignObserver.observe(sign);
+      }
+    }
+
     function update(v) {
       if (destroyed || !v) return;
       const st = v.mode === 'stage' ? v.stage : null;
@@ -8176,6 +8200,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       text(els.speaker, st ? st.speaker : '');
 
       if (st && kind !== 'dual') paintClock(clocks.main, active, kind);
+      watchChalkSign(themeId === 'chalk' && kind === 'single' && active.phase === 'over');
       if (kind === 'dual') {
         attr(els.halves, 'data-idle', idle);
         const leftSide = seat === 'left' ? 'pro' : 'con';
@@ -8327,6 +8352,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     function destroy() {
       destroyed = true;
       stage.ownerDocument.removeEventListener('visibilitychange', onVisible);
+      if (chalkSignObserver) chalkSignObserver.disconnect();
       stopPainter();
       timers.forEach(id => clearTimeout(id));
       timers.clear();
