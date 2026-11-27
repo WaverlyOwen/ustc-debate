@@ -119,7 +119,8 @@
   }
 
   function themeOf(id) {
-    if (DT.webScenes && DT.webScenes.get(id)) return id;
+    const scene = DT.webScenes?.get(id);
+    if (scene) return scene.id;
     const ids = Array.isArray(DT.THEMES) ? DT.THEMES.map(t => t.id) : BUILTIN_THEMES;
     return ids.indexOf(id) >= 0 ? id : 'hall';
   }

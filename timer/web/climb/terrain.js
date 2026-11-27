@@ -2,7 +2,7 @@ import { drawIceShoulders, drawRockBeds, drawSnowBanks, drawTalus } from './moun
 
 import { addOutcrops } from './outcrops.js';
 
-// One surveyed ridge, two ascents, and three ways to draw the same relief.
+// The two ascents follow one surveyed ridge.
 // World coordinates are east, up, and toward the viewer.
 const mountain = {
     seed: 17, summitX: -1, light: [-0.86, 0.55, 0.35],
@@ -22,19 +22,9 @@ const mountain = {
     ],
 };
 
-const editions = {
-  poster: {
-    snow: ['#757f9f','#9eafc2','#e7d1ce','#ffdeb1','#fff3cb'],
-    rock: ['#34334f','#514861','#827077','#bb8969','#e7ac6e','#ffd68c'],
-  },
-  ink: {
-    snow: ['#9a9994','#bbbab0','#d9d6c7','#eee9d6','#f9f4e2'],
-    rock: ['#585959','#777974','#92938a','#b5b3a6','#d4ceba'],
-  },
-  paper: {
-    snow: ['#5a799a','#83a4b5','#a8c7c7','#d0e4d9','#f2eed6'],
-    rock: ['#303b62','#435779','#526f89','#688e9c','#89afa9','#a6c5b6'],
-  },
+const rockAndSnow = {
+  snow: ['#757f9f','#9eafc2','#e7d1ce','#ffdeb1','#fff3cb'],
+  rock: ['#34334f','#514861','#827077','#bb8969','#e7ac6e','#ffd68c'],
 };
 
 const clamp = (n, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, n));
@@ -111,7 +101,7 @@ function clip(poly, field, level, above) {
 
 // The drawing lives in mountain coordinates. A whole seam or pen stroke can
 // cross several facets without changing direction at their boundaries.
-function drawing(style) {
+function drawing() {
   const cells = new Map();
   const key = (i,j) => (i+24)*64+j+12;
   function mark(points, material, pigment) {
@@ -138,8 +128,7 @@ function drawing(style) {
       mark([[x-w,z],[x+w,z],[xx+ww,zz],[xx-ww,zz]],material,pigment);
     }
   }
-  const ink=style==='ink', paper=style==='paper';
-  drawSnowBanks(style,mark,blade);
+  drawSnowBanks(mark,blade);
   // Snow in branching couloirs runs lengthwise down the stratified wall.
   for (const [x,z,len,drift] of [[-46,-5,21,-8],[-29,-7,28,-8],[-10,-5,33,-8],
     [-1,-4,15,-4],[10,-7,28,9],[25,-3,26,8],[42,-2,23,10],[57,-2,19,6]]) {
@@ -147,7 +136,6 @@ function drawing(style) {
     seam([p(0,0,.6),p(.22,1.1,.57),p(.37,-.55,.42),p(.56,.7,.84),
       p(.71,-.4,.53),p(.83,-.2,.28),p(1,-1.2,.016)],'rock','vein');
     seam([p(.22,-2.9,.06),p(.36,-1.9,.23),p(.56,.7,.47)],'rock','vein');
-    if (paper) seam([p(.04,.7,.26),p(.22,1.65,.23),p(.37,-.27,.12),p(.55,1.09,.05)],'rock','lip');
   }
   // Winds curl over the buttresses and carve small, crescent-shaped sastrugi
   // into the softer snow below. Their broken lee edges follow each snowfield.
@@ -159,8 +147,8 @@ function drawing(style) {
       const sx=x+i*.55+hash(x,i,82)*.76, sz=z+i*1.14;
       const length=.58+.66*hash(i,z,32), width=.10+.13*hash(x+i,z,73);
       const bend=(i%3===1?-.61:-.35)*length;
-      blade(sx,sz,dx*length,dz*length,width*(ink?.61:paper?1.48:1),bend,'snow','rime');
-      if (i%2===0 && !ink) blade(sx+.15,sz-.15,dx*length*.85,dz*length*.83,width*.82,bend,'snow','spark');
+      blade(sx,sz,dx*length,dz*length,width,bend,'snow','rime');
+      if (i%2===0) blade(sx+.15,sz-.15,dx*length*.85,dz*length*.83,width*.82,bend,'snow','spark');
     }
   }
   for (let i=-11; i<=10; i++) for (let j=-2; j<=6; j++) {
@@ -168,39 +156,17 @@ function drawing(style) {
     const x=(i+rnd(0))*8, z=(j+rnd(1))*8;
     const dip=(noise(x*.06,z*.05,86)-.48)*1.9;
     const pocket = noise(x*.075,z*.071,11);
-    if (paper) {
-      if (pocket>.46) blade(x,z,1.1+dip,2+rnd(2)*3,.36+rnd(3)*.34,-.45,'rock','cut');
-      if (pocket>.72) blade(x+.31,z+.07,.9+dip,2+rnd(2)*2.8,.13,-.37,'rock','lip');
-      continue;
+    const count=1+Math.floor(rnd(4)*4);
+    for (let n=0; n<count; n++) {
+      const sx=x+(rnd(5+n)-.5)*2.7, sz=z+(rnd(n+11)-.5)*3.1;
+      const len=.85+2.9*rnd(n+14);
+      blade(sx,sz,len*(dip+.32),len,.15+.27*rnd(19+n),dip*.4,'rock',n%3?'cut':'ore');
     }
-    if (ink) {
-      const count=2+Math.floor(pocket*8);
-      const dx=1.6+2.2*rnd(2), dz=2+4.2*rnd(3);
-      const step=.34+.24*rnd(4);
-      for (let n=0; n<count; n++) {
-        const t=(n+.5)/count;
-        const len=(.3+.75*Math.sin(Math.PI*t))*(.7+.35*rnd(n+5));
-        blade(x+n*step,z-n*step*.31,dx*len+dip,dz*len,.05+rnd(n+17)*.08,.1+dip*.20,'rock','pen');
-      }
-      if (pocket>.54) {
-        for (let n=0; n<3; n++) blade(x+.3*n,z+.4*n,1.7+rnd(n+31),-1.1,.06,.09,'rock','pen');
-      }
-      if (pocket>.63) {
-        for (let n=0; n<4; n++) blade(x+.4*n,z-.13*n,1.4,.9+rnd(n+20),.05,.17,'snow','pencil');
-      }
-    } else {
-      const count=1+Math.floor(rnd(4)*4);
-      for (let n=0; n<count; n++) {
-        const sx=x+(rnd(5+n)-.5)*2.7, sz=z+(rnd(n+11)-.5)*3.1;
-        const len=.85+2.9*rnd(n+14);
-        blade(sx,sz,len*(dip+.32),len,.15+.27*rnd(19+n),dip*.4,'rock',n%3?'cut':'ore');
-      }
-      if (pocket>.42) blade(x+.7,z,1+dip,3+rnd(2)*2,.17,.28,'snow','pencil');
-    }
+    if (pocket>.42) blade(x+.7,z,1+dip,3+rnd(2)*2,.17,.28,'snow','pencil');
     if (pocket>.47) {
       // Bedding appears in short, locally parallel runs beneath a broken lip.
       const len=2.4+rnd(42)*4.8;
-      blade(x,z,len,.18+dip*1.6,.12+rnd(43)*.19,-.25,'rock',ink?'fault':'ore');
+      blade(x,z,len,.18+dip*1.6,.12+rnd(43)*.19,-.25,'rock','ore');
       if (pocket>.62) blade(x+.25,z+.3,len*.61,dip+.23,.11,-.12,'rock','cut');
     }
     if (z>12 && pocket>.30) {
@@ -215,11 +181,10 @@ function drawing(style) {
   // Long irregular joints and pale adjacent flakes define individual cliffs.
   for (const [x,z,toe,run] of [[-62,-4,-69,19],[-43,-4,-45,29],[-28,-7,-38,39],
     [-11,-7,-17,32],[3,-4,13,40],[17,-3,27,32],[35,-3,48,29],[54,-2,63,21]]) {
-    const width=ink?.11:paper?.34:.21;
+    const width=.21;
     const path=[[x,z,.01],[x+.9,z+run*.18,width],[x-1.3,z+run*.31,width*.6],
       [mix(x,toe,.53),z+run*.51,width],[mix(x,toe,.75)-.7,z+run*.65,width*.55],[toe,z+run,.01]];
-    seam(path,'rock',ink?'fault':'cut');
-    if (paper) seam(path.map(([sx,sz,w])=>[sx+w+.2,sz,w*.52]),'rock','lip');
+    seam(path,'rock','cut');
   }
   return (minX,maxX,minZ,maxZ) => {
     const found=new Set();
@@ -274,12 +239,10 @@ function facePlane(poly) {
   return (x,z)=>[x,a[1]+sx*(x-a[0])+sz*(z-a[2]),z];
 }
 
-export function createTerrain(style = 'poster') {
-  const edition = editions[style] || editions.poster;
-  const ink = edition === editions.ink, paper = edition === editions.paper;
+export function createTerrain() {
   const {ridge, seed, summitX, light: sun} = mountain;
-  const snowColor = palette(edition.snow), rockColor = palette(edition.rock);
-  const marksFor = drawing(style);
+  const snowColor = palette(rockAndSnow.snow), rockColor = palette(rockAndSnow.rock);
+  const marksFor = drawing();
   const crest = x => -9 + clamp((Math.abs(x-summitX)-3)/6) *
     (3.2*Math.sin((x-summitX)*.088) + 1.7*Math.sin((x-summitX)*.18)) +
     1.32*bell((x-summitX)/1.5) - .62*bell((x-.8)/1.3);
@@ -386,10 +349,6 @@ export function createTerrain(style = 'poster') {
     const scatter = hash(index,1,seed);
     const variation=.05*(scatter-.5)+.12*(noise(x*.08,z*.08,seed)-.5);
     let exposure=clamp(.29+.69*(light*.55+broadLight*.45)+variation);
-    if (paper) {
-      const broad=clamp(.23+.76*(light*.18+broadLight*.82));
-      exposure=Math.round(broad*7)/7;
-    }
     if (forefield) exposure=clamp(.32+.42*broadLight+.35*(noise(x*.051,z*.07,77)-.5));
     const snow=clip(tri,3,0,true), rock=clip(tri,3,0,false);
     const tonalSnow=clamp(exposure+.11);
@@ -406,25 +365,17 @@ export function createTerrain(style = 'poster') {
       const details=[];
       const lift=(xx,zz)=>[xx,bedHeight(xx,zz),zz];
       const pigments={
-        pen:tint(base,'#373c3d',.72), fault:tint(base,ink?'#292e31':'#394050',.86),
-        cut:tint(base,paper?'#243b61':ink?'#44494a':'#4f4058',paper?.48:.53),
-        ore:tint(base,ink?'#e4ddc7':paper?'#c3daca':'#ffdc9b',.58),
-        pencil:tint(base,ink?'#6d7474':paper?'#6f9da9':'#a099b0',ink?.59:.47),
-        vein:snowColor(clamp(tonalSnow-.13)), lip:paper?'#bfdccd':snowColor(tonalSnow),
-        stone:tint(base,ink?'#484b49':'#46435a',.64),
-        rime:tint(base,ink?'#767e77':paper?'#6c99aa':'#899eb0',ink?.59:.43),
-        spark:tint(base,paper?'#f4f3dc':'#fff3d9',.79),
+        cut:tint(base,'#4f4058',.53), ore:tint(base,'#ffdc9b',.58),
+        pencil:tint(base,'#a099b0',.47), vein:snowColor(clamp(tonalSnow-.13)),
+        stone:tint(base,'#46435a',.64), rime:tint(base,'#899eb0',.43),
+        spark:tint(base,'#fff3d9',.79),
       };
-      if (material==='rock' && !forefield && z>crest(x)-4) drawRockBeds(poly,style,pigments,clip,details);
+      if (material==='rock' && !forefield && z>crest(x)-4) drawRockBeds(poly,pigments,clip,details);
       if (material==='snow' && rock.length && !forefield && z>crest(x)-2 && Math.abs(x)<58 && scatter<.19) {
         drawTalus(poly,index,hash,(outline,pigment)=>{
           const points=fitMark(outline,poly,lift);
           if (points.length) details.push({points,color:pigments[pigment]});
         });
-      }
-      if (paper && material==='rock' && snow.length && z>crest(x) && broadLight>-.15) {
-        const bevel=clip(rock,3,-.13,true);
-        if (bevel.length>2) details.push({points:bevel.map(p=>p.slice(0,3)),color:tint(rockBase,snowBase,.59)});
       }
       for (const mark of marks) {
         if (mark.material!=='both' && mark.material!==material) continue;
@@ -468,7 +419,7 @@ export function createTerrain(style = 'poster') {
       const base=p=>p.slice(0,3), rim=p=>[p[0],p[1]+lip(p),p[2]];
       const shade=snowColor(clamp(.24+.23*sideLight+.28*tonalSnow));
       faces.push({points:[base(p),base(q),rim(q),rim(p)],material:'firn',
-        color:tint(shade,ink?'#616761':paper?'#385e77':'#685e78',.16)});
+        color:tint(shade,'#685e78',.16)});
     }
   }
 
@@ -717,7 +668,7 @@ export function createTerrain(style = 'poster') {
     face.points=face.points.map(worldPoint);
     for (const detail of face.details||[]) detail.points=detail.points.map(worldPoint);
   }
-  addOutcrops(faces,surface,style,worldPerMapUnit);
+  addOutcrops(faces,surface,worldPerMapUnit);
   const worldRoute=(side,p)=>worldPoint(route(side,p));
   function worldSurface(x,z) {
     const point=surface(x/worldPerMapUnit,z/worldPerMapUnit,true);
@@ -765,7 +716,7 @@ export function createTerrain(style = 'poster') {
     }
     return peak===-Infinity?Infinity:(peak+.00001)*worldPerMapUnit;
   };
-  return {scale:worldPerMapUnit,summit:worldPoint(summit),...mountaineeringCourse(faces,worldRoute,worldSurface,style)};
+  return {scale:worldPerMapUnit,summit:worldPoint(summit),...mountaineeringCourse(faces,worldRoute,worldSurface)};
 }
 
 // Cut a convex footprint into the existing facets. Every new rim vertex is
@@ -796,17 +747,10 @@ function dividedPatch(points,edges) {
   return {inside,outside};
 }
 
-function mountaineeringCourse(sourceFaces,baseRoute,ground,style) {
+function mountaineeringCourse(sourceFaces,baseRoute,ground) {
   const deckHalfWidth=.72;
-  const icePalettes={
-    poster:{ rim:'#e4f1e7', ice:'#9ed5d6', face:'#76adb9', shade:'#52738d', deep:'#35425e',
-      alloy:'#c5c6b3', steel:'#626978', line:'#a95737', flag:'#f4cf7d' },
-    ink:{ rim:'#f6f0d9', ice:'#c5d2c7', face:'#a9beb8', shade:'#768b89', deep:'#46555d',
-      alloy:'#d5d1b9', steel:'#565e60', line:'#72624b', flag:'#d2b475' },
-    paper:{ rim:'#e7f0db', ice:'#a0d9d1', face:'#79b9c1', shade:'#4c8098', deep:'#344768',
-      alloy:'#c3d4bc', steel:'#4b6376', line:'#ac6b48', flag:'#e4bb77' },
-  };
-  const palette=icePalettes[style] || icePalettes.poster;
+  const palette={rim:'#e4f1e7', ice:'#9ed5d6', face:'#76adb9', shade:'#52738d', deep:'#35425e',
+    alloy:'#c5c6b3', steel:'#626978', line:'#a95737', flag:'#f4cf7d'};
   const features={pro:[],con:[]};
   const decks=[];
   let faces=sourceFaces;
@@ -915,7 +859,7 @@ function mountaineeringCourse(sourceFaces,baseRoute,ground,style) {
     }
     if (!ladder) {
       const shoulders=[];
-      drawIceShoulders(style,(outline,pigment)=>{
+      drawIceShoulders((outline,pigment)=>{
         const points=outline.map(([u,lane])=>{const [x,,z]=at(u,lane);return [x,z];});
         const xs=points.map(p=>p[0]), zs=points.map(p=>p[1]);
         shoulders.push({points,pigment,left:Math.min(...xs),right:Math.max(...xs),back:Math.min(...zs),front:Math.max(...zs)});

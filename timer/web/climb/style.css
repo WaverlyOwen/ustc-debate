@@ -7,19 +7,13 @@ button, select { color:inherit; cursor:pointer; }
 button { border:0; background:transparent; }
 button:focus-visible, select:focus-visible, input:focus-visible { outline:3px solid #ec9645; outline-offset:2px; }
 .mast { position:absolute; z-index:2; top:max(8px,env(safe-area-inset-top)); inset-inline:var(--gutter);
-  display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:16px; }
+  display:grid; grid-template-columns:1fr auto; align-items:center; gap:16px; }
 .mast,footer { text-shadow:0 1px 2px var(--clock-paper),0 0 4px var(--clock-paper); }
-.brand,.editions,.team,.play-row { display:flex; align-items:center; }
+.brand,.team,.play-row { display:flex; align-items:center; }
 .brand { gap:12px; white-space:nowrap; }
 .brand svg { width:44px; height:34px; }
 h1 { font:700 27px/1 "Songti SC","SimSun",serif; margin:0; letter-spacing:.13em; }
 .edition { font-size:12px; color:#55655b; border-left:1px solid var(--line); padding-left:12px; }
-.editions { gap:5px; }
-.editions button { display:flex; align-items:center; gap:8px; border-radius:4px; padding:9px 15px; color:var(--ink); font-weight:600; text-shadow:inherit; }
-.editions button[aria-pressed=true] { text-decoration:underline; text-underline-offset:.38em; text-decoration-thickness:2px; }
-.editions i { width:11px; height:11px; border-radius:50%; background:#df9c54; }
-.editions [data-variant=ink] i { background:repeating-linear-gradient(120deg,#615a48 0 1px,#eae1c9 1px 3px); }
-.editions [data-variant=paper] i { background:linear-gradient(145deg,#92c4be 44%,#235f73 45% 70%,#324259 71%); }
 #full { justify-self:end; width:44px; height:44px; display:grid; place-items:center; }
 #full svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.65; }
 main { position:relative; height:100vh; height:100dvh; }
@@ -29,8 +23,6 @@ main { position:relative; height:100vh; height:100dvh; }
 .stage { position:absolute; top:calc(max(8px,env(safe-area-inset-top)) + 48px); inset-inline:var(--gutter);
   display:grid; justify-items:start;
   color:var(--clock-ink); text-shadow:0 1px 2px var(--clock-paper),0 0 .08em var(--clock-paper); pointer-events:none; }
-body[data-style=ink] { --clock-paper:#f5f0df; --clock-ink:#27291f; }
-body[data-style=paper] { --clock-paper:#e2efeb; --clock-ink:#17394a; }
 .stage-label { justify-self:center; display:flex; justify-content:center; align-items:baseline; gap:.55em;
   max-width:100%; text-align:center; font-size:clamp(14px,1.4vw,24px); font-weight:600; }
 #side { font-weight:750; }
@@ -75,16 +67,12 @@ footer { position:absolute; inset-inline:var(--gutter); bottom:max(8px,env(safe-
 .sr { position:absolute; clip-path:inset(50%); width:1px; height:1px; overflow:hidden; }
 #error { position:absolute; top:30%; left:10%; padding:12px; background:var(--paper); }
 @media(max-width:740px) {
-  .mast { grid-template-columns:1fr auto; gap:0 8px; }
   .brand svg { width:34px; height:25px; } h1 { font-size:22px; } .brand { gap:8px; }
-  #full { grid-area:1/2; } .editions { grid-area:2/1/3/3; justify-content:center; gap:2px; }
-  .editions button { min-height:44px; padding:4px clamp(5px,2vw,12px); gap:5px; font-size:13px; }
-  .stage { top:calc(max(8px,env(safe-area-inset-top)) + 88px); }
   #remaining { font-size:clamp(76px,21vw,118px); } .stage-label { font-size:14px; }
   .format { grid-column:1/-1; grid-row:1; text-align:center; } .time-row { grid-template-columns:1fr 1fr; gap:2px 6px; }
   .team { gap:4px; font-size:12px; } .team b { font-size:17px; } .team small { font-size:10px; }
   .play-row { gap:6px; margin-top:0; }
 }
 :fullscreen .mast { inset:auto auto max(8px,env(safe-area-inset-bottom)) var(--gutter); display:block; }
-:fullscreen .mast .brand,:fullscreen .mast nav,:fullscreen footer { display:none; }
+:fullscreen .mast .brand,:fullscreen footer { display:none; }
 :fullscreen .stage { top:max(12px,env(safe-area-inset-top)); }

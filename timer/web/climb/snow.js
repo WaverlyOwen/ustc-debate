@@ -6,11 +6,7 @@ const bands = [
   { layer:'middle', from:25, to:56, spacing:9.2, radius:.049, opacity:.79 },
   { layer:'near', from:7.5, to:21, spacing:4.7, radius:.033, opacity:.88 },
 ];
-const colors = {
-  poster: { snow:'#fff7e5', edge:'#aa9dac', dust:'#fff1cd' },
-  ink: { snow:'#fff8e6', edge:'#7d8077', dust:'#f4edda' },
-  paper: { snow:'#edf4e6', edge:'#739ca7', dust:'#d8eadd' },
-};
+const palette={snow:'#fff7e5', edge:'#aa9dac', dust:'#fff1cd'};
 
 function element(parent,name,attributes) {
   const node=parent.ownerDocument.createElementNS(NS,name);
@@ -30,9 +26,9 @@ function particleAt(i,j,k,band) {
   return particles[hash%particles.length];
 }
 
-function summitPlume(group,style,color,scale) {
+function summitPlume(group,color,scale) {
   const paths=[.43,.30,.21].map((opacity,i)=>element(group,'path',{
-    fill:color, opacity:style==='ink'?opacity*.76:opacity, 'data-spindrift':i,
+    fill:color, opacity, 'data-spindrift':i,
   }));
   return (summit,project,time)=>{
     for (let i=0;i<paths.length;i++) {
@@ -53,19 +49,18 @@ function summitPlume(group,style,color,scale) {
   };
 }
 
-export function mountSnow(svg,groups,style,summit,scale=1) {
-  const palette=colors[style] || colors.poster;
+export function mountSnow(svg,groups,summit,scale=1) {
   // The atmosphere uses the scene's clock. It does not start a second loop.
   for (const layer of svg.querySelectorAll('[data-climb-weather]')) layer.remove();
   for (const plume of groups.horizon.querySelectorAll('[data-spindrift]')) plume.remove();
   const background=element(svg,'g',{'data-climb-weather':'background','pointer-events':'none','aria-hidden':'true'});
   svg.insertBefore(background,groups.parties);
   const foreground=element(svg,'g',{'data-climb-weather':'foreground','pointer-events':'none','aria-hidden':'true'});
-  const plume=summitPlume(groups.horizon,style,palette.dust,scale);
+  const plume=summitPlume(groups.horizon,palette.dust,scale);
   const parents=[background,background,foreground];
   const layers=bands.map((band,i)=>{
     const group=element(parents[i],'g',{'data-snow-layer':band.layer,'pointer-events':'none','aria-hidden':'true'});
-    const shadow=element(group,'path',{ fill:palette.edge, opacity:style==='ink'?.57:style==='paper'?.56:.33 });
+    const shadow=element(group,'path',{ fill:palette.edge, opacity:.33 });
     const face=element(group,'path',{ fill:palette.snow, opacity:band.opacity });
     return {shadow,face,flakes:[]};
   });
@@ -115,13 +110,8 @@ export function mountSnow(svg,groups,style,summit,scale=1) {
         if (depthAt(x,y,limit)<limit) continue;
         const pt=(dx,dy)=>(x+r*dx).toFixed(1)+','+(y+r*dy).toFixed(1);
         const slant=sway*.22;
-        if (style==='paper') {
-          faces+='M'+pt(-.9+slant,-.05)+'L'+pt(-.2,-.72)+' '+pt(.87+slant,-.12)+' '+pt(.31,.64)+' '+pt(-.52,.43)+'Z';
-          if (i) shadows+='M'+pt(-.52,.43)+'L'+pt(.31,.64)+' '+pt(.87+slant,-.12)+' '+pt(.53,.88)+'Z';
-        } else {
-          faces+='M'+pt(-.81+slant,-.23)+'Q'+pt(.12,-.86)+' '+pt(.85+slant,-.22)+'Q'+pt(.44,.70)+' '+pt(-.26,.67)+'Q'+pt(-.85,.42)+' '+pt(-.81+slant,-.23)+'Z';
-          if (i) shadows+='M'+pt(-.76,.25)+'Q'+pt(.03,.96)+' '+pt(.83,-.12)+'Q'+pt(.30,1.13)+' '+pt(-.42,.88)+'Z';
-        }
+        faces+='M'+pt(-.81+slant,-.23)+'Q'+pt(.12,-.86)+' '+pt(.85+slant,-.22)+'Q'+pt(.44,.70)+' '+pt(-.26,.67)+'Q'+pt(-.85,.42)+' '+pt(-.81+slant,-.23)+'Z';
+        if (i) shadows+='M'+pt(-.76,.25)+'Q'+pt(.03,.96)+' '+pt(.83,-.12)+'Q'+pt(.30,1.13)+' '+pt(-.42,.88)+'Z';
       }
       layer.shadow.setAttribute('d',shadows);
       layer.face.setAttribute('d',faces);

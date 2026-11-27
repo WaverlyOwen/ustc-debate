@@ -32,10 +32,10 @@ function clockState(phase, clockPhase, active, value) {
   return '';
 }
 
-export function createMatchView(host, variant) {
+export function createMatchView(host) {
   const doc = host.ownerDocument, win = doc.defaultView, stage = host.parentElement;
   host.classList.add('dt-climb-host');
-  host.dataset.style = variant;
+  host.dataset.style = 'poster';
   host.innerHTML = `<svg class="climb-match-scene" aria-hidden="true" focusable="false">
     <g id="horizon" data-layer="horizon"></g><g id="mountain" data-layer="mountain" stroke-linejoin="round"></g>
     <g id="tracks" data-layer="tracks"></g><g id="parties" data-layer="parties"></g>
@@ -126,7 +126,7 @@ export function createMatchView(host, variant) {
     }
     try {
       if (!draw) {
-        draw = createLandscape(scene, variant, camera);
+        draw = createLandscape(scene, camera);
         // createLandscape resolves its named layers once. Embedded previews can share a document.
         for (const layer of scene.querySelectorAll('g[data-layer]')) layer.removeAttribute('id');
       }

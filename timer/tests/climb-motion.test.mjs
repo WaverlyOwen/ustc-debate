@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createParties } from '../web/climb/climbers.js';
 import { createTerrain } from '../web/climb/terrain.js';
 
-const terrain = createTerrain('poster');
+const terrain = createTerrain();
 const live = {pro:1020, con:1020};
 const ownClock = {pro:true, con:false};
 const distance = (a,b) => Math.hypot(...a.map((v,i)=>v-b[i]));
@@ -14,7 +14,7 @@ test('the blue leader faces continuously along the switchback above the ice',()=
   let last;
   for (let tick=9145;tick<=9175;tick++) {
     const p=tick/10000,t=p*seconds;
-    const leader=sample(terrain,{con:p,pro:.32},t,{con:true,pro:false},'poster',seconds).members[3];
+    const leader=sample(terrain,{con:p,pro:.32},t,{con:true,pro:false},seconds).members[3];
     const b=leader.bones;
     const pose=[b.torso.z,b.head.z,b.hand0.origin,b.hand1.origin,b.pole0.origin,b.pole1.origin];
     if (last) for (let j=0;j<pose.length;j++) {
@@ -29,7 +29,7 @@ test('a live speech produces a weight transfer, a planted support foot and a hum
   let lifted=null, previous, preload=false, supported=false;
   for (let frame=0;frame<24*95;frame++) {
     const t=frame/24, p=(230+t)/1020;
-    const m=sample(terrain,{pro:p,con:.5},t,ownClock,'poster',live).members[0];
+    const m=sample(terrain,{pro:p,con:.5},t,ownClock,live).members[0];
     const foot=m.legs[0];
     if (foot.clearance>.018 && lifted===null) lifted=t;
     if (foot.clearance<=.018 && lifted!==null) { swings.push(t-lifted);lifted=null; }
@@ -56,7 +56,7 @@ test('each climber covers the longer course with human-sized steps and short res
       assert.ok(intervals.at(-1)>6 && intervals.at(-1)<16);
       assert.ok(strides[middle]>.70 && strides[middle]<1.20);
     }
-    const end=sample(terrain,{pro:1,con:1},seconds,{pro:false,con:false},'poster',seconds).members;
+    const end=sample(terrain,{pro:1,con:1},seconds,{pro:false,con:false},seconds).members;
     const leader=end.find(m=>m.side===side&&m.rank===0);
     assert.ok(distance(leader.position,terrain.route(side,1))<1e-6);
   }
@@ -67,13 +67,13 @@ test('a mid-ladder interruption settles in staggered time onto physical rungs', 
   let before, foot, p, t;
   for (let n=0;n<24*65;n++) {
     t=n/24; p=.25+t/1020;
-    before=sample(terrain,{pro:p,con:.48},t,ownClock,'poster',live).members;
+    before=sample(terrain,{pro:p,con:.48},t,ownClock,live).members;
     const m=before[0];
     foot=m.legs.findIndex(l=>l.clearance>.14);
     if (m.feature?.kind==='ladder' && m.feature.u>.2 && m.feature.u<.75 && foot>=0) break;
   }
   assert(foot>=0 && before[0].feature?.kind==='ladder');
-  const stopped=dt=>sample(terrain,{pro:p,con:.48},t+dt,{pro:false,con:false},'poster',live).members;
+  const stopped=dt=>sample(terrain,{pro:p,con:.48},t+dt,{pro:false,con:false},live).members;
   const atSwitch=stopped(0);
   assert(distance(before[0].bones['boot'+foot].origin,atSwitch[0].bones['boot'+foot].origin)<1e-9);
   const easing=stopped(.35);
@@ -106,7 +106,7 @@ test('both teams take successive physical rungs and keep a hand braced as the ot
     const seen=new Set(),last=new Map();
     for (let tick=Math.floor(.16*seconds*24);tick<.44*seconds*24;tick++) {
       const t=tick/24,p=t/seconds;
-      for (const m of sample(terrain,{pro:p,con:p},t,moving,'poster',seconds).members) {
+      for (const m of sample(terrain,{pro:p,con:p},t,moving,seconds).members) {
         const f=m.feature,b=m.bones,id=m.side+m.rank;
         if (f?.kind!=='ladder'||f.u<.10||f.u>.90) continue;
         const palms=[b.hand0.origin,b.hand1.origin];
@@ -132,7 +132,7 @@ test('the summit hand-up keeps a shared reachable grip above the rock ledge',()=
   const sample=createParties();
   let previous;
   for (let tick=9570;tick<=9640;tick++) {
-    const p=tick/10000,[leader,second]=sample(terrain,{pro:p,con:.31},p*150,ownClock,'poster',150).members;
+    const p=tick/10000,[leader,second]=sample(terrain,{pro:p,con:.31},p*150,ownClock,150).members;
     assert.equal(leader.cooperation?.role,'pull');
     assert.equal(second.cooperation?.role,'reach');
     const palms=[leader,second].map(m=>{
@@ -151,7 +151,7 @@ test('obstacle grips meet the modeled handline, ice and belay rope, and partners
   const sample=createParties(), quick={pro:42.5,con:42.5}, seen={};
   for (let n=0;n<=600;n++) {
     const p=n/600;
-    const members=sample(terrain,{pro:p,con:p},42.5*p,{pro:true,con:true},'poster',quick).members;
+    const members=sample(terrain,{pro:p,con:p},42.5*p,{pro:true,con:true},quick).members;
     for (const m of members) {
       const j=m.railGrip?.hand;
       if (m.railGrip?.amount>.999 && distance(m.bones['hand'+j].origin,m.railGrip.target)<.025) seen.ladder=true;

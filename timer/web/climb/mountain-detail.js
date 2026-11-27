@@ -19,25 +19,16 @@ const bankProfiles = [
   [[0,0,0],[.24,-.34,.18],[.40,-.39,.27],[.58,-.23,.71],[.74,-.18,.57],[.88,-.05,.22],[1,0,0]],
 ];
 
-export function drawSnowBanks(style, mark, blade) {
-  const ink = style === 'ink', paper = style === 'paper';
+export function drawSnowBanks(mark, blade) {
   snowBanks.forEach(([x,z,span,fall,depth], index) => {
     const profile = bankProfiles[index % bankProfiles.length];
     const point = (t, offset) => [x + span*t, z + fall*t + depth*offset];
     const lip = profile.map(([t,bend]) => point(t,bend));
     const inner = profile.slice(1,-1);
-    const face = inner.map(([t,bend,width]) => point(t,bend + width*(ink?.71:1)));
+    const face = inner.map(([t,bend,width]) => point(t,bend + width));
     mark([...lip, ...face.reverse()], 'snow', 'rime');
-    // The three prints model the same bank with a woodcut edge, a dry nib,
-    // or the narrow exposed edge of the upper sheet of paper.
-    if (ink) {
-      for (const [t,bend,width] of inner.filter(station => station[2] > .35)) {
-        mark([point(t-.03,bend+.05), point(t+.004,bend+.09), point(t+.053,bend+width*.91)], 'snow', 'pencil');
-      }
-    } else {
-      const bevel = inner.map(([t,bend,width]) => point(t,bend - (paper?.50:.28)*width));
-      mark([...lip, ...bevel.reverse()], 'snow', 'spark');
-    }
+    const bevel = inner.map(([t,bend,width]) => point(t,bend - .28*width));
+    mark([...lip, ...bevel.reverse()], 'snow', 'spark');
   });
 
   // In the lee of each shoulder the shorter grooves converge into a longer
@@ -52,8 +43,8 @@ export function drawSnowBanks(style, mark, blade) {
     const wind = Math.sign(drift);
     for (const [offset,start,length,width] of [[0,0,1,.16],[.62,.24,.51,.11],[1.01,.17,.28,.065]]) {
       const xx = x + drift*start + offset*wind, zz = z + run*start;
-      blade(xx,zz,drift*length-offset*wind*.39,run*length,width*(paper?1.65:1),wind*.31,'snow','rime');
-      if (!ink && offset === 0) blade(xx-wind*.11,zz+.13,drift*.78,run*.76,.12,wind*.23,'snow','spark');
+      blade(xx,zz,drift*length-offset*wind*.39,run*length,width,wind*.31,'snow','rime');
+      if (offset === 0) blade(xx-wind*.11,zz+.13,drift*.78,run*.76,.12,wind*.23,'snow','spark');
     }
   }
 }
@@ -69,9 +60,8 @@ const beds = [
   [45,12,15.9,-.17,1.04], [60,9,10.6,-.10,.74],
 ];
 
-export function drawRockBeds(poly, style, pigments, clip, details) {
+export function drawRockBeds(poly, pigments, clip, details) {
   const xs = poly.map(point => point[0]), left = Math.min(...xs), right = Math.max(...xs);
-  const ink = style === 'ink', paper = style === 'paper';
   for (const [center,span,level,dip,thickness] of beds) {
     if (right <= center-span || left >= center+span) continue;
     const section = poly.map(point => {
@@ -94,9 +84,9 @@ export function drawRockBeds(poly, style, pigments, clip, details) {
       const piece = clip(clip(section,lower,0,true),upper,0,true);
       if (piece.length > 2) details.push({points:piece.map(point=>point.slice(0,3)), color:pigments[pigment]});
     }
-    band(3,4,ink ? 'stone' : 'cut');
-    band(5,6,ink ? 'pencil' : 'cut');
-    band(7,8,paper ? 'lip' : 'ore');
+    band(3,4,'cut');
+    band(5,6,'cut');
+    band(7,8,'ore');
   }
 }
 
@@ -127,8 +117,7 @@ export function drawTalus(poly, seed, hash, mark) {
 // Each shelf starts beside the ice at a different point on the actual pitch.
 // Widths run across the fall line in world units and stay at boot-to-body scale
 // even when the length of a pitch changes. The caller clips them to solid snow.
-export function drawIceShoulders(style, mark) {
-  const ink = style === 'ink', paper = style === 'paper';
+export function drawIceShoulders(mark) {
   // From/to along the pitch, two distances from its edge, lateral bow and
   // thickness. Long slips of firn sit obliquely beside shorter broken lips.
   const shelves = [
@@ -144,6 +133,6 @@ export function drawIceShoulders(style, mark) {
     const point=(t,bend,side=0)=>[start+(end-start)*t,sign*(near+(far-near)*t+bow*bend+side*thickness)];
     const edge=[point(0,0),point(.26,.57),point(.44,1),point(.71,.73),point(1,0)];
     mark([...edge,point(.66,.72,.38),point(.42,.96,1),point(.22,.48,.25)],'shade');
-    if (!ink) mark([...edge,point(.71,.73,-.20),point(.49,.98,paper?-.69:-.44),point(.20,.48,-.16)],'light');
+    mark([...edge,point(.71,.73,-.20),point(.49,.98,-.44),point(.20,.48,-.16)],'light');
   }
 }

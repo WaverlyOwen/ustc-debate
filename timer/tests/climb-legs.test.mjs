@@ -4,7 +4,7 @@ import { createParties } from '../web/climb/climbers.js';
 import { createClimberModel, kneeSection, posedVertex } from '../web/climb/climber-model.js';
 import { createTerrain } from '../web/climb/terrain.js';
 
-const terrain=createTerrain('poster');
+const terrain=createTerrain();
 
 test('collision ceilings include snow lips, bridge banks and the area outside the survey',()=>{
   const surface=terrain.surface;
@@ -35,8 +35,8 @@ test('broad-phase rejection gives the same knee positions as the exact custom su
   const custom={...terrain,surface:(x,z)=>terrain.surface(x,z)};
   for (const start of [.14,.22,.315,.52,.75,.83,.96]) for (let i=0;i<18;i++) {
     const p=start+i/3600,time=p*150,progress={pro:p,con:p};
-    const a=fast(terrain,progress,time,walking,'poster',150).members;
-    const b=exact(custom,progress,time,walking,'poster',150).members;
+    const a=fast(terrain,progress,time,walking,150).members;
+    const b=exact(custom,progress,time,walking,150).members;
     for (const [j,m] of a.entries()) for (const bone of ['shin0','shin1']) {
       assert.deepEqual(m.bones[bone].origin,b[j].bones[bone].origin);
     }
@@ -87,7 +87,7 @@ test('ordinary uphill steps bend toward the toe and pass over an unlocked suppor
     const sample=createParties(),swing=[],stance=[],loaded=[];
     for (const start of [.13,.145,.52,.54]) for (let frame=0;frame<240;frame++) {
       const t=start*seconds+frame/24,p=t/seconds;
-      const members=sample(terrain,{pro:p,con:p},t,{pro:true,con:true},'poster',seconds).members;
+      const members=sample(terrain,{pro:p,con:p},t,{pro:true,con:true},seconds).members;
       for (const m of members) {
         if (m.equipment || m.cooperation || m.slope<.05) continue;
         for (const i of [0,1]) {
@@ -120,7 +120,7 @@ test('the raised boot and gaiter clear their own parka through the summit hand-u
     const sample=createParties(),ticks=seconds*24;
     for (let tick=Math.floor(ticks*.90);tick<=ticks;tick++) {
       const p=tick/ticks;
-      const members=sample(terrain,{pro:p,con:p},tick/24,{pro:true,con:true},'poster',seconds).members;
+      const members=sample(terrain,{pro:p,con:p},tick/24,{pro:true,con:true},seconds).members;
       for (const m of members) {
         const id=m.side+m.rank;
         if (!models.has(id)) {
@@ -144,7 +144,7 @@ test('both teams clear snow, ice, bridge ends and the opposite shoe with the act
     const sample=createParties(),moving={pro:running,con:running};
     for (let tick=0;tick<=count;tick++) {
       const p=tick/count;
-      for (const m of sample(terrain,{pro:p,con:p},p*seconds,moving,'poster',seconds).members) {
+      for (const m of sample(terrain,{pro:p,con:p},p*seconds,moving,seconds).members) {
         const id=m.side+m.rank;
         if (!models.has(id)) models.set(id,createClimberModel(m.person).filter(o=>/^(thigh|shin|boot)[01]$/.test(o.bone)));
         kinds.add(m.feature?.kind||'snow');
@@ -170,7 +170,7 @@ test('a planted boot stays fixed and a loaded knee follows the same bend through
   const sample=createParties(),moving={pro:true,con:true},travel=[];
   let prior;
   for (let tick=0;tick<=3600;tick++) {
-    const p=tick/3600,group=sample(terrain,{pro:p,con:p},tick/24,moving,'poster',150).members;
+    const p=tick/3600,group=sample(terrain,{pro:p,con:p},tick/24,moving,150).members;
     if (prior) for (let i=0;i<group.length;i++) for (const foot of [0,1]) {
       const a=prior[i],b=group[i],boot='boot'+foot,knee='shin'+foot;
       if (b.legs[foot].id && b.legs[foot].id===a.legs[foot].id) {

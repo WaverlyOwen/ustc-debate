@@ -15,8 +15,8 @@ const dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
 const angle=(a,b)=>Math.acos(Math.min(1,Math.max(-1,dot(unit(a),unit(b)))));
 
 test('the clothing follows the thigh, kneecap and rear calf around to the ankle',()=>{
-  const terrain=createTerrain('poster'),sample=createParties();
-  const climber=sample(terrain,{pro:0,con:0},0,{pro:false,con:false},'poster',150).members[0];
+  const terrain=createTerrain(),sample=createParties();
+  const climber=sample(terrain,{pro:0,con:0},0,{pro:false,con:false},150).members[0];
   const model=createClimberModel(climber.person);
   const sections=bone=>{
     const part=model.find(mesh=>mesh.bone===bone);
@@ -38,12 +38,12 @@ test('the clothing follows the thigh, kneecap and rear calf around to the ankle'
 });
 
 test('the two trouser panels share a moving hem through snow, bridge and ice poses',()=>{
-  const terrain=createTerrain('poster'),sample=createParties(),render=createPartyRenderer(),parent=node();
+  const terrain=createTerrain(),sample=createParties(),render=createPartyRenderer(),parent=node();
   const poses=new Set(),models=new Map();
   let flexions=0;
   for (let tick=0;tick<=250;tick++) {
     const p=tick/250;
-    const members=sample(terrain,{pro:p,con:p},p*150,{pro:true,con:true},'poster',150).members;
+    const members=sample(terrain,{pro:p,con:p},p*150,{pro:true,con:true},150).members;
     for (const m of members) {
       if (!models.has(m.person)) models.set(m.person,createClimberModel(m.person));
       const foot=(tick+m.rank)%2,upper='thigh'+foot,lower='shin'+foot;
@@ -54,7 +54,7 @@ test('the two trouser panels share a moving hem through snow, bridge and ice pos
         return Object.assign(out,{x:v[0]*50,y:-v[1]*50,depth:150-v[2],scale:50});
       };
       render(parent,project,[{...m,rank:0,groundShadow:[],carriedTools:null,
-        bones:{[upper]:m.bones[upper],[lower]:m.bones[lower]}}],'poster',terrain);
+        bones:{[upper]:m.bones[upper],[lower]:m.bones[lower]}}],terrain);
       // The projector receives the climber's centre, then the vertices of both panels.
       const n=shapes[0].vertices.length,upperPoints=world.slice(1,1+n),lowerPoints=world.slice(1+n);
       const rings=(shape,points,y)=>shape.vertices.flatMap((v,i)=>v[1]===y?[points[i]]:[]);

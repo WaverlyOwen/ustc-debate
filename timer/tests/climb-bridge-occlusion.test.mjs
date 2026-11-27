@@ -35,7 +35,7 @@ function contains(poly,x,y) {
   return inside;
 }
 
-const terrain=createTerrain('poster');
+const terrain=createTerrain();
 
 // Isolate the first of eight rope segments (x=10..20). The party stands out
 // of frame so only its rope is rendered against these projected bridge faces.
@@ -51,7 +51,7 @@ function ropeAtRails(rails) {
     visitOccluders:(_box,_far,visit)=>{visits++;for(const f of metal) visit(...f.points);}});
   const members=[0,1].map(rank=>({side:'pro',rank,person:{side:'pro',rank,skin:'#ded2ac',hair:'#453122',light:'#bbbbbb'},
     harness:[10+80*rank,10,10],position:[-100,0,10],bones:{}}));
-  createPartyRenderer()(group,project,members,'poster',null);
+  createPartyRenderer()(group,project,members,null);
   return {paths:group.children.at(-1).children.map(node=>node.attributes),visits};
 }
 
@@ -100,7 +100,7 @@ for (const [side,p] of [['con',.215],['pro',.306]]) {
     Object.assign(project,{width:1440,height:900,terrainDepth:(x,y)=>nearest(metal,x,y),
       bridgeOverlaps:()=>true,visitOccluders:(_box,_far,visit)=>metal.forEach(t=>visit(...t.points))});
     const sample=createParties(), progress={pro:.47,con:.47,[side]:p};
-    const {members}=sample(terrain,progress,p*150,{pro:true,con:true},'poster',150);
+    const {members}=sample(terrain,progress,p*150,{pro:true,con:true},150);
     let nearer=0,farther=0,leaks=0,holes=0;
     for (const member of members.filter(person=>person.side===side)) {
       const limbs=createClimberModel(member.person).filter(part=>/^(boot|thigh|shin)[01]$/.test(part.bone));
@@ -111,7 +111,7 @@ for (const [side,p] of [['con',.215],['pro',.306]]) {
         return part.faces.flatMap(face=>triangles(face.indices.map(i=>points[i])));
       });
       const group=svgNode(), bones=Object.fromEntries(limbs.map(part=>[part.bone,member.bones[part.bone]]));
-      createPartyRenderer()(group,project,[{...member,rank:0,bones,carriedTools:null}],'poster',terrain);
+      createPartyRenderer()(group,project,[{...member,rank:0,bones,carriedTools:null}],terrain);
       const fills=group.children.at(-1).children.filter(node=>node.attributes.fill!=='none')
         .flatMap(node=>node.attributes.d.match(/M[^MZ]+/g)||[])
         .map(loop=>Array.from(loop.matchAll(/[ML]([-\d.]+),([-\d.]+)/g),m=>[+m[1],+m[2]]));

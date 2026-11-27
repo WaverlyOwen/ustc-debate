@@ -20,13 +20,9 @@ const exposures=[
     [-54.6,5.6,1.15,1.1,1.12,.08],[-56.9,7.4,.33,.4,.22,.02]],
 ];
 
-const inks={
-  poster:{rock:['#494555','#655764','#8a6e68','#ab826c','#cd9b71','#dfb482'],
-    snow:['#958da6','#b8a7b0','#e3c2b6','#f5dbb8','#fff1cb']},
-  ink:{rock:['#686b69','#777976','#898983','#9c9b91','#b1aea0','#c2bdab'],
-    snow:['#a9aaa4','#c4c4ba','#dad7c9','#e9e5d5','#f6f1df']},
-  paper:{rock:['#3d536e','#49647a','#587180','#6c868a','#849995','#a0b4a9'],
-    snow:['#88a5b4','#a1bcc2','#bfd4cf','#d5e3d8','#edf0dd']},
+const colors={
+  rock:['#494555','#655764','#8a6e68','#ab826c','#cd9b71','#dfb482'],
+  snow:['#958da6','#b8a7b0','#e3c2b6','#f5dbb8','#fff1cb'],
 };
 
 function pigment(a,b,c,palette,facet) {
@@ -37,8 +33,7 @@ function pigment(a,b,c,palette,facet) {
   return palette[Math.round(level*(palette.length-1))];
 }
 
-export function addOutcrops(faces,surface,style,scale=1) {
-  const colors=inks[style]||inks.poster;
+export function addOutcrops(faces,surface,scale=1) {
   for (const [site,sections] of exposures.entries()) {
     // The crest and its toe share stations. Adjacent cap, soffit and rock
     // triangles therefore meet at exactly the same three-dimensional edge.

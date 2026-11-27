@@ -1,37 +1,28 @@
-/* Pages registers the three expedition themes before the shared timer boots.
-   The setup thumbnails stay light. Three and the scene load on the first match. */
+/* Pages registers the climbing theme before the shared timer boots.
+   Three and the scene load on the first match. */
 (function (DT) {
   'use strict';
   const entry = document.currentScript?.src;
   const moduleURL = entry ? new URL('./climb/match-view.js', entry).href : 'expedition/climb/match-view.js';
   const sides = ['pro', 'con'];
-  const prints = [
-    ['poster', '登山海报', '日照金山与暖色岩壁', ['#f5d5ae','#e39364','#786071','#fae5bf','#9f777b','#51495a']],
-    ['ink', '岩层线描', '淡墨雪原与层叠岩纹', ['#e9e8d8','#c6bfa0','#858778','#faf6e3','#969782','#444b42']],
-    ['paper', '分层剪纸', '蓝绿色山脊与错层雪面', ['#c7e1da','#97c6c1','#62979a','#edeee0','#71a6a4','#326073']],
-  ];
-
-  function thumbnail(host, variant, colors) {
-    const [sky,sun,far,snow,shade,rock] = colors;
-    const marks = variant==='ink'
-      ? '<path d="m68 48 19-9-7 5m7-7 13-10m8 12 7 5-4-6m10 9 15 8m-120 4 18-7m118 2 12 1" fill="none" stroke="'+rock+'" stroke-width=".9"/>'
-      : '';
+  function thumbnail(host) {
     host.innerHTML='<svg width="100%" height="100%" viewBox="0 0 176 78" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
-      '<rect width="176" height="78" fill="'+sky+'"/><circle cx="137" cy="18" r="9" fill="'+sun+'"/>'+
-      '<path d="M0 45 23 26 43 39 64 22 90 42 137 24 176 39V78H0Z" fill="'+far+'"/>'+
-      '<path d="m0 64 36-18 13 4 33-26 14-8 8-9 19 24 10 4 10 14 33 14v15H0Z" fill="'+snow+'"/>'+
-      '<path d="m104 7 6 18-7-6-13 24 5-2-8 14-34 17 41-8 18-25 10 6-6-14 27 18-13-15-9-4Z" fill="'+shade+'"/>'+
-      '<path d="m8 68 33-16-9 8 17-5-12 10 16-2-27 12Zm100-28 7-12 5 10-4-2 6 11-7-6-11 6Zm30 10 34 12 4 12-23-9 4 4-27-12Z" fill="'+rock+'"/>'+marks+
-      '<path d="M0 76 29 66 60 70 77 64 106 68 146 57 176 59V78H0Z" fill="'+shade+'"/>'+
+      '<rect width="176" height="78" fill="#f5d5ae"/><circle cx="137" cy="18" r="9" fill="#e39364"/>'+
+      '<path d="M0 45 23 26 43 39 64 22 90 42 137 24 176 39V78H0Z" fill="#786071"/>'+
+      '<path d="m0 64 36-18 13 4 33-26 14-8 8-9 19 24 10 4 10 14 33 14v15H0Z" fill="#fae5bf"/>'+
+      '<path d="m104 7 6 18-7-6-13 24 5-2-8 14-34 17 41-8 18-25 10 6-6-14 27 18-13-15-9-4Z" fill="#9f777b"/>'+
+      '<path d="m8 68 33-16-9 8 17-5-12 10 16-2-27 12Zm100-28 7-12 5 10-4-2 6 11-7-6-11 6Zm30 10 34 12 4 12-23-9 4 4-27-12Z" fill="#51495a"/>'+
+      '<path d="M0 76 29 66 60 70 77 64 106 68 146 57 176 59V78H0Z" fill="#9f777b"/>'+
       '<path d="m41 58 2-5 2 4-1 3Zm7-3 2-5 2 4-1 2Z" fill="#ae352d"/>'+
       '<path d="m140 51 2-5 2 4-1 3Zm7 3 2-5 2 4-1 3Z" fill="#1b597e"/></svg>';
   }
 
-  const themes = prints.map(([variant,name,desc,colors]) => ({
-    id:'climb-'+variant, name:'攀登 · '+name, desc:desc+'，自动跟拍红蓝两队，正方在左、反方在右',
-    variant, tone:'light', thumbnail:host => thumbnail(host,variant,colors),
-  }));
-  const byId = new Map(themes.map(theme => [theme.id,theme]));
+  const theme = {id:'climb-poster', name:'攀登', tone:'light', thumbnail,
+    desc:'日照金山与暖色岩壁，自动跟拍红蓝两队，正方在左、反方在右'};
+  // Older saved matches and shared links can still open their mountain scene.
+  function get(id) {
+    if (id===theme.id || id==='climb-ink' || id==='climb-paper') return theme;
+  }
   // A running neutral interval and speech overtime weather existing tracks.
   // Only credited speech advances a party along the route.
   const clockBaselines=new WeakMap();
@@ -122,13 +113,13 @@
     return history;
   }
   function rememberFootprintSnapshot(session,snapshot) {
-    if (byId.has(session.theme)) footprintHistories.set(snapshot,footprintHistory(session));
+    if (get(session.theme)) footprintHistories.set(snapshot,footprintHistory(session));
   }
 
   // Send a compact seed with a projector state or the oldest retained undo
   // snapshot. The projector never receives the undo stack itself.
   function preserveFootprintTurns(session,copy) {
-    if (!byId.has(session.theme)) return;
+    if (!get(session.theme)) return;
     const kept=copy.history?.length||0,ancestors=session.history||[];
     const cut=ancestors.length-kept;
     const seed=kept?footprintHistory(ancestors[cut],ancestors.slice(0,cut)):footprintHistory(session);
@@ -143,7 +134,7 @@
   // Automatic clock exhaustion does not add an undo action. Retain its
   // starting clock totals and speaker before tick can consume both turns.
   function noteFootprintHandoff(before,after,active) {
-    if (byId.has(before.theme)) after.footprintHandoffs=(before.footprintHandoffs||[])
+    if (get(before.theme)) after.footprintHandoffs=(before.footprintHandoffs||[])
       .concat({used:clockTotals(before).used,active});
   }
 
@@ -204,14 +195,14 @@
     return data;
   }
 
-  function mount(stage,id) {
+  function mount(stage) {
     const host = stage.ownerDocument.createElement('div');
     stage.prepend(host);
     let last, view, destroyed=false;
     const still=stage.hasAttribute('data-still');
     import(moduleURL).then(({createMatchView}) => {
       if (destroyed) return;
-      view=createMatchView(host,byId.get(id).variant);
+      view=createMatchView(host);
       if (last) view.update(matchData(last,still));
     }).catch(error => {
       if (!destroyed) console.warn('攀登场景未能载入，继续显示比赛计时',error);
@@ -223,18 +214,18 @@
   }
   // Each study opens a spot on the route with the regular match clocks and controls.
   const studies = {'climb-walk':.14,'climb-ladder':.31,'climb-ice':.72,'climb-assist':.946};
-  function demo(name, now, theme) {
+  function demo(name, now) {
     const seconds = name==='climb-assist' ? 540 : 150, side = 'pro', E=DT.engine;
     const format={id:'climb-study',name:'攀登动作预演', stages:[
       {id:'crossing',name:'自由辩论',type:'dual',first:side,secs:seconds}
     ]};
     const match={proTeam:'红队',conTeam:'蓝队'};
-    let s=E.createSession(format,match,now,{theme:byId.has(theme) ? theme : 'climb-poster'});
+    let s=E.createSession(format,match,now,{theme:theme.id});
     s=E.goto(s,0,now);
     s=E.adjust(s,-seconds*1000*studies[name],now,'pro');
     s=E.adjust(s,-seconds*1000*.17,now,'con');
     return {route:'timer',session:E.floor(s,side,now)};
   }
-  DT.webScenes = {themes, get:id=>byId.get(id), ascent, preserveFootprintTurns, noteFootprintHandoff, rememberFootprintSnapshot,
+  DT.webScenes = {themes:[theme], get, ascent, preserveFootprintTurns, noteFootprintHandoff, rememberFootprintSnapshot,
     mount, demoNames:Object.keys(studies), demo};
 })(window.DT = window.DT || {});

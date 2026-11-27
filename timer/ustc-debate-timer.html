@@ -7430,7 +7430,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     out.proSeat = m.proSeat === 'right' ? 'right' : 'left';
     return {
       kind: KIND, schema: SCHEMA, id: DT.store.uid('m'), createdAt: now,
-      format: clone(format), match: out, theme: String(theme || 'hall'),
+      format: clone(format), match: out, theme: String(DT.webScenes?.get(theme)?.id || theme || 'hall'),
     };
   }
 
@@ -7831,7 +7831,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   }
 
   function themeOf(id) {
-    if (DT.webScenes && DT.webScenes.get(id)) return id;
+    const scene = DT.webScenes?.get(id);
+    if (scene) return scene.id;
     const ids = Array.isArray(DT.THEMES) ? DT.THEMES.map(t => t.id) : BUILTIN_THEMES;
     return ids.indexOf(id) >= 0 ? id : 'hall';
   }
@@ -8882,7 +8883,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 
   // Static markup only; format names and match text go in through textContent and value.
   const TEMPLATE =
-    '<header class="dt-setup-head"><h1>辩论计时器</h1><p>选好赛制，填好这一场，就可以开始</p></header>' +
+    '<header class="dt-setup-head"><h1>辩论计时器</h1></header>' +
     '<div class="dt-setup-body">' +
     '<section class="dt-setup-formats"><h2 class="dt-setup-label">赛制</h2>' +
     '<div class="dt-setup-list" role="listbox" tabindex="0" aria-label="赛制"></div></section>' +
@@ -9097,7 +9098,10 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     let chosen = null;         // the chosen theme's cell
     let themePicked = false;   // the theme follows the chosen format until the timekeeper picks one
     // Compared as values, not put into a selector: an imported format's theme id can be any string.
-    const cellOf = id => cells.find(c => c.dataset.themeId === id) || null;
+    function cellOf(id) {
+      const themeId = DT.webScenes?.get(id)?.id || id;
+      return cells.find(c => c.dataset.themeId === themeId) || null;
+    }
     const describe = cell => { themeDesc.textContent = themes[cells.indexOf(cell)].desc || ''; };
     function setTheme(id, focus) {
       chosen = cellOf(id) || cellOf('hall') || cells[0];
@@ -9736,10 +9740,11 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       const nameField = field('名称', name, 'dt-ed-grow');
       nameField.appendChild(msgSlot('name'));
       sec.appendChild(nameField);
-      const known = themes.some(t => t.id === draft.theme);
+      const selectedTheme = DT.webScenes?.get(draft.theme)?.id || draft.theme;
+      const known = themes.some(t => t.id === selectedTheme);
       const options = themes.map(t => [t.id, t.name || t.id]);
       if (!known) options.push([draft.theme, '找不到这个主题，按「堂」显示']);
-      const theme = selectBox('theme', 'f:theme', options, draft.theme);
+      const theme = selectBox('theme', 'f:theme', options, selectedTheme);
       const hint = el('span', 'dt-ed-hint');
       const describe = () => { const t = themes.find(x => x.id === theme.value); hint.textContent = (t && t.desc) || ''; };
       theme.addEventListener('change', () => { draft.theme = theme.value; describe(); commit(); });

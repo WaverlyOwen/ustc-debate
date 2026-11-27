@@ -438,10 +438,11 @@
       const nameField = field('名称', name, 'dt-ed-grow');
       nameField.appendChild(msgSlot('name'));
       sec.appendChild(nameField);
-      const known = themes.some(t => t.id === draft.theme);
+      const selectedTheme = DT.webScenes?.get(draft.theme)?.id || draft.theme;
+      const known = themes.some(t => t.id === selectedTheme);
       const options = themes.map(t => [t.id, t.name || t.id]);
       if (!known) options.push([draft.theme, '找不到这个主题，按「堂」显示']);
-      const theme = selectBox('theme', 'f:theme', options, draft.theme);
+      const theme = selectBox('theme', 'f:theme', options, selectedTheme);
       const hint = el('span', 'dt-ed-hint');
       const describe = () => { const t = themes.find(x => x.id === theme.value); hint.textContent = (t && t.desc) || ''; };
       theme.addEventListener('change', () => { draft.theme = theme.value; describe(); commit(); });

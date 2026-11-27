@@ -25,12 +25,6 @@
   --ground: var(--climb-paper);
   --accent: #985621;
 }
-.dt-stage.has-climb-view:has(.dt-climb-host[data-style="ink"]) {
-  --climb-ink: #30372d; --climb-paper: #f6f1df;
-}
-.dt-stage.has-climb-view:has(.dt-climb-host[data-style="paper"]) {
-  --climb-ink: #173b42; --climb-paper: #e5efdf;
-}
 .dt-stage.has-climb-view > :is(.dt-field, .dt-halves, .dt-warnline, .dt-deco-over, .dt-clock) { display: none; }
 .dt-stage.has-climb-view[data-mode="stage"] > :is(.dt-head, .dt-card) { display: none; }
 

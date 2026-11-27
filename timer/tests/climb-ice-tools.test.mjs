@@ -4,7 +4,7 @@ import { createClimberModel } from '../web/climb/climber-model.js';
 import { createParties } from '../web/climb/climbers.js';
 import { createTerrain } from '../web/climb/terrain.js';
 
-const terrain=createTerrain('poster');
+const terrain=createTerrain();
 const moving={pro:true,con:true}, seconds={pro:150,con:150};
 const dist=(a,b)=>Math.hypot(...a.map((x,i)=>x-b[i]));
 
@@ -18,7 +18,7 @@ test('a climber faces the ice and loads three fixed contacts while changing a pi
     const ticks=budget*24;
     for (let tick=Math.floor(.70*ticks);tick<.94*ticks;tick++) {
       const p=tick/ticks;
-      for (const m of sample(terrain,{pro:p,con:p},tick/24,moving,'poster',budget).members) {
+      for (const m of sample(terrain,{pro:p,con:p},tick/24,moving,budget).members) {
         if (m.feature?.kind!=='ice') continue;
         const h=m.person.height,b=m.bones,floor=(x,z)=>terrain.surface(x,z)[1];
         const touching=p=>Math.abs(p[1]-floor(p[0],p[2]))<.012;
@@ -64,7 +64,7 @@ test('a belayer passes the brake hand from rope to ice tool without a one-frame 
   const end=Math.ceil((Math.max(...ice.map(f=>f.end))+.06)*10000);
   for (let tick=start;tick<=end;tick++) {
     const p=tick/10000;
-    const party=sample(terrain,{pro:p,con:p},150*p,moving,'poster',seconds).members;
+    const party=sample(terrain,{pro:p,con:p},150*p,moving,seconds).members;
     for (const m of party) {
       const pole=m.bones.pole1||m.carriedTools.pole1;
       if (!pole) continue;
@@ -86,7 +86,7 @@ test('a belayer passes the brake hand from rope to ice tool without a one-frame 
 });
 
 test('each climber takes both axes from the pack before stepping onto ice and replaces them after the lip',()=>{
-  const sample=createParties(), snow=sample(terrain,{pro:.55,con:.55},0,moving,'poster',seconds).members;
+  const sample=createParties(), snow=sample(terrain,{pro:.55,con:.55},0,moving,seconds).members;
   for (const m of snow) {
     for (let i=0;i<2;i++) {
       assert.equal(m.carriedTools?.['axe'+i]?.location,'pack');
@@ -95,7 +95,7 @@ test('each climber takes both axes from the pack before stepping onto ice and re
   }
   const contact=new Set(), strokes=new Set(), mixed=new Set(), stationary=new Set(), last=new Map();
   for (let n=0;n<=1100;n++) {
-    const p=.63+n/3200, party=sample(terrain,{pro:p,con:p},p*150,moving,'poster',seconds).members;
+    const p=.63+n/3200, party=sample(terrain,{pro:p,con:p},p*150,moving,seconds).members;
     for (const side of ['pro','con']) {
       const team=party.filter(m=>m.side===side);
       if (team.some(m=>m.feature?.kind==='ice')&&team.some(m=>m.bones.pole0?.location==='hand')) mixed.add(side);
@@ -129,16 +129,14 @@ test('each climber takes both axes from the pack before stepping onto ice and re
   assert.equal(strokes.size,12);
 });
 
-test('every style models a hooked steel pick, a flared opposing adze and a separate colored shaft',()=>{
+test('the ice axe has a hooked steel pick, a flared opposing adze and a separate colored shaft',()=>{
   const person=createParties()(terrain,{pro:0,con:0},0,moving).members[0].person;
-  for (const style of ['poster','ink','paper']) {
-    const model=createClimberModel(person,style);
-    const {vertices:blade}=model.find(p=>p.bone==='axe0'&&p.name==='ice-pick');
-    const {vertices:adze}=model.find(p=>p.bone==='axe0'&&p.name==='ice-adze');
-    assert(blade.some(p=>dist(p,[0,1,0])<1e-8));
-    assert(Math.max(...blade.map(p=>p[2]))>.50 && Math.max(...blade.map(p=>p[1]))>1.12);
-    assert(Math.max(...adze.map(p=>p[2]))>.74 && Math.max(...adze.map(p=>p[0]))>.14);
-    const shaft=model.find(p=>p.bone==='axe0'&&p.name==='axe-shaft');
-    assert(new Set(shaft.faces.map(f=>f.color)).size>=3);
-  }
+  const model=createClimberModel(person);
+  const {vertices:blade}=model.find(p=>p.bone==='axe0'&&p.name==='ice-pick');
+  const {vertices:adze}=model.find(p=>p.bone==='axe0'&&p.name==='ice-adze');
+  assert(blade.some(p=>dist(p,[0,1,0])<1e-8));
+  assert(Math.max(...blade.map(p=>p[2]))>.50 && Math.max(...blade.map(p=>p[1]))>1.12);
+  assert(Math.max(...adze.map(p=>p[2]))>.74 && Math.max(...adze.map(p=>p[0]))>.14);
+  const shaft=model.find(p=>p.bone==='axe0'&&p.name==='axe-shaft');
+  assert(new Set(shaft.faces.map(f=>f.color)).size>=3);
 });

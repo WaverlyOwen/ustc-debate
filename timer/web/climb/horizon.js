@@ -1,25 +1,11 @@
 const NS = 'http://www.w3.org/2000/svg';
 let nextHorizon = 0;
 
-const palettes = {
-  poster: {
-    sky: ['#dda183', '#eeb693', '#f6c79e', '#ffe3aa', '#efbd9b'],
-    far: ['#bc9393', '#deaf9d'], farSnow: '#fbd1aa', farShade: '#af8a91',
-    middle: ['#93818c', '#cd9e96'], snow: '#ffe0ac', half: '#e5b398',
-    shade: '#776f82', crag: '#b99398', mist: '#ffe3bf', cloud: '#ffebc5',
-  },
-  ink: {
-    sky: ['#e8e1ca', '#f0ead5', '#f7efda', '#f6eed9', '#e2dfc9'],
-    far: ['#d4d2bb', '#e8e4cd'], farSnow: '#f9f0db', farShade: '#c2c5b1',
-    middle: ['#c5c7b3', '#e4e1cb'], snow: '#f9f1dd', half: '#e9e7d0',
-    shade: '#aab2a0', crag: '#8d9a8b', mist: '#f5efd9', cloud: '#f8f2df',
-  },
-  paper: {
-    sky: ['#9cc9cb', '#abd0ce', '#c1dfd7', '#dbe8d9', '#b6d5ca'],
-    far: ['#a2bfbc', '#a2bfbc'], farSnow: '#dfebda', farShade: '#86aaa9',
-    middle: ['#75a3a2', '#75a3a2'], snow: '#e7efdc', half: '#bed9cb',
-    shade: '#618c91', crag: '#9abeb7', mist: '#d3e4d7', cloud: '#e9efe0',
-  },
+const colors = {
+  sky: ['#dda183', '#eeb693', '#f6c79e', '#ffe3aa', '#efbd9b'],
+  far: ['#bc9393', '#deaf9d'], farSnow: '#fbd1aa', farShade: '#af8a91',
+  middle: ['#93818c', '#cd9e96'], snow: '#ffe0ac', half: '#e5b398',
+  shade: '#776f82', crag: '#b99398', mist: '#ffe3bf', cloud: '#ffebc5',
 };
 
 function element(parent, name, attributes = {}) {
@@ -128,92 +114,25 @@ const middleRock = `M43 373 l-9 20-20 18 13-5 14-14 8-14 Z
 
 const shelves = 'M-22 428 l32-8 28-16-20 18-19 3-14 8 Z M143 387 l-13 17-36 29 25-16 15-6 19-29 Z M261 407 l-14 14-20 12 21-6 19-22 Z M1080 436 l32-12 15-11-11 15-29 10 Z M1201 389 l-15 24-19 15 13-4 15-16 10-23 Z M1301 410 l-26 18-17 6 17-1 16-9 Z';
 
-function line(parent, d, color, width, opacity) {
-  return element(parent, 'path', {
-    d, fill: 'none', stroke: color, 'stroke-width': width, opacity,
-    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-  });
-}
-
-// Short, slightly bowed marks follow individual wedges of rock like an engraved plate.
-function engravedFaces(parent, runs, strength) {
-  let hatching = '';
-  for (const [x, y, count, step, slope, dx, dy] of runs) {
-    for (let i = 0; i < count; i++) {
-      const t = i / (count - 1);
-      const weight = 0.3 + 0.7 * Math.sin(Math.PI * t);
-      const px = x + i * step, py = y + i * slope + Math.sin(i * 0.73);
-      const ex = dx * weight, ey = dy * weight + Math.sin(i * 1.23) * 2;
-      hatching += `M${px.toFixed(1)} ${py.toFixed(1)} q${(ex*0.35).toFixed(1)} ${(ey*0.62).toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`;
-    }
-  }
-  line(parent, hatching, '#526960', 1.05, strength);
-}
-
-const distantEngravings = [
-  [166, 351, 12, 2.5, 0.8, -9, 18], [484, 368, 12, 2.7, 0.6, -5, 17],
-  [802, 355, 16, 2.9, 0.55, -8, 19], [1049, 360, 14, 2.5, 0.35, -9, 14],
-  [1360, 362, 13, 2.8, 0.45, -6, 16],
-];
-const nearEngravings = [
-  [36, 360, 18, 2.5, -0.35, -10, 20], [115, 349, 17, 2.5, -1.25, -14, 25],
-  [187, 311, 19, 2.3, 1.2, -13, 34], [221, 350, 20, 2.5, 1.1, -18, 30],
-  [267, 378, 19, 2.4, 0.95, -21, 27], [320, 406, 16, 2.7, 0.9, -23, 21],
-  [1087, 426, 21, 2.5, -1.45, -15, 24], [1147, 381, 25, 2.2, -1.6, -14, 29],
-  [1211, 332, 20, 2.1, 1.25, -12, 30], [1257, 367, 20, 2.5, 0.7, -17, 29],
-  [1303, 394, 20, 2.6, 0.65, -23, 22], [1490, 361, 16, 2.6, -1.2, -13, 24],
-];
-
-// Preserve the endpoints of each ridge segment while giving each paper edge a little broken fiber.
-function tornCrest(d) {
-  const vertices = d.split('V')[0].match(/-?\d+/g).map(Number);
-  let rough = 'M' + vertices[0] + ' ' + vertices[1] + ' L';
-  for (let i = 2; i < vertices.length; i += 2) {
-    const x = vertices[i], y = vertices[i+1];
-    const dx = x - vertices[i-2], dy = y - vertices[i-1];
-    const steps = Math.ceil(Math.hypot(dx, dy) / 10);
-    for (let j = 1; j < steps; j++) {
-      const t = j / steps;
-      const tooth = Math.sin(i * 2.17 + j * 4.91) * 1.3;
-      rough += (x - dx*(1-t)).toFixed(1) + ' ' + (y - dy*(1-t) + tooth).toFixed(1) + ' ';
-    }
-    rough += x + ' ' + y + ' ';
-  }
-  return rough + 'V1500 H-1150 Z';
-}
-
-function addRange(parent, defs, prefix, style, colors, distant) {
+function addRange(parent, defs, prefix, distant) {
   const group = element(parent, 'g');
   const name = distant ? 'far' : 'middle';
   const crest = distant ? farCrest : middleCrest;
-  const outline = style === 'paper' ? tornCrest(crest) : crest;
-  const fill = style === 'paper' ? colors[name][0] : gradient(defs, prefix + name, 'linearGradient',
+  const fill = gradient(defs, prefix + name, 'linearGradient',
     { gradientUnits: 'userSpaceOnUse', x1: 0, x2: 0, y1: distant ? 340 : 285, y2: distant ? 485 : 590 },
     [[0, colors[name][0]], [1, colors[name][1]]]);
-  if (style === 'paper') {
-    path(group, outline, '#527876', 0.26).setAttribute('transform', 'translate(5 4)');
-    path(group, outline, distant ? '#d0e0ce' : '#bbdbca').setAttribute('transform', 'translate(-2 -2.5)');
-  }
-  path(group, outline, fill);
+  path(group, crest, fill);
   const clipId = prefix + name + '-clip';
   const cut = element(defs, 'clipPath', { id: clipId });
-  path(cut, outline, '#fff');
+  path(cut, crest, '#fff');
   const faces = element(group, 'g', { 'clip-path': 'url(#' + clipId + ')' });
   const snow = distant ? farLit : middleSnow;
   const rock = distant ? farFacets : middleShadow;
-  path(faces, rock, distant ? colors.farShade : colors.shade, style === 'ink' ? 0.58 : 0.84);
-  if (style === 'paper') {
-    path(faces, snow, '#527c82', 0.52).setAttribute('transform', 'translate(3.5 3.8)');
-  }
-  path(faces, snow, distant ? colors.farSnow : colors.snow, style === 'poster' && distant ? 0.84 : 1);
+  path(faces, rock, distant ? colors.farShade : colors.shade, 0.84);
+  path(faces, snow, distant ? colors.farSnow : colors.snow, distant ? 0.84 : 1);
   if (!distant) {
     path(faces, middleRock, colors.crag);
     path(faces, shelves, colors.half);
-  }
-  if (style === 'ink') {
-    line(faces, rock, '#6e8176', distant ? 0.75 : 1.05, distant ? 0.45 : 0.64);
-    engravedFaces(faces, distant ? distantEngravings : nearEngravings, distant ? 0.40 : 0.80);
-    line(group, outline, '#69796b', distant ? 0.90 : 1.35, distant ? 0.57 : 0.82);
   }
   return group;
 }
@@ -224,33 +143,17 @@ const cirrus = [
   'M1099 255 C1175 251 1230 235 1309 236 C1392 238 1471 217 1568 217 C1470 225 1399 242 1315 241 C1248 240 1180 255 1099 255Z',
 ];
 
-const etchedClouds = `M-80 222 C-18 218 49 212 93 209 M105 208 C177 207 219 189 281 190
- M212 198 C236 192 256 190 273 190 M895 186 C952 182 1015 167 1058 164
- M1075 161 C1143 147 1173 157 1226 149 M1184 161 C1217 157 1236 156 1264 147
- M1079 261 C1151 258 1211 244 1262 243 M1271 243 C1350 243 1387 236 1447 229`;
-
 const sunVeils = 'M-58 15 Q-31 14-7 16 T42 16 Q24 18-5 18 T-58 15Z M-46 25 Q-24 23 2 24 L31 25 Q10 27-16 26Z';
 
-function addSun(parent, defs, prefix, style) {
+function addSun(parent, defs, prefix) {
   const light = element(parent, 'g');
-  if (style === 'poster') {
-    const glow = gradient(defs, prefix + 'glow', 'radialGradient', {},
-      [[0, '#ffe1a1', 0.84], [0.28, '#ffe5a5', 0.38], [0.7, '#ffe8b8', 0.11], [1, '#ffe1a1', 0]]);
-    element(light, 'circle', { r: 202, fill: glow });
-    const disk = gradient(defs, prefix + 'disk', 'linearGradient', { x2: 0, y2: 1 },
-      [[0, '#fff8d6'], [0.74, '#fff0b3'], [1, '#ffdd93']]);
-    element(light, 'circle', { r: 34, fill: disk });
-    path(light, sunVeils, '#e8af87', 0.47);
-  } else if (style === 'ink') {
-    element(light, 'circle', { r: 34, fill: '#efd9aa', stroke: '#9e9169', 'stroke-width': 1.1 });
-    line(light, 'M-30-22 C-14-42 14-42 31-19 M31 18 Q27 25 21 29', '#b2a37a', 0.8, 0.76);
-    line(light, 'M-30 13 Q-18 12-8 13 M-26 16 Q-13 15 3 16 M-26 19 Q-8 18 9 19 M-22 22 Q-6 21 14 22 M-19 25 Q-4 24 12 25 M-13 28 Q-3 27 5 28', '#9d8c65', 0.88, 0.62);
-  } else {
-    const disc = 'M0-34 L9-33 18-29 25-23 30-16 33-8 34 2 32 11 28 19 22 26 13 31 4 34 -6 34 -15 31 -23 25 -29 18 -33 9 -34-1 -33-10 -29-18 -23-25 -15-30 -8-33Z';
-    path(light, disc, '#628f89', 0.38).setAttribute('transform', 'translate(3.5 4.5)');
-    path(light, disc, '#fff0c5');
-    path(light, 'M-28-17 l5-8 9-5 13-4 12 1-12 .8-13 4.2Z', '#fff8dd');
-  }
+  const glow = gradient(defs, prefix + 'glow', 'radialGradient', {},
+    [[0, '#ffe1a1', 0.84], [0.28, '#ffe5a5', 0.38], [0.7, '#ffe8b8', 0.11], [1, '#ffe1a1', 0]]);
+  element(light, 'circle', { r: 202, fill: glow });
+  const disk = gradient(defs, prefix + 'disk', 'linearGradient', { x2: 0, y2: 1 },
+    [[0, '#fff8d6'], [0.74, '#fff0b3'], [1, '#ffdd93']]);
+  element(light, 'circle', { r: 34, fill: disk });
+  path(light, sunVeils, '#e8af87', 0.47);
   return light;
 }
 
@@ -268,44 +171,21 @@ const cloudBank = [
   'M755 448 Q847 432 926 432 Q1006 431 1068 416 Q1141 399 1230 406 Q1343 421 1431 401 Q1524 385 1664 400 Q1557 393 1450 414 Q1342 433 1232 416 Q1144 411 1072 426 Q999 440 927 440 Q834 440 755 452Z',
 ];
 
-export function mountHorizon(svgGroup, style) {
-  if (!Object.hasOwn(palettes, style)) style = 'poster';
-  const colors = palettes[style];
+export function mountHorizon(svgGroup) {
   const prefix = 'climb-horizon-' + ++nextHorizon + '-';
   const defs = element(svgGroup, 'defs');
   const sky = gradient(defs, prefix + 'sky', 'linearGradient', { x2: '0', y2: '1' },
     [0, 0.27, 0.48, 0.66, 1].map((offset, i) => [offset, colors.sky[i]]));
   const field = element(svgGroup, 'rect', { x: 0, y: 0, fill: sky });
-  const light = addSun(svgGroup, defs, prefix, style);
+  const light = addSun(svgGroup, defs, prefix);
   const clouds = element(svgGroup, 'g');
-  for (const d of cirrus) {
-    if (style === 'paper') {
-      path(clouds, d, '#74a8a4', 0.45).setAttribute('transform', 'translate(2.8 3.3)');
-      path(clouds, d, colors.cloud);
-    } else {
-      path(clouds, d, colors.cloud, style === 'ink' ? 0.9 : 0.73);
-      if (style === 'ink') line(clouds, d, '#8d9680', 0.95, 0.53);
-    }
-  }
-  if (style === 'ink') line(clouds, etchedClouds, '#7f8d79', 1.05, 0.59);
-  const far = addRange(svgGroup, defs, prefix, style, colors, true);
+  for (const d of cirrus) path(clouds, d, colors.cloud, 0.73);
+  const far = addRange(svgGroup, defs, prefix, true);
   const bank = element(svgGroup,'g');
-  for (const d of cloudBank) {
-    if (style==='paper') path(bank,d,'#719797',.29).setAttribute('transform','translate(1.5 2.3)');
-    path(bank,d,colors.mist,style==='paper'?.78:style==='ink'?.81:.52);
-    if (style==='ink') line(bank,d,'#a0a592',.57,.39);
-  }
-  const middle = addRange(svgGroup, defs, prefix, style, colors, false);
+  for (const d of cloudBank) path(bank,d,colors.mist,.52);
+  const middle = addRange(svgGroup, defs, prefix, false);
   const mist = element(svgGroup, 'g');
-  for (const [i, d] of valleyMist.entries()) {
-    if (style === 'paper') {
-      path(mist, d, '#557f80', 0.38).setAttribute('transform', 'translate(3 4)');
-      path(mist, d, i < 2 ? colors.mist : '#b8d2c6');
-    } else {
-      path(mist, d, colors.mist, style === 'ink' ? 0.72 : i < 2 ? 0.32 : 0.22);
-      if (style === 'ink') line(mist, d, '#9aa18c', 0.8, 0.5);
-    }
-  }
+  for (const [i, d] of valleyMist.entries()) path(mist, d, colors.mist, i < 2 ? 0.32 : 0.22);
 
   let lastWidth, lastHeight;
   return function update({ width, height, yaw = 0, pitch = 0, focusX = 0, focusY = 0, time = 0 }) {

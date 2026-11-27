@@ -1280,7 +1280,7 @@ export function createParties() {
     }
     return course;
   }
-  function sample(terrain, progress, t, moving, variant = 'poster', secondsPerTeam = {}) {
+  function sample(terrain, progress, t, moving, secondsPerTeam = {}) {
     const course=courseFor(terrain);
     const members = PEOPLE.map((p,i) => {
       const seconds=Math.max(.01,(typeof secondsPerTeam==='number'?secondsPerTeam:secondsPerTeam?.[p.side])||1020);
@@ -1312,7 +1312,7 @@ export function createParties() {
       delete member.step.plants;
     }
     for (const pair of pairs) joinPartners(pair,terrain.surface);
-    return { members, draw: (group, project) => render(group, project, members, variant, terrain) };
+    return { members, draw: (group, project) => render(group, project, members, terrain) };
   }
   sample.footfalls=(terrain,side,progress,secondsPerTeam={})=>{
     const course=courseFor(terrain);

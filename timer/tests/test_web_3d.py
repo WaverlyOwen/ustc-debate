@@ -27,6 +27,8 @@ function step(ms=50) {
 import './preview.js';
 import {createMatchView} from './match-view.js';
 const result = document.getElementById('result'), errors = [];
+if (document.querySelector('[data-variant]') || document.querySelector('h1')?.textContent !== '攀登')
+  errors.push('Unexpected theme controls on the climbing preview');
 step();
 document.getElementById('play').click();
 for (let i=0;i<5;i++) step();
@@ -45,7 +47,7 @@ for (const rate of [1,12,24,60]) {
 const host = document.body.appendChild(document.createElement('div'));
 for (const hz of [60,120]) {
   document.getElementById('play').click(); step(0);
-  const match = createMatchView(host,'poster');
+  const match = createMatchView(host);
   match.update({phase:'running',running:true,active:'pro',stageSide:'pro',progress:{pro:0,con:0},
     moving:{pro:true,con:false},clocks:{pro:'1:00',con:''},teams:{pro:'Pro',con:'Con'}});
   const views = [sceneCalls,matchCalls], starts = views.map(calls=>calls.length);
@@ -84,7 +86,7 @@ export function createLandscape(svg) {
             source = (climb / 'study.html').read_text(encoding='utf-8')
             source = source.replace('<head>', '<head>'+scheduler).replace('</body>', probe+'</body>')
             (climb / 'preview-controls.html').write_text(source, encoding='utf-8')
-            dom = dump(url+'web/climb/preview-controls.html?still=1')
+            dom = dump(url+'web/climb/preview-controls.html?scene=ink&still=1')
         result = re.search(r'<output id="result">(.*?)</output>', dom, re.S)
         self.assertIsNotNone(result)
         self.assertEqual(unescape(result[1]), 'ok')
@@ -117,11 +119,16 @@ function centered(nodes, label) {
 }
 try {
   const format = DT.BUILTIN_FORMATS.find(f => f.id === 'recruit-3v3');
-  const session = DT.engine.createSession(format, {title:'校园辩论赛'}, 0, {theme:'climb-paper'});
-  view.update(DT.engine.view(DT.engine.goto(session,0,0),0));
+  const session = DT.engine.createSession(format, {title:'校园辩论赛'}, 0);
+  session.theme = 'climb-ink'; // A session saved before the climbing styles were consolidated.
+  DT.store.saveSession(session);
+  const restored = DT.store.loadSession();
+  view.update(DT.engine.view(DT.engine.goto(restored,0,0),0));
   await import('./web/climb/match-view.js');
   for (let i=0; i<40 && !stage.classList.contains('has-climb-view'); i++) await new Promise(r => setTimeout(r,20));
   check(stage.classList.contains('has-climb-view'), 'Match scene did not mount');
+  check(stage.dataset.theme === 'climb-poster' && stage.querySelector('.dt-climb-host').dataset.style === 'poster',
+    'Saved ink match did not project the poster');
   for (const [width,height] of [[320,844],[1280,800]]) {
     screen.style.width=width+'px'; screen.style.height=height+'px';
     const round=stage.querySelector('.climb-round'), footer=stage.querySelector('.dt-bottom');
@@ -159,7 +166,7 @@ finally { view.destroy(); screen.remove(); }
 <output id="result"></output><script type="module">
 import {createMatchView} from './match-view.js';
 const screen = document.getElementById('screen'), host = document.getElementById('host');
-const view = createMatchView(host,'paper'), stage = host.parentElement;
+const view = createMatchView(host), stage = host.parentElement;
 const base = {phase:'paused', teams:{pro:'Red',con:'Blue'}, progress:{pro:0,con:0}, still:true,
   active:'pro', dual:true, clocks:{pro:'9:59',con:'2:30'}};
 function inspect(data, bell, sides) {
@@ -210,24 +217,26 @@ addEventListener('load', () => {
   function check(condition, message) { if (!condition) throw Error(message); }
   try {
     const options = document.querySelectorAll('[data-theme-id^="climb-"]');
-    check(options.length === 3, 'Three choices on the opening screen');
+    check(options.length === 1 && options[0].dataset.themeId === 'climb-poster', 'Expected one climbing theme');
+    const option = options[0];
+    check(option.querySelector('.dt-setup-theme-name').textContent === '攀登', 'Incorrect climbing theme name');
+    check(!document.querySelector('.dt-setup-head').textContent.includes('选好赛制，填好这一场，就可以开始'),
+      'Removed setup hint is visible');
     document.querySelector('[data-action="swap-seats"]').click();
-    for (const option of options) {
-      option.click();
-      const tile = option.querySelector('.dt-setup-thumb');
-      const ring = getComputedStyle(tile,'::after');
-      check(Math.abs(parseFloat(ring.width)-tile.clientWidth)<1 &&
-        Math.abs(parseFloat(ring.height)-tile.clientHeight)<1, 'Selection border escaped '+option.dataset.themeId);
-      check(document.querySelector('.dt-setup-seating').dataset.seat === 'left', 'Red team on left');
-      check(document.querySelector('[data-action="swap-seats"]').disabled, 'Seats fixed for this theme');
-    }
+    option.click();
+    const tile = option.querySelector('.dt-setup-thumb');
+    const ring = getComputedStyle(tile,'::after');
+    check(Math.abs(parseFloat(ring.width)-tile.clientWidth)<1 &&
+      Math.abs(parseFloat(ring.height)-tile.clientHeight)<1, 'Selection border escaped '+option.dataset.themeId);
+    check(document.querySelector('.dt-setup-seating').dataset.seat === 'left', 'Red team on left');
+    check(document.querySelector('[data-action="swap-seats"]').disabled, 'Seats fixed for this theme');
     document.querySelector('[data-theme-id="hall"]').click();
     check(document.querySelector('.dt-setup-seating').dataset.seat === 'right', 'Other seats restored');
     const E = DT.engine, format = {name:'Test', stages:[
       {id:'d',name:'Dual',type:'dual',secs:10}, {id:'p',name:'Pro',type:'single',side:'pro',secs:20},
       {id:'b',name:'Break',type:'break',secs:40}
     ]};
-    let s = E.createSession(format, {}, 0, {theme:'climb-ink'});
+    let s = E.createSession(format, {}, 0, {theme:option.dataset.themeId});
     const route = now => E.view(s,now).ascent;
     check(route(0).secondsPerTeam.pro === 30 && route(0).secondsPerTeam.con === 10, 'Side budgets');
     s = E.floor(E.goto(s,0,0),'pro',0);
@@ -292,11 +301,11 @@ try {
   const [{createTerrain}, {createParties}, {createClimberModel}] = await Promise.all([
     import('./terrain.js'), import('./climbers.js'), import('./climber-model.js'),
   ]);
-  const terrain = createTerrain('poster'), sample = createParties();
+  const terrain = createTerrain(), sample = createParties();
   // This section is open snow, beyond both ladder crossings and below the ice walls.
   const progress = {pro:.52, con:.48}, paused = {pro:false, con:false};
-  const pose = sample(terrain,progress,3,paused,'poster'), leader = pose.members[0];
-  const later = sample(terrain,progress,13,paused,'poster');
+  const pose = sample(terrain,progress,3,paused), leader = pose.members[0];
+  const later = sample(terrain,progress,13,paused);
   for (const [i,member] of pose.members.entries()) {
     const other = later.members[i];
     check(member.bones.pole0, 'Missing the planted trekking pole');
@@ -320,11 +329,11 @@ try {
   }
   const bends = [];
   for (let step=0; step<12; step++) {
-    const {bones} = sample(terrain,{...progress,pro:.34 + step*.002},3,{pro:true,con:false},'poster').members[0];
+    const {bones} = sample(terrain,{...progress,pro:.34 + step*.002},3,{pro:true,con:false}).members[0];
     bends.push(dot(along(bones.thigh0.y),along(bones.shin0.y)));
   }
   check(Math.max(...bends)-Math.min(...bends) > .025, 'Advancing the climber did not bend the knee');
-  const model = createClimberModel(leader.person,'poster');
+  const model = createClimberModel(leader.person);
   const solids = ['torso','head'].map(bone => {
     const candidates = model.filter(piece => piece.bone === bone)
       .map(piece => ({piece, volume:closedVolume(piece)})).sort((a,b) => b.volume-a.volume);
@@ -397,7 +406,7 @@ const original=PerspectiveCamera.prototype.updateMatrixWorld;
 let camera;
 PerspectiveCamera.prototype.updateMatrixWorld=function(...args) { camera=this; return original.apply(this,args); };
 try {
-  const state={cameraTime:81}, draw=createLandscape(document.querySelector('svg'),'poster',state);
+  const state={cameraTime:81}, draw=createLandscape(document.querySelector('svg'),state);
   const progress={pro:.337,con:.224}, dt=1/24;
   function frame(shot,elapsed,snap=false) {
     state.cameraTime+=elapsed;
@@ -443,8 +452,8 @@ import { createLandscape } from './landscape.js';
 import { createParties } from './climbers.js';
 import { createTerrain } from './terrain.js';
 try {
-  const svg=document.querySelector('svg'), state={cameraTime:35}, draw=createLandscape(svg,'poster',state);
-  const terrain=createTerrain('poster'), sample=createParties(), moving={pro:true,con:false};
+  const svg=document.querySelector('svg'), state={cameraTime:35}, draw=createLandscape(svg,state);
+  const terrain=createTerrain(), sample=createParties(), moving={pro:true,con:false};
   for (const [width,height] of [[1280,720],[390,740]]) {
     svg.setAttribute('width',width);svg.setAttribute('height',height);
     for (const progress of [{pro:0,con:0},{pro:.80,con:.05},{pro:.96,con:1}]) {
@@ -453,7 +462,7 @@ try {
       const horizontal=r.distance*Math.cos(r.pitch);
       camera.position.set(r.x+horizontal*Math.sin(r.yaw),r.y+r.distance*Math.sin(r.pitch),r.z+horizontal*Math.cos(r.yaw));
       camera.lookAt(r.x,r.y,r.z);camera.updateMatrixWorld();
-      const {members}=sample(terrain,progress,35,moving,'poster',1020);
+      const {members}=sample(terrain,progress,35,moving,1020);
       const anchors=[terrain.summit,...members.flatMap(m=>[m.bones.head.origin,m.bones.boot0.origin])];
       for (const anchor of anchors) {
         const point=new Vector3(...anchor).project(camera);
@@ -478,8 +487,8 @@ import {PerspectiveCamera} from '../vendor/three-0.187.0/build/three.core.js';
 try {
   const svg=document.querySelector('svg'), get=id=>document.getElementById(id);
   const groups={horizon:get('sky'),mountain:get('mountain'),tracks:get('tracks'),parties:get('parties')};
-  mountSnow(svg,groups,'ink',[0,0,-115]);
-  const weather=mountSnow(svg,groups,'paper',[0,0,-115]);
+  mountSnow(svg,groups,[0,0,-115]);
+  const weather=mountSnow(svg,groups,[0,0,-115]);
   if (svg.querySelectorAll('[data-climb-weather]').length!==2 || groups.horizon.querySelectorAll('[data-spindrift]').length!==3)
     throw Error('Remount left duplicate weather layers or summit plumes');
   const camera=new PerspectiveCamera(35,1.6,.2,1200);
@@ -551,8 +560,8 @@ import {createTerrain} from './terrain.js';
 import {createLandscape} from './landscape.js';
 try {
   const svg=document.querySelector('svg'), group=svg.querySelector('#mountain');
-  const draw=createLandscape(svg,'poster',{cameraTime:81}), nodes=[...group.children];
-  const faces=createTerrain('poster').faces, beds=new Map(),caps=new Map();
+  const draw=createLandscape(svg,{cameraTime:81}), nodes=[...group.children];
+  const faces=createTerrain().faces, beds=new Map(),caps=new Map();
   const key=p=>p.map(n=>n.toFixed(5)).join(',');
   const edge=(a,b)=>[key(a),key(b)].sort().join('/');
   for (const [i,f] of faces.entries()) {
@@ -590,7 +599,7 @@ try {
 import { createLandscape } from './landscape.js';
 try {
   const state={autoFollowObstacles:'pro'}, svg=document.querySelector('svg');
-  const draw=createLandscape(svg,'ink',state);
+  const draw=createLandscape(svg,state);
   for (let i=0;i<80;i++) {
     const elapsed=.946*540+i/8, remaining=540-elapsed;
     state.cameraTime=elapsed+.17*540;

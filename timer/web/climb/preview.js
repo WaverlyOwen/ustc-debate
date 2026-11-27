@@ -4,19 +4,16 @@ import { createFrameClock } from './frame-clock.js';
 
 const $ = selector => document.querySelector(selector);
 const params = new URLSearchParams(location.search);
-const names = { poster:'登山海报', ink:'岩层线描', paper:'分层剪纸' };
-const oldLinks = { sunrise:'poster', glacier:'ink', moon:'paper' };
 const format = window.DT.BUILTIN_FORMATS.find(f => f.id === 'ustc-chongxiao-cup');
 const timeline = climbTimeline(format);
-const requested = params.get('scene');
-let variant = Object.hasOwn(names,requested) ? requested : Object.hasOwn(oldLinks,requested) ? oldLinks[requested] : 'poster';
 let elapsed = Math.max(0,Math.min(1, Number(params.get('p')) || 0)) * timeline.duration;
 let speed = Number($('#speed').value), motion = elapsed/speed;
 let playing = params.get('still') !== '1' && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-let draw, snap = true, refresh = true, seeking = false, frame = 0;
+let snap = true, refresh = true, seeking = false, frame = 0;
 const svg = $('#scene'), seek = $('#seek');
 const cache = new Map();
 const cameraState = {};
+const draw = createLandscape(svg,cameraState);
 const frameClock = createFrameClock();
 
 function clock(seconds) {
@@ -27,28 +24,9 @@ function setText(selector, content) {
   if (cache.get(selector) === content) return;
   $(selector).textContent = content; cache.set(selector,content);
 }
-function pressed(key, current) {
-  document.querySelectorAll('[data-'+key+']').forEach(node => node.setAttribute('aria-pressed',node.dataset[key] === current));
-}
-function shareState() {
-  if (location.protocol === 'file:') return;
-  const url = new URL(location.href);
-  url.searchParams.set('scene',variant);
-  history.replaceState(null,'',url);
-}
 function redraw(immediate = false) {
   refresh = true; snap ||= immediate;
   if (!frame && !document.hidden) frame = requestAnimationFrame(tick);
-}
-function selectVariant(id) {
-  const first = !draw;
-  variant = id;
-  draw = createLandscape(svg,id,cameraState);
-  document.body.dataset.style = id;
-  pressed('variant',id);
-  document.title = '攀登 · '+names[id];
-  svg.setAttribute('aria-label',names[id]+'，红蓝两支登山队沿两侧山脊攀登');
-  redraw(first);
 }
 function paintControls(state) {
   const done = state.finished;
@@ -107,10 +85,6 @@ seek.addEventListener('input',() => {
   elapsed = Number(seek.value)/10000*timeline.duration;
   motion = elapsed/speed; frameClock.reset(); redraw(true);
 });
-document.querySelectorAll('[data-variant]').forEach(button => button.addEventListener('click',() => {
-  if (variant !== button.dataset.variant) selectVariant(button.dataset.variant);
-  shareState();
-}));
 document.addEventListener('keydown',e => {
   if (e.code === 'Space' && !e.repeat && (e.target === document.body || e.target === svg)) {
     e.preventDefault(); toggle();
@@ -134,4 +108,4 @@ window.addEventListener('resize',() => redraw(!playing));
 setText('#duration',clock(timeline.duration));
 setText('#format',format.name);
 for (const side of ['pro','con']) setText('#'+side+'-total','/ '+clock(timeline.totals[side]));
-selectVariant(variant);
+redraw(true);

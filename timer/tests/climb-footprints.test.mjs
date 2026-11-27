@@ -34,8 +34,8 @@ test('a rotated boot leaves heel and forefoot impressions only on its supporting
 });
 
 test('on tilted ice only the steel front point that contacts the face leaves a puncture',()=>{
-  const {person}=createParties()(createTerrain('paper'),{pro:0,con:0},0,{pro:false,con:false}).members[0];
-  const model=createClimberModel(person,'paper'),foot=0,[tip]=frontPoints[foot];
+  const {person}=createParties()(createTerrain(),{pro:0,con:0},0,{pro:false,con:false}).members[0];
+  const model=createClimberModel(person),foot=0,[tip]=frontPoints[foot];
   const teeth=model.filter(part=>part.bone==='crampon'+foot);
   for (const point of frontPoints[foot]) {
     assert(teeth.some(tooth=>tooth.vertices.some(p=>p.every((v,i)=>v===point[i]))));
@@ -78,7 +78,7 @@ test('the near ridge clips a tread crossing its silhouette and hides a tread beh
 });
 
 test('six walkers reproduce planted boot frames and independent histories after seeking',()=>{
-  const terrain=createTerrain('poster'),sample=createParties(), seconds={pro:1020,con:330};
+  const terrain=createTerrain(),sample=createParties(), seconds={pro:1020,con:330};
   const stopped={pro:false,con:false}, walking={pro:true,con:true};
   const seen=new Set();
   for (const side of ['pro','con']) {
@@ -91,21 +91,21 @@ test('six walkers reproduce planted boot frames and independent histories after 
     assert.equal(ids.size,later.length);
     for (const mark of later.filter(mark=>mark.progress>.02 && mark.progress<.52).filter((_,i)=>i%5===0)) {
       const p=mark.progress+1e-8,progress={pro:p,con:p};
-      const m=sample(terrain,progress,p*seconds[side],walking,'poster',seconds).members.find(m=>m.side===side&&m.rank===mark.rank);
+      const m=sample(terrain,progress,p*seconds[side],walking,seconds).members.find(m=>m.side===side&&m.rank===mark.rank);
       const boot=m.bones['boot'+mark.foot];
       for (const axis of ['origin','x','z']) {
         assert(Math.hypot(...mark.frame[axis].map((n,i)=>n-boot[axis][i]))<2e-4,side+' '+mark.id+' '+axis);
       }
       seen.add(side+mark.rank+mark.foot);
     }
-    sample(terrain,{pro:.2,con:.5},100,stopped,'poster',seconds);
+    sample(terrain,{pro:.2,con:.5},100,stopped,seconds);
     assert.deepEqual(early,sample.footfalls(terrain,side,.2,seconds));
   }
   assert.equal(seen.size,12);
 });
 
 test('the painted tracks stop with each party and rebuild after a seek or a reset',()=>{
-  const terrain=createTerrain('poster'),seconds={pro:1020,con:330};
+  const terrain=createTerrain(),seconds={pro:1020,con:330};
   const project=p=>({x:330+p[0]*4,y:380-p[1]*4-p[2],depth:150-p[2]});
   Object.assign(project,{width:660,height:500,visitOccluders(){}});
   function scene() {
@@ -114,9 +114,9 @@ test('the painted tracks stop with each party and rebuild after a seek or a rese
       const attributes=new Map();
       return {setAttribute:(key,value)=>attributes.set(key,value),getAttribute:key=>attributes.get(key)};
     }}};
-    const draw=mountFootprints(group,terrain,'poster',sample);
+    const draw=mountFootprints(group,terrain,sample);
     return (progress,t,pro=true,con=true)=>{
-      const {members}=sample(terrain,progress,t,{pro,con},'poster',seconds);
+      const {members}=sample(terrain,progress,t,{pro,con},seconds);
       draw(project,'fixed',progress,seconds,members);
       const result={pro:{},con:{}};
       for (const node of nodes) {
@@ -169,7 +169,7 @@ test('one planted tread fades on the SVG path and its expired geometry is never 
     planReads++;
     return side==='pro' && p>=event.progress?[event]:[];
   }};
-  const draw=mountFootprints(group,terrain,'poster',sample);
+  const draw=mountFootprints(group,terrain,sample);
   let calls=0;
   const project=Object.assign(p=>{calls++;return {x:30+p[0]*50,y:30+p[2]*50,depth:20};},
     {width:80,height:80,visitOccluders(){}});
@@ -194,7 +194,7 @@ test('one planted tread fades on the SVG path and its expired geometry is never 
 });
 
 test('a swing planted during the opposing speech has the same age on a newly opened projector',()=>{
-  const {engine:E,webScenes:scene}=timer(),terrain=createTerrain('poster'),plan=createParties(),budget=150;
+  const {engine:E,webScenes:scene}=timer(),terrain=createTerrain(),plan=createParties(),budget=150;
   const geometry=createTreadGeometry(terrain);
   const project=Object.assign(p=>({x:1200+p[0]*7,y:1200-p[1]*7-p[2],depth:600-p[2]}),
     {width:2400,height:1800,visitOccluders(){}});
@@ -204,11 +204,11 @@ test('a swing planted during the opposing speech has the same age on a newly ope
   const path=geometry(event).map(f=>projectTread(f.points,project)).join('');
   const lane='pro/'+event.rank+'/'+event.foot+'/snow';
   function projection() {
-    const group=svgGroup(),sample=createParties(),draw=mountFootprints(group,terrain,'poster',sample);
+    const group=svgGroup(),sample=createParties(),draw=mountFootprints(group,terrain,sample);
     return (state,t)=>{
       const a=scene.ascent(state,t*1000),r=E.getRun(state);
       const moving={pro:r.active==='pro'&&r.running,con:r.active==='con'&&r.running};
-      const m=sample(terrain,a.progress,t,moving,'poster',a.secondsPerTeam).members;
+      const m=sample(terrain,a.progress,t,moving,a.secondsPerTeam).members;
       draw(project,'same',a.progress,a.secondsPerTeam,m,a.footprintClock);
       return group.nodes.some(n=>n.getAttribute('data-footprints')===lane&&n.getAttribute('d').includes(path));
     };

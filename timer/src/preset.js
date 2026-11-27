@@ -42,7 +42,7 @@
     out.proSeat = m.proSeat === 'right' ? 'right' : 'left';
     return {
       kind: KIND, schema: SCHEMA, id: DT.store.uid('m'), createdAt: now,
-      format: clone(format), match: out, theme: String(theme || 'hall'),
+      format: clone(format), match: out, theme: String(DT.webScenes?.get(theme)?.id || theme || 'hall'),
     };
   }
 

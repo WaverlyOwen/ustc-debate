@@ -121,9 +121,8 @@ function fadeBand(age) {
   return Math.max(1,Math.round(fadeBands*(1-t*t*(3-2*t))));
 }
 
-export function mountFootprints(group,terrain,style,sample) {
-  const colors={poster:['#756777','#426a80'],ink:['#656760','#536269'],paper:['#507587','#467b94']};
-  const palette=colors[style]||colors.poster,geometry=createTreadGeometry(terrain);
+export function mountFootprints(group,terrain,sample) {
+  const geometry=createTreadGeometry(terrain);
   const cache=new Map(),plans={},slots=[],early={pro:new Map(),con:new Map()};
   const fallbackBirth={pro:new Map(),con:new Map()};
   let previous={},lastTime,lastClock,lastView,lastBatch='',activeSlots=0;
@@ -224,7 +223,7 @@ export function mountFootprints(group,terrain,style,sample) {
     for (const {lane,band,material,d} of batches.values()) {
       const node=slot(count++),ice=material==='ice';
       attr(node,'data-footprints',lane);
-      attr(node,'fill',palette[ice?1:0]);
+      attr(node,'fill',ice?'#426a80':'#756777');
       attr(node,'opacity',((ice?.73:.54)*band/fadeBands).toFixed(3));
       attr(node,'d',d);
     }

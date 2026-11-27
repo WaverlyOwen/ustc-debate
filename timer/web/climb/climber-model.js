@@ -4,25 +4,11 @@ const octagon = [[.54,1],[-.54,1],[-.96,.56],[-1,-.35],[-.62,-1],[.62,-1],[1,-.3
 const hexagon = [[.55,1],[-.55,1],[-1,-.10],[-.57,-1],[.57,-1],[1,-.10]];
 const pentagon = [[0,1],[-.95,.42],[-.72,-.88],[.72,-.88],[.95,.42]];
 
-const paints = {
-  poster: {
-    pro: ['#cf523a','#e76d45','#ad4941'], con: ['#378bb4','#438fb1','#416e9d'],
-    bands: ['#fe342e','#167ff0'], flash: ['#ffb77c','#a7e8ef'],
-    pack: ['#405c58','#64574b','#475866'], flap: '#7f9083',
-    cloth: '#485765', gaiter: '#344755', web: '#354145', metal: '#ddcc91',
-  },
-  ink: {
-    pro: ['#c6a294','#d0b2a0','#ac8c80'], con: ['#9aaeb4','#acb9b5','#8e9aa7'],
-    bands: ['#e12d29','#1a74c8'], flash: ['#eb9a83','#96c2d3'],
-    pack: ['#646b60','#746f61','#626c69'], flap: '#9a9b87',
-    cloth: '#666d6a', gaiter: '#515c5b', web: '#4e5653', metal: '#c5bea3',
-  },
-  paper: {
-    pro: ['#cc5941','#e5734f','#b65348'], con: ['#4089a9','#5499aa','#4a7798'],
-    bands: ['#ff362e','#187bdd'], flash: ['#ffc392','#b0e1dd'],
-    pack: ['#45655f','#715e4f','#495d65'], flap: '#8fa393',
-    cloth: '#4a616b', gaiter: '#354e5d', web: '#354951', metal: '#d2c494',
-  },
+const kit = {
+  pro: ['#cf523a','#e76d45','#ad4941'], con: ['#378bb4','#438fb1','#416e9d'],
+  bands: ['#fe342e','#167ff0'], flash: ['#ffb77c','#a7e8ef'],
+  pack: ['#405c58','#64574b','#475866'], flap: '#7f9083',
+  cloth: '#485765', gaiter: '#344755', web: '#354145', metal: '#ddcc91',
 };
 
 function tint(a,b,t) {
@@ -144,8 +130,8 @@ const upperSleeve=rings(sleeveSection,[[-.10,.128,.13],[.05,.172,.173],[.26,.182
 const lowerSleeve=rings(sleeveSection,[[-.07,.106,.107],[.09,.14,.142,-.008],[.30,.143,.141,.006],
   [.65,.122,.119],[.82,.107,.105],[.86,.112,.108],[1,.104,.101]]);
 
-export function createClimberModel(person,variant='poster') {
-  const kit=paints[variant] || paints.poster, red=person.side==='pro', rank=person.rank;
+export function createClimberModel(person) {
+  const red=person.side==='pro', rank=person.rank;
   const shell=kit[red?'pro':'con'][rank], band=kit.bands[red?0:1], flash=kit.flash[red?0:1];
   const pack=kit.pack[rank], skin=person.skin, hair=person.hair, light=person.light;
   const shellShadow=tint(shell,kit.web,.34), shoulder=tint(shell,flash,.33);
@@ -302,8 +288,8 @@ export function createClimberModel(person,variant='poster') {
     }
     // Local +Z faces away from the wall. The steel curves back to the
     // working point at (0,1,0), leaving knuckle clearance under the head.
-    const handle=variant==='ink'?'#ba6b35':variant==='paper'?'#ea8233':'#f38a28';
-    const steel=variant==='ink'?'#383e40':'#293e4b', bevel=variant==='ink'?'#a7aaa1':'#b6d5d5';
+    const handle='#f38a28';
+    const steel='#293e4b', bevel='#b6d5d5';
     add('axe'+i,'axe-shaft',rings(hexagon,[[-.15,.10,.11,.04],[-.10,.071,.064,.017],
       [.18,.068,.065,.065],[.47,.056,.061,.24],[.89,.058,.066,.40],[1.08,.068,.071,.49]]),
       (r,f)=>r<2?kit.web:r===4?steel:f===0?tint(handle,'#ffd287',.55):handle,kit.web,steel);

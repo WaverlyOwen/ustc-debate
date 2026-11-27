@@ -1,5 +1,6 @@
 """End to end: an exported match file opens straight on its title card."""
 import html as htmllib
+import json
 import re
 import shutil
 import subprocess
@@ -56,13 +57,14 @@ def serve_pages():
 
 @unittest.skipUnless(run_js_tests.find_browser(), "needs Edge or Chrome")
 class ExportEndToEnd(unittest.TestCase):
-    def test_exported_climb_match_renders_its_scene_offline(self):
+    def test_exported_legacy_climb_match_renders_the_poster_offline(self):
         probe = """<output id="climb-export"></output><script>
 addEventListener('load', async () => {
   const f = DT.BUILTIN_FORMATS.find(f => f.id === 'ustc-chongxiao-cup');
-  const p = DT.preset.make(f, {proTeam:'红杉', conTeam:'蓝海'}, 'climb-paper', 1);
+  const oldTheme = 'climb-paper';
+  const p = DT.preset.make(f, {proTeam:'红杉', conTeam:'蓝海'}, oldTheme, 1);
   document.getElementById('climb-export').textContent =
-    DT.preset.buildHtml(await DT.web.exportSource(p.theme), p);
+    DT.preset.buildHtml(await DT.web.exportSource(oldTheme), p);
 });</script>"""
         with serve_pages() as (site, base):
             source = (site / 'index.html').read_text(encoding='utf-8')
@@ -70,14 +72,22 @@ addEventListener('load', async () => {
             match = re.search(r'<output id="climb-export">(.*?)</output>',dump(base+'export.html'),re.S)
             self.assertIsNotNone(match)
             page = htmllib.unescape(match[1])
+            preset = re.search(r'<script type="application/json" id="dt-preset">(.*?)</script>', page, re.S)
+            self.assertIsNotNone(preset)
+            self.assertEqual(json.loads(preset[1])['theme'], 'climb-poster')
         # Take the server away before opening the exported match, including its file:// ES modules.
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'climb.html'
             path.write_text(page,encoding='utf-8')
             out = dump(path.as_uri())
-        self.assertRegex(out,r'class="dt-stage[^"]*has-climb-view')
-        self.assertRegex(out,r'<div[^>]*data-style="paper"[^>]*data-ready')
-        self.assertIn('data-mesh="parka"',out)
+        stage = re.search(r'<div class="dt-stage[^"]*has-climb-view[^>]*>', out)
+        self.assertIsNotNone(stage, 'Offline match did not render the mountain')
+        self.assertIn('data-theme="climb-poster"', stage[0])
+        host = re.search(r'<div class="dt-climb-host"[^>]*>', out)
+        self.assertIsNotNone(host)
+        self.assertIn('data-style="poster"', host[0])
+        self.assertIn('data-ready', host[0])
+        self.assertIsNotNone(re.search(r'<path\b[^>]*data-mesh="parka"', out))
 
     def test_exported_file_opens_on_its_title_card(self):
         self.check_export(BUILT.as_uri(), "export-test.html")

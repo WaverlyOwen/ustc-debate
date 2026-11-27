@@ -19,7 +19,7 @@
 
   // Static markup only; format names and match text go in through textContent and value.
   const TEMPLATE =
-    '<header class="dt-setup-head"><h1>辩论计时器</h1><p>选好赛制，填好这一场，就可以开始</p></header>' +
+    '<header class="dt-setup-head"><h1>辩论计时器</h1></header>' +
     '<div class="dt-setup-body">' +
     '<section class="dt-setup-formats"><h2 class="dt-setup-label">赛制</h2>' +
     '<div class="dt-setup-list" role="listbox" tabindex="0" aria-label="赛制"></div></section>' +
@@ -234,7 +234,10 @@
     let chosen = null;         // the chosen theme's cell
     let themePicked = false;   // the theme follows the chosen format until the timekeeper picks one
     // Compared as values, not put into a selector: an imported format's theme id can be any string.
-    const cellOf = id => cells.find(c => c.dataset.themeId === id) || null;
+    function cellOf(id) {
+      const themeId = DT.webScenes?.get(id)?.id || id;
+      return cells.find(c => c.dataset.themeId === themeId) || null;
+    }
     const describe = cell => { themeDesc.textContent = themes[cells.indexOf(cell)].desc || ''; };
     function setTheme(id, focus) {
       chosen = cellOf(id) || cellOf('hall') || cells[0];

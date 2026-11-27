@@ -15,45 +15,33 @@ function svg(parent,name,attrs = {}) {
   return node;
 }
 
-// Cache rest normals and neighbours. At a flexed knee the fabric's normal
-// is calculated from the posed panel before shading.
+// At a flexed knee the fabric's normal is calculated from the posed panel.
 function preparePart(part) {
-  const edges = new Map();
   const weights=part.knee?.weights;
-  const faces = part.faces.map((spec,index) => {
-    const indices = spec.indices, normal = [0,0,0], neighbours = [];
+  const faces = part.faces.map(spec => {
+    const indices = spec.indices, normal = [0,0,0];
     for (let i=0; i<indices.length; i++) {
       const a = indices[i], b = indices[(i+1)%indices.length];
       const p = part.vertices[a], q = part.vertices[b];
       normal[0] += (p[1]-q[1])*(p[2]+q[2]);
       normal[1] += (p[2]-q[2])*(p[0]+q[0]);
       normal[2] += (p[0]-q[0])*(p[1]+q[1]);
-      const key = a < b ? a+','+b : b+','+a;
-      const adjacent = edges.get(key);
-      if (adjacent) {
-        adjacent.neighbours[adjacent.i] = index;
-        neighbours[i] = adjacent.index;
-      } else {
-        edges.set(key,{ index, i, neighbours });
-        neighbours[i] = -1;
-      }
     }
-    return { ...spec, normal, neighbours, flexible:weights && indices.some(i=>weights[i]>0),front:false, depth:0 };
+    return { ...spec, normal, flexible:weights && indices.some(i=>weights[i]>0) };
   });
-  return { ...part, faces,weights, points:part.vertices.map(()=>({})), world:[0,0,0] };
+  return { ...part, faces, points:part.vertices.map(()=>({})), world:[0,0,0] };
 }
 
-function lighting(variant) {
+function lighting() {
   const cache = new Map();
   return (base, illumination, fabric) => {
-    // The narrow bevels of the trousers turn gradually into the light. Keep
-    // enough tonal steps to read their shape even in the paper-cut palette.
-    const steps = fabric ? (variant==='paper'?10:22) : (variant==='paper'?5:14);
+    // Additional tonal steps model the rounded bevels of the trousers.
+    const steps = fabric ? 22 : 14;
     const band = Math.round(clamp((illumination+.55)/1.55,0,1)*steps);
     const key = base+'/'+steps+'/'+band;
     if (cache.has(key)) return cache.get(key);
-    const t = band/steps, amount = fabric ? .65+.56*t : variant === 'ink' ? .74+.37*t : .69+.45*t;
-    const warm = variant === 'poster' ? [12,5,-2] : variant === 'paper' ? [1,8,8] : [6,5,1];
+    const t = band/steps, amount = fabric ? .65+.56*t : .69+.45*t;
+    const warm = [12,5,-2];
     const rgb = [1,3,5].map((start,i) => {
       const channel = parseInt(base.slice(start,start+2),16);
       return Math.round(clamp(channel*amount + warm[i]*t,0,255)).toString(16).padStart(2,'0');
@@ -103,7 +91,7 @@ function snowIntersection(a,b,project) {
   return mix(a.x,b.x,t).toFixed(2)+','+mix(a.y,b.y,t).toFixed(2);
 }
 
-function addPart(queue,part,bone,shade,variant,project,owner) {
+function addPart(queue,part,bone,shade,project,owner) {
   const points = part.points;
   // The cofactor transforms normals correctly even on stretched shin/pole bones.
   const nx = cross(bone.y,bone.z), ny = cross(bone.z,bone.x), nz = cross(bone.x,bone.y);
@@ -117,15 +105,10 @@ function addPart(queue,part,bone,shade,variant,project,owner) {
       depth += a.depth;
       near = Math.min(near,a.depth);
     }
-    face.front = area*handedness < 0;
-    face.draw = near>1 && (face.front || face.doubleSided) && Math.abs(area)>.035;
-    face.depth = depth/ids.length;
-  }
-  for (const face of part.faces) {
-    if (!face.draw) continue;
+    const front=area*handedness < 0;
+    if (!(near>1 && (front || face.doubleSided) && Math.abs(area)>.035)) continue;
     // Adjacent front panels share corners. Test each against the mountain only
     // when a visible panel needs it, and leave back-facing panels unformatted.
-    const ids=face.indices;
     let obscured=0;
     for (const index of ids) {
       const p=points[index];
@@ -143,7 +126,7 @@ function addPart(queue,part,bone,shade,variant,project,owner) {
         x+=(a.wy-b.wy)*(a.wz+b.wz);y+=(a.wz-b.wz)*(a.wx+b.wx);z+=(a.wx-b.wx)*(a.wy+b.wy);
       }
     }
-    const intensity = (x*light[0]+y*light[1]+z*light[2])*handedness*(face.front ? 1 : -1)/(Math.hypot(x,y,z)||1);
+    const intensity = (x*light[0]+y*light[1]+z*light[2])*handedness*(front ? 1 : -1)/(Math.hypot(x,y,z)||1);
     let exact=null;
     if (part.atBridge) {
       const projected=ids.map(index=>points[index]);
@@ -156,23 +139,19 @@ function addPart(queue,part,bone,shade,variant,project,owner) {
         if (exact==='') continue;
       }
     }
-    let d=exact, outline='';
+    let d=exact;
     if (d===null) {
       d='';
       for (let i=0; i<ids.length; i++) {
         const a = points[ids[i]], b = points[ids[(i+1)%ids.length]];
         if (!a.hidden) d += (d?'L':'M')+coordinates(a);
         if (clipped && a.hidden!==b.hidden) d += (d?'L':'M')+snowIntersection(a,b,project);
-        const neighbour = face.neighbours[i];
-        const sharedHem=neighbour===-1 && part.weights?.[ids[i]]===1 && part.weights[ids[(i+1)%ids.length]]===1;
-        if (!clipped && !sharedHem && variant === 'ink' && (neighbour === -1 || !part.faces[neighbour].front)
-            && Math.abs(a.x-b.x)+Math.abs(a.y-b.y)>2.4) outline += 'M'+coordinates(a)+'L'+coordinates(b);
       }
       if (!d) continue;
       d+='Z';
     }
-    queue.push({ depth:face.depth, d, clipped:exact!==null, color:shade(face.color,intensity,part.knee),
-      bone:part.bone, name:part.name || part.bone, outline, location:bone.location, owner:bone.location && owner });
+    queue.push({ depth:depth/ids.length, d, clipped:exact!==null, color:shade(face.color,intensity,part.knee),
+      bone:part.bone, name:part.name || part.bone, location:bone.location, owner:bone.location && owner });
   }
 }
 
@@ -180,9 +159,9 @@ function groundHeight(terrain,x,z,fallback) {
   return terrain?.surface ? terrain.surface(x,z)[1] : fallback;
 }
 
-function addRope(queue,a,b,member,project,terrain,variant) {
+function addRope(queue,a,b,member,project,terrain) {
   const side = member.side;
-  const color = side==='pro' ? (variant==='ink'?'#976449':'#ba6843') : (variant==='ink'?'#4f707a':'#43829a');
+  const color = side==='pro' ? '#ba6843' : '#43829a';
   // Split the catenary into short pieces so a nearer shoulder or backpack
   // can hide just the section of rope passing behind it.
   function ropePoint(point) {
@@ -214,22 +193,22 @@ function addRope(queue,a,b,member,project,terrain,variant) {
 
 export function createPartyRenderer() {
   let art;
-  function mount(parent,members,variant) {
+  function mount(parent,members) {
     parent.replaceChildren();
-    const shadows = svg(parent,'g',{fill:variant==='paper'?'#274556':'#343742', opacity:variant==='ink'?'.17':'.20'});
-    return { parent, variant, shade:lighting(variant), shadows:members.map(()=>svg(shadows,'path')),
-      people:members.map(member=>createClimberModel(member.person,variant).map(preparePart)),
+    const shadows = svg(parent,'g',{fill:'#343742', opacity:'.20'});
+    return { parent, shade:lighting(), shadows:members.map(()=>svg(shadows,'path')),
+      people:members.map(member=>createClimberModel(member.person).map(preparePart)),
       layer:svg(parent,'g',{'stroke-linejoin':'round','stroke-linecap':'round'}), slots:[] };
   }
-  return function render(parent,project,members,variant,terrain) {
-    if (!art || art.parent!==parent || art.variant!==variant) art = mount(parent,members,variant);
+  return function render(parent,project,members,terrain) {
+    if (!art || art.parent!==parent) art = mount(parent,members);
     const queue = [];
     for (let i=0; i<members.length; i++) {
       const member = members[i], shadow = member.groundShadow || [];
       if (member.rank>0) {
         const a=members[i-1].harness,b=member.harness,guide=member.ropeGuide;
-        if (guide) addRope(queue,a,guide,member,project,terrain,variant);
-        addRope(queue,guide||a,b,member,project,terrain,variant);
+        if (guide) addRope(queue,a,guide,member,project,terrain);
+        addRope(queue,guide||a,b,member,project,terrain);
       }
       const center=project(member.position), margin=center.scale*6;
       if (center.depth<1 || (project.width && (center.x < -margin || center.y < -margin ||
@@ -247,7 +226,7 @@ export function createPartyRenderer() {
         const bone = member.bones[part.bone] || member.carriedTools?.[part.bone];
         if (!bone) continue;
         transformPart(part,bone,project,part.knee && knees[part.knee.leg]);
-        addPart(queue,part,bone,art.shade,variant,project,member.side+'-'+member.rank);
+        addPart(queue,part,bone,art.shade,project,member.side+'-'+member.rank);
       }
     }
     queue.sort((a,b)=>b.depth-a.depth);
@@ -275,7 +254,6 @@ export function createPartyRenderer() {
         emit(face,face.d,'none',face.color,face.width.toFixed(2));
       } else {
         emit(face,face.d,face.color,face.clipped?'none':face.color,face.clipped?undefined:'.32');
-        if (face.outline) emit(face,face.outline,'none','#3c4038','.53');
       }
     }
     for (let i=count; i<(art.active||0); i++) art.slots[i].node.removeAttribute('d');

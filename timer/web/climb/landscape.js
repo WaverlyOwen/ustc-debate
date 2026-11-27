@@ -316,18 +316,18 @@ function clearSightline(goal,terrain,progress) {
   goal.distance=Math.hypot(height,horizontal);
 }
 
-export function createLandscape(svg, variant, cameraState = {}) {
+export function createLandscape(svg, cameraState = {}) {
   const groups = {};
   for (const name of ['horizon','mountain','tracks','parties']) {
     groups[name] = svg.querySelector('[data-layer="'+name+'"]') || svg.querySelector('#'+name);
     groups[name].replaceChildren();
   }
-  const terrain = createTerrain(variant);
-  const sky = mountHorizon(groups.horizon, variant);
+  const terrain = createTerrain();
+  const sky = mountHorizon(groups.horizon);
   const drawMountain = mountMountain(groups.mountain, terrain.faces);
   const sample = createParties();
-  const drawTracks = mountFootprints(groups.tracks,terrain,variant,sample);
-  const weather = mountSnow(svg, groups, variant, terrain.summit,terrain.scale);
+  const drawTracks = mountFootprints(groups.tracks,terrain,sample);
+  const weather = mountSnow(svg, groups, terrain.summit,terrain.scale);
   const motionPreference = svg.ownerDocument.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)');
   const camera = new PerspectiveCamera(35, 1, .2, 1200);
   const matrix = new Matrix4(), lookAt = new Vector3();
@@ -353,13 +353,13 @@ export function createLandscape(svg, variant, cameraState = {}) {
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
     }
-    const parties = sample(terrain, progress, time, moving, variant, secondsPerTeam);
+    const parties = sample(terrain, progress, time, moving, secondsPerTeam);
     const goal = {};
     const amount = (progress.pro + progress.con)/2;
     const target = side => parties.members.find(person => person.side === side).position;
     const a = target('pro'), b = target('con');
-    // Orbit around the same world-space pivot using the same shot in every
-    // print. Foreground climbers and distant ridges move at different rates.
+    // Orbit around the same world-space pivot so foreground climbers and
+    // distant ridges move at different rates.
     const reducedMotion=Boolean(motionPreference?.matches);
     const atmosphereTime=reducedMotion?0:time;
     const orbitTime=reducedMotion?0:(cameraState.cameraTime??time);

@@ -1,4 +1,4 @@
-"""Bundle the three interactive art studies for viewing directly from a local file."""
+"""Bundle the interactive climbing preview for viewing directly from a local file."""
 import json
 
 import build
