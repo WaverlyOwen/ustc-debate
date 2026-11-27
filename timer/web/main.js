@@ -28,19 +28,26 @@
     });
   }
 
-  // Match exports contain only the shared timer, including when exported from the web app.
-  async function exportSource() {
-    async function read(url) {
-      const response = await fetch(url, { cache: 'force-cache' });
+  // A match exported with a mountain theme carries its vector scene into the single file.
+  async function exportSource(theme) {
+    async function read(url, cache = 'force-cache') {
+      const response = await fetch(url, { cache });
       if (!response.ok) throw new Error('读取计时器资源失败：' + response.status);
       return response.text();
     }
-    const [style, main] = await Promise.all([
+    const scene = DT.webScenes && DT.webScenes.get(theme);
+    const [style, main, sceneStyle, sceneScript] = await Promise.all([
       read(document.getElementById('dt-web-style').href),
       read(document.getElementById('dt-web-main').src),
+      scene ? read(document.getElementById('dt-scene-style').href) : '',
+      scene ? read(new URL('assets/climb-export.js',document.baseURI),'no-cache') : '',
     ]);
-    return { lang: document.documentElement.lang, title: document.title, style, main };
+    return { lang: document.documentElement.lang, title: document.title, style:style+sceneStyle, main:sceneScript+main };
   }
 
-  DT.web = { addDownloadLink, exportSource };
+  function load3D() {
+    return import('./three-runtime.js');
+  }
+
+  DT.web = { addDownloadLink, exportSource, load3D };
 })(window.DT = window.DT || {});

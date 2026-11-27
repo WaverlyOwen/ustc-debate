@@ -290,6 +290,8 @@
 .dt-setup .dt-setup-theme:focus-visible { outline-offset: 4px; }
 .dt-setup-thumb {
   display: block;
+  position: relative;
+  overflow: hidden;
   aspect-ratio: 16 / 9;
   border-radius: .35em;
   pointer-events: none;

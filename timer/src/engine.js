@@ -149,6 +149,7 @@
     const snap = clone(strip(session));
     snap.lastFeedback = null;
     snap.lastRung = null;
+    DT.webScenes?.rememberFootprintSnapshot?.(session, snap);
     const s = clone(snap);
     s.history = (session.history || []).concat([snap]).slice(-HISTORY_MAX);
     return s;
@@ -372,6 +373,9 @@
     if (!h.length) return refuse(session, 'nothing-to-undo', '没有可以撤销的操作');
     const back = clone(h[h.length - 1]);
     back.history = h.slice(0, -1);
+    // The oldest retained snapshot can still have footfalls from turns
+    // before the undo limit. Carry its seed into the restored session.
+    if (!back.history.length) DT.webScenes?.preserveFootprintTurns?.(h[0], back);
     back.lastFeedback = null;
     back.lastRung = null;
     const out = advance(back, now, Infinity);
@@ -448,7 +452,11 @@
     }
     if (!changed) return { session, events };
     const runs = Object.assign({}, session.runs, { [st.id]: run });
-    return { session: Object.assign({}, session, { runs }), events };
+    const updated = Object.assign({}, session, { runs });
+    if (run.kind === 'dual' && (r0.active !== run.active || !run.running)) {
+      DT.webScenes?.noteFootprintHandoff?.(session, updated, r0.active);
+    }
+    return { session: updated, events };
   }
 
   // Future bells of the running clock, plus the other side's after a dual handover. A single clock that rings in
@@ -521,6 +529,7 @@
       })),
       feedback: session.lastFeedback || null,
     };
+    if (DT.webScenes && DT.webScenes.get(session.theme)) out.ascent = DT.webScenes.ascent(session, now);
     const nx = cur < count ? session.timeline[cur + 1] : null;
     if (nx) out.next = { name: nx.name, type: nx.type, side: nx.side || null, secs: nx.secs };
     if (!st) return out;

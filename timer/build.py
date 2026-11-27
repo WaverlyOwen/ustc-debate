@@ -10,6 +10,7 @@ Usage:
 Only the standard library is used; the timer must build on a bare Windows Python.
 """
 import argparse
+import base64
 import hashlib
 import json
 import re
@@ -303,6 +304,24 @@ def inline_html(formats):
     return _page(banner, f'<style id="dt-style">\n{css}</style>\n', f'<script id="dt-main">\n{js}</script>\n')
 
 
+def embedded_modules(entry):
+    """Collect relative ES module imports into a self-contained import map for file://."""
+    imports = {}
+
+    def visit(path):
+        path = path.resolve()
+        name = "expedition/" + path.relative_to(WEB).as_posix()
+        if name not in imports:
+            imports[name] = ""
+            source = path.read_text(encoding="utf-8")
+            source = re.sub(r"""^(import\s+[^\n;]+\s+from\s+)['"](\.[^'"]+)['"]""",
+                            lambda m: m[1] + json.dumps(visit(path.parent / m[2])), source, flags=re.M)
+            imports[name] = "data:text/javascript;base64," + base64.b64encode(source.encode()).decode("ascii")
+        return name
+
+    return visit(entry), imports
+
+
 def web_outputs(formats):
     css, js = core_assets(formats)
     entry = WEB / "main.js"
@@ -312,12 +331,26 @@ def web_outputs(formats):
     def version(content):
         return hashlib.sha256(content).hexdigest()[:16]
 
-    head = f'<link id="dt-web-style" rel="stylesheet" href="assets/timer.css?v={version(css.encode())}">\n'
-    body = (f'<script defer src="web/main.js?v={version(entry.read_bytes())}"></script>\n'
+    three = "./web/vendor/three-0.187.0"
+    imports = {"three": f"{three}/build/three.module.js", "three/addons/": f"{three}/examples/jsm/"}
+    scene_script = WEB / "climb-theme.js"
+    scene_style = WEB / "climb/match.css"
+    head = (f'<link id="dt-web-style" rel="stylesheet" href="assets/timer.css?v={version(css.encode())}">\n'
+            f'<link id="dt-scene-style" rel="stylesheet" href="web/climb/match.css?v={version(scene_style.read_bytes())}">\n'
+            f'<script type="importmap">{json.dumps({"imports": imports})}</script>\n')
+    body = (f'<script defer src="web/climb-theme.js?v={version(scene_script.read_bytes())}"></script>\n'
+            f'<script defer src="web/main.js?v={version(entry.read_bytes())}"></script>\n'
             f'<script defer id="dt-web-main" src="assets/timer.js?v={version(js.encode())}"></script>\n')
     index = _page("<!-- GitHub Pages -->\n", head, body)
     outputs = {PAGES / "index.html": index, PAGES / "assets/timer.css": css, PAGES / "assets/timer.js": js,
                PAGES / "debate-timer.html": index, PAGES / ".nojekyll": ""}
+    _, scene_imports = embedded_modules(WEB / "climb/match-view.js")
+    license_text = (WEB / "vendor/three-0.187.0/LICENSE").read_text(encoding="utf-8")
+    outputs[PAGES / "assets/climb-export.js"] = (
+        f"/* {license_text} */\n(function() {{\n"
+        "const map = document.createElement('script');\nmap.type = 'importmap';\n"
+        f"map.textContent = JSON.stringify({json.dumps({'imports': scene_imports})});\n"
+        "document.head.appendChild(map);\n})();\n" + scene_script.read_text(encoding="utf-8") + "\n")
     for path in WEB.rglob("*"):
         if path.is_file():
             outputs[PAGES / "web" / path.relative_to(WEB)] = path.read_bytes()

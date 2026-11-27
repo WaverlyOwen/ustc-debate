@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f3ee">
+  <title>攀登 · 画风与动作预演</title>
+  <link rel="stylesheet" href="./style.css">
+  <script defer src="../../assets/timer.js"></script>
+  <script type="module" src="./preview.js"></script>
+</head>
+<body>
+  <header class="mast">
+    <div class="brand">
+      <svg viewBox="0 0 58 40" aria-hidden="true"><path d="M2 34 19 10l5 7L33 3l23 31Zm10-2 8-13 4 6 9-14 5 8-5-3-7 13-5-3-4 6Z" fill="currentColor" fill-rule="evenodd"/></svg>
+      <h1>攀登</h1><span class="edition">主题预览</span>
+    </div>
+    <nav class="editions" aria-label="雪山画风">
+      <button data-variant="poster" aria-pressed="true"><i></i>登山海报</button>
+      <button data-variant="ink" aria-pressed="false"><i></i>岩层线描</button>
+      <button data-variant="paper" aria-pressed="false"><i></i>分层剪纸</button>
+    </nav>
+    <button id="full" aria-label="全屏预览" title="全屏预览"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5"/></svg></button>
+  </header>
+  <main>
+    <section class="viewport" aria-label="攀登动态场景">
+      <svg id="scene" role="img" aria-label="两支登山队从雪山两侧向山顶攀登" xmlns="http://www.w3.org/2000/svg">
+        <desc>镜头随发言队伍转向雪脊、梯桥和冰壁。</desc>
+        <g id="horizon"></g><g id="mountain" stroke-linejoin="round"></g><g id="tracks"></g><g id="parties"></g>
+      </svg>
+      <div class="stage">
+        <div class="stage-label"><i></i><span id="side">正方</span><span id="stage">比赛预演</span><span class="urgent-note">最后 30 秒</span></div>
+        <strong id="remaining" role="timer" aria-label="当前计时剩余">03:30</strong>
+      </div>
+    </section>
+    <footer>
+      <div class="time-row">
+        <div class="team pro" title="正方累计发言用时"><i></i><span>正方</span><b id="pro-used">00:00</b><small id="pro-total"></small></div>
+        <span class="format" id="format">中国科学技术大学 重霄杯</span>
+        <div class="team con" title="反方累计发言用时"><i></i><span>反方</span><b id="con-used">00:00</b><small id="con-total"></small></div>
+      </div>
+      <div class="play-row">
+        <button id="play" title="暂停预演" aria-label="暂停预演"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="play-icon" d="M7 5h3v14H7zm7 0h3v14h-3z"/></svg></button>
+        <span class="clock" id="elapsed">00:00</span>
+        <label class="scrub"><span class="sr">比赛进度</span><input id="seek" type="range" min="0" max="10000" step="1" value="0"></label>
+        <span class="clock end" id="duration">00:00</span>
+        <label class="speed"><span class="sr">预演速度</span><select id="speed"><option value="1">1×</option><option value="12">12×</option><option value="24" selected>24×</option><option value="60">60×</option></select></label>
+      </div>
+    </footer>
+  </main>
+  <p id="error" hidden role="alert"></p>
+</body>
+</html>

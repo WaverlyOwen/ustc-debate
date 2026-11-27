@@ -1,0 +1,223 @@
+/* The live stage owns its title, record, bell notices and next-stage rail. */
+.dt-climb-host {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  visibility: hidden;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--climb-ink, #302d26);
+  font-family: "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+}
+.dt-climb-host[data-ready] { visibility: visible; }
+.climb-match-scene { display: block; width: 100%; height: 100%; }
+
+.dt-stage.has-climb-view {
+  --climb-ink: #302d26;
+  --climb-paper: #fff3df;
+  --climb-text-shadow: 0 1px 2px var(--climb-paper), 0 0 .08em var(--climb-paper);
+  --climb-red: #9b2d24;
+  --climb-blue: #1e537c;
+  --ink: var(--climb-ink);
+  --ink-dim: #4d5148;
+  --pro: var(--climb-red);
+  --con: var(--climb-blue);
+  --ground: var(--climb-paper);
+  --accent: #985621;
+}
+.dt-stage.has-climb-view:has(.dt-climb-host[data-style="ink"]) {
+  --climb-ink: #30372d; --climb-paper: #f6f1df;
+}
+.dt-stage.has-climb-view:has(.dt-climb-host[data-style="paper"]) {
+  --climb-ink: #173b42; --climb-paper: #e5efdf;
+}
+.dt-stage.has-climb-view > :is(.dt-field, .dt-halves, .dt-warnline, .dt-deco-over, .dt-clock) { display: none; }
+.dt-stage.has-climb-view[data-mode="stage"] > :is(.dt-head, .dt-card) { display: none; }
+
+.climb-round {
+  position: absolute;
+  top: 2.1cqh;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1.1cqw;
+  width: max-content;
+  max-width: 92%;
+  line-height: 1.2;
+  text-shadow: var(--climb-text-shadow);
+}
+.climb-round > *, .climb-clock-label > * {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.climb-round strong { font-size: min(3.15cqh, 2.45cqw); font-weight: 700; letter-spacing: .055em; }
+.climb-round span { flex-shrink: 2; font-size: min(2.15cqh, 1.8cqw); }
+.climb-round span:empty { display: none; }
+.dt-stage.has-climb-view > .dt-top {
+  position: absolute;
+  inset: 1cqh 3.2cqw auto;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1em;
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 1.82cqh;
+  letter-spacing: .04em;
+  text-shadow: var(--climb-text-shadow);
+  pointer-events: none;
+}
+.dt-stage.has-climb-view > .dt-top span:empty { display: none; }
+@container (aspect-ratio > 1/1) {
+  .dt-stage.has-climb-view[data-mode="stage"]:not([data-kind="dual"]):has(.dt-top span:not(:empty)) .climb-round { top: 4.1cqh; }
+}
+
+.climb-readouts {
+  position: absolute;
+  inset: 9.2cqh 3.2cqw auto;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+  align-items: start;
+  gap: 3cqw;
+  direction: ltr;
+}
+.climb-clock {
+  --team-ink: var(--climb-ink);
+  --digit-size: min(24cqh, 25cqw, calc(145cqw / var(--time-chars, 5)));
+  display: grid;
+  grid-template-columns: minmax(0,1fr);
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  width: max-content;
+  text-align: left;
+  text-shadow: var(--climb-text-shadow);
+}
+.climb-clock[hidden] { display: none; }
+.climb-clock[data-side="pro"] { --team-ink: var(--climb-red); grid-column: 1; justify-self: start; }
+.climb-clock[data-side="con"] { --team-ink: var(--climb-blue); grid-column: 2; justify-self: end; text-align: right; }
+.climb-clock[data-side="neutral"] { grid-column: 1 / -1; justify-self: center; text-align: center; }
+.climb-readouts[data-layout="single"] .climb-clock { grid-column: 1 / -1; }
+.climb-readouts[data-layout="dual"] .climb-clock {
+  --digit-size: min(22cqh, 17.5cqw, calc(78cqw / var(--time-chars, 5)));
+}
+.climb-clock-label { display: flex; align-items: baseline; gap: .7cqw; min-width: 0; line-height: 1.25; }
+.climb-clock[data-side="con"] .climb-clock-label { justify-content: flex-end; }
+.climb-clock[data-side="neutral"] .climb-clock-label { justify-content: center; }
+.climb-side {
+  flex: none;
+  color: var(--team-ink);
+  font-weight: 750;
+  font-size: min(3.3cqh, 2.8cqw);
+}
+.climb-team { min-width: 0; max-width: 18cqw; font-size: min(2.85cqh, 2.3cqw); font-weight: 600; }
+.climb-clock-state { flex: none; color: #514d41; font-weight: 600; font-size: min(2.4cqh, 2cqw); }
+.climb-side:empty, .climb-team:empty, .climb-clock-state:empty { display: none; }
+.climb-time {
+  margin-top: .5cqh;
+  color: var(--team-ink);
+  line-height: .94;
+  font-family: "Bahnschrift", "Arial Narrow", "Arial", sans-serif;
+  font-size: var(--digit-size);
+  font-weight: 700;
+  letter-spacing: -.052em;
+  font-variant-numeric: tabular-nums lining-nums;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+.climb-readouts[data-layout="dual"]:has(.climb-clock[data-active="true"]:not([hidden])) .climb-clock[data-active="false"] {
+  --digit-size: min(16.5cqh, 13.5cqw, calc(74cqw / var(--time-chars, 5)));
+}
+.climb-clock:is([data-urgency="warn"], [data-urgency="count"]) .climb-clock-state { color: #88510f; }
+.climb-clock[data-urgency="over"] .climb-clock-state { color: #992e22; }
+.dt-stage.has-climb-view[data-bell-clock="main"] .climb-clock[data-active="true"] .climb-time,
+.dt-stage.has-climb-view[data-bell-clock="pro"] .climb-clock[data-side="pro"] .climb-time,
+.dt-stage.has-climb-view[data-bell-clock="con"] .climb-clock[data-side="con"] .climb-time {
+  text-shadow: 0 1px 2px var(--climb-paper), 0 0 .09em #ffde99, 0 0 .18em #ffde99;
+}
+
+.dt-stage.has-climb-view > .dt-bottom {
+  position: absolute;
+  inset: auto 3.2cqw 2.1cqh;
+  flex-direction: column;
+  justify-content: center;
+  gap: .8cqh;
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 1.95cqh;
+  font-weight: 600;
+  text-shadow: 0 0 2px var(--climb-paper), 0 0 4px var(--climb-paper);
+}
+.dt-stage.has-climb-view > .dt-bottom::before { display: none; }
+.dt-stage.has-climb-view .dt-next {
+  order: -1;
+  justify-content: center;
+  max-width: 100%;
+}
+.dt-stage.has-climb-view .dt-next:not(:has(span:not(:empty))) { display: none; }
+.dt-stage.has-climb-view .dt-progress {
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 100%;
+  gap: 1cqh min(.35cqh, .5cqw);
+}
+.dt-stage.has-climb-view .dt-seg { width: min(1.7cqh, 2.5cqw); }
+.dt-stage.has-climb-view ~ .dt-status {
+  top: auto;
+  right: 3.2cqw;
+  bottom: 6.7cqh;
+}
+.dt-stage.has-climb-view:is([data-mode="title"],[data-mode="end"]) > .dt-card,
+.dt-stage.has-climb-view[data-mode="end"] > .dt-head {
+  box-sizing: border-box;
+  align-self: center;
+  width: max-content;
+  max-width: 92cqw;
+  background: var(--climb-paper);
+  color: var(--climb-ink);
+  box-shadow: .22cqw .35cqh 0 color-mix(in srgb, var(--climb-ink) 15%, transparent);
+}
+.dt-stage.has-climb-view[data-mode="title"] > .dt-card {
+  flex: 0 1 auto;
+  gap: 5cqh;
+  margin: auto 0;
+  padding: 4cqh 3.4cqw;
+  border-top: max(2px,.45cqh) solid var(--climb-ink);
+}
+.dt-stage.has-climb-view[data-mode="title"] .dt-motion { max-width: 77cqw; font-size: min(4.7cqh,4.5cqw); }
+.dt-stage.has-climb-view[data-mode="title"] .dt-teams { font-size: min(4cqh,4cqw); }
+.dt-stage.has-climb-view[data-mode="end"] > .dt-head { margin: 4.3cqh auto 0; padding: 1.4cqh 2.6cqw; }
+.dt-stage.has-climb-view[data-mode="end"] > .dt-card { margin: 1.2cqh auto 0; padding: 1.5cqh 2.4cqw; }
+.dt-stage.has-climb-view[data-mode="end"] .dt-title { font-size: 4.4cqh; }
+
+/* The scoring and preparation intervals still carry the two debate motions. */
+.dt-stage.has-climb-view[data-mode="stage"][data-kind="break"] > .dt-card:has(.dt-motion:not([hidden])) {
+  display: flex;
+  position: absolute;
+  bottom: max(11.8cqh, calc(6.7cqh + 2rem));
+  left: 50%;
+  translate: -50% 0;
+  width: max-content;
+  max-width: 86cqw;
+  margin: 0;
+  padding: 1.15cqh 1.4cqw;
+  background: var(--climb-paper);
+  color: var(--climb-ink);
+}
+.dt-stage.has-climb-view[data-kind="break"] .dt-motions { gap: .65cqh; }
+.dt-stage.has-climb-view[data-kind="break"] .dt-motion { font-size: min(2.65cqh,3.5cqw); }
+
+@container (max-aspect-ratio: 1/1) {
+  .dt-stage.has-climb-view[data-mode="stage"] > .dt-top { display: none; }
+  .climb-round { gap: 2cqw; }
+  .climb-round strong { font-size: min(2.9cqh,5cqw); }
+  .climb-round span { font-size: min(2.3cqh,3.8cqw); }
+  .climb-readouts { inset: 8.7cqh 2.8cqw auto; gap: 2cqw; }
+  .climb-side { font-size: 4cqw; }
+  .climb-team { max-width: 22cqw; font-size: 3.6cqw; }
+  .climb-clock-state { font-size: 3.2cqw; }
+  .climb-clock-label { flex-wrap: wrap; gap: .3cqh 1cqw; }
+  .dt-stage.has-climb-view > .dt-bottom { font-size: min(2cqh,3.6cqw); }
+}

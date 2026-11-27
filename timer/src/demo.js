@@ -107,6 +107,7 @@
   // opts.theme: show the scene in this theme instead (?theme=<id>, for reviewing a theme in every scene).
   function build(name, now, opts) {
     const theme = (opts && opts.theme) || null;
+    if (DT.webScenes && DT.webScenes.demoNames.includes(name)) return DT.webScenes.demo(name,now,theme);
     if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
     const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
     if (!scene.setup) {
@@ -120,5 +121,5 @@
     return { route: 'setup', session: scene.steps.length ? play(scene, now, theme) : null, lastMatch, dock: false };
   }
 
-  DT.demo = { names: Object.keys(SCENES), build };
+  DT.demo = { names: Object.keys(SCENES).concat(DT.webScenes ? DT.webScenes.demoNames : []), build };
 })(window.DT = window.DT || {});

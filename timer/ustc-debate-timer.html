@@ -1667,6 +1667,8 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 .dt-setup .dt-setup-theme:focus-visible { outline-offset: 4px; }
 .dt-setup-thumb {
   display: block;
+  position: relative;
+  overflow: hidden;
   aspect-ratio: 16 / 9;
   border-radius: .35em;
   pointer-events: none;
@@ -6584,6 +6586,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     const snap = clone(strip(session));
     snap.lastFeedback = null;
     snap.lastRung = null;
+    DT.webScenes?.rememberFootprintSnapshot?.(session, snap);
     const s = clone(snap);
     s.history = (session.history || []).concat([snap]).slice(-HISTORY_MAX);
     return s;
@@ -6807,6 +6810,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     if (!h.length) return refuse(session, 'nothing-to-undo', '没有可以撤销的操作');
     const back = clone(h[h.length - 1]);
     back.history = h.slice(0, -1);
+    // The oldest retained snapshot can still have footfalls from turns
+    // before the undo limit. Carry its seed into the restored session.
+    if (!back.history.length) DT.webScenes?.preserveFootprintTurns?.(h[0], back);
     back.lastFeedback = null;
     back.lastRung = null;
     const out = advance(back, now, Infinity);
@@ -6883,7 +6889,11 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     }
     if (!changed) return { session, events };
     const runs = Object.assign({}, session.runs, { [st.id]: run });
-    return { session: Object.assign({}, session, { runs }), events };
+    const updated = Object.assign({}, session, { runs });
+    if (run.kind === 'dual' && (r0.active !== run.active || !run.running)) {
+      DT.webScenes?.noteFootprintHandoff?.(session, updated, r0.active);
+    }
+    return { session: updated, events };
   }
 
   // Future bells of the running clock, plus the other side's after a dual handover. A single clock that rings in
@@ -6956,6 +6966,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       })),
       feedback: session.lastFeedback || null,
     };
+    if (DT.webScenes && DT.webScenes.get(session.theme)) out.ascent = DT.webScenes.ascent(session, now);
     const nx = cur < count ? session.timeline[cur + 1] : null;
     if (nx) out.next = { name: nx.name, type: nx.type, side: nx.side || null, secs: nx.secs };
     if (!st) return out;
@@ -7350,6 +7361,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   function saveSession(s) {
     const copy = Object.assign({}, s);
     if (Array.isArray(copy.history)) copy.history = copy.history.slice(-HISTORY_LIMIT);
+    DT.webScenes?.preserveFootprintTurns?.(s, copy);
     writeJSON(KEYS.session, copy);
   }
   function clearSession() { try { store().removeItem(KEYS.session); } catch (e) { /* ignore */ } }
@@ -7819,6 +7831,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   }
 
   function themeOf(id) {
+    if (DT.webScenes && DT.webScenes.get(id)) return id;
     const ids = Array.isArray(DT.THEMES) ? DT.THEMES.map(t => t.id) : BUILTIN_THEMES;
     return ids.indexOf(id) >= 0 ? id : 'hall';
   }
@@ -7892,6 +7905,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     const lockTimers = { pro: null, con: null };
     let theme = null;       // the theme on screen
     let paint = null;       // while that theme has a painter: its canvas, context, instance and frame bookkeeping
+    let scene = null;
     let lastView = null, lastSig = null;
     let painterWarned = false;
     let chalkSignObserver = null;
@@ -8112,6 +8126,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       if (id === theme) return;
       theme = id;
       stopPainter();
+      if (scene) { scene.destroy(); scene = null; }
+      if (!thumbnail && DT.webScenes && DT.webScenes.get(id)) scene = DT.webScenes.mount(stage, id);
       injectDefs(stage.ownerDocument, id);
       const spec = DT.themes.get(id);
       if (spec && typeof spec.painter === 'function') startPainter(spec.painter);
@@ -8163,7 +8179,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       if (destroyed || !v) return;
       const st = v.mode === 'stage' ? v.stage : null;
       const kind = st ? st.type : 'break';
-      const seat = v.proSeat === 'right' ? 'right' : 'left';
+      const seat = DT.webScenes && DT.webScenes.get(v.theme) ? 'left' : v.proSeat === 'right' ? 'right' : 'left';
       const match = v.match || {};
       const active = kind === 'dual' ? v.clocks.find(c => c.active) || null : v.clocks[0] || null;
       const idle = kind === 'dual' && !active;
@@ -8240,6 +8256,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 
       // What a still painter redraws for: the stage, its phase, who holds the floor and where the sides sit.
       lastView = v;
+      if (scene) scene.update(v);
       lastSig = [key, active ? active.phase : '', active ? active.side : '', seat].join('|');
       draw(v, lastSig);
     }
@@ -8355,6 +8372,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       stage.ownerDocument.removeEventListener('visibilitychange', onVisible);
       if (chalkSignObserver) chalkSignObserver.disconnect();
       stopPainter();
+      if (scene) scene.destroy();
       timers.forEach(id => clearTimeout(id));
       timers.clear();
       stage.remove();
@@ -9065,9 +9083,12 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       cell.dataset.themeId = th.id;
       const host = el('span', 'dt-setup-thumb');
       host.setAttribute('aria-hidden', 'true');   // the cell is read by its name
-      const thumb = DT.render.mount(host, { thumbnail: true });
-      thumb.update(Object.assign({}, sample, { theme: th.id }));
-      thumbs.push(thumb);
+      if (th.thumbnail) th.thumbnail(host);
+      else {
+        const thumb = DT.render.mount(host, { thumbnail: true });
+        thumb.update(Object.assign({}, sample, { theme: th.id }));
+        thumbs.push(thumb);
+      }
       cell.appendChild(host);
       cell.appendChild(el('span', 'dt-setup-theme-name', th.name || th.id));
       themeBox.appendChild(cell);
@@ -9085,6 +9106,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         c.tabIndex = c === chosen ? 0 : -1;
       });
       describe(chosen);
+      paintSeat();
       if (focus) chosen.focus();
     }
     function pickTheme(i, focus) {
@@ -9110,7 +9132,6 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       e.preventDefault();
       pickTheme(moves[e.code], true);
     });
-    setTheme('hall');   // until a format is chosen
 
     // ---- selection ----
     let current = -1;
@@ -9145,12 +9166,14 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     const seatNow = () => page.querySelector('input[name="proSeat"]:checked').value;
     // The boxes are moved in the page, not just drawn in the other order, so Tab and Enter go left to right too.
     function paintSeat() {
-      const right = seatNow() === 'right';
+      const fixed = !!(chosen && DT.webScenes && DT.webScenes.get(chosen.dataset.themeId));
+      const right = !fixed && seatNow() === 'right';
       const pro = field('proTeam').parentNode, con = field('conTeam').parentNode;
       seating.insertBefore(right ? con : pro, swap);
       seating.appendChild(right ? pro : con);
       seating.dataset.seat = right ? 'right' : 'left';
-      const label = '左右交换（现在正方坐在' + (right ? '右' : '左') + '边）';
+      swap.disabled = fixed;
+      const label = fixed ? '攀登主题固定正方在左、反方在右' : '左右交换（现在正方坐在' + (right ? '右' : '左') + '边）';
       swap.setAttribute('aria-label', label);
       swap.title = label;
     }
@@ -9164,7 +9187,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     function matchNow() {
       const match = {};
       TEXT_FIELDS.forEach(k => { match[k] = field(k).value.trim(); });
-      match.proSeat = page.querySelector('input[name="proSeat"]:checked').value;
+      match.proSeat = seating.dataset.seat;
       return match;
     }
     function start() {
@@ -9218,7 +9241,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
 
     // Filled in before the page is attached, so the first frame has nothing to transition from.
     const wanted = options.findIndex(x => x.format.id === last.formatId);
+    setTheme('hall');
     select(wanted >= 0 ? wanted : 0);
+    if (cellOf(o.initialTheme)) { themePicked = true; setTheme(o.initialTheme); }
     root.appendChild(page);
     if (current >= 0) options[current].el.scrollIntoView({ block: 'nearest' });
 
@@ -10614,6 +10639,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
   // opts.theme: show the scene in this theme instead (?theme=<id>, for reviewing a theme in every scene).
   function build(name, now, opts) {
     const theme = (opts && opts.theme) || null;
+    if (DT.webScenes && DT.webScenes.demoNames.includes(name)) return DT.webScenes.demo(name,now,theme);
     if (!Object.prototype.hasOwnProperty.call(SCENES, name)) return null;
     const scene = typeof SCENES[name] === 'function' ? SCENES[name]() : SCENES[name];
     if (!scene.setup) {
@@ -10627,7 +10653,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     return { route: 'setup', session: scene.steps.length ? play(scene, now, theme) : null, lastMatch, dock: false };
   }
 
-  DT.demo = { names: Object.keys(SCENES), build };
+  DT.demo = { names: Object.keys(SCENES).concat(DT.webScenes ? DT.webScenes.demoNames : []), build };
 })(window.DT = window.DT || {});
 
 /* === ui.js === */
@@ -10855,7 +10881,8 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     return saved;
   }
 
-  const themeList = () => (Array.isArray(DT.THEMES) && DT.THEMES.length ? DT.THEMES : FALLBACK_THEMES);
+  const themeList = () => (Array.isArray(DT.THEMES) && DT.THEMES.length ? DT.THEMES : FALLBACK_THEMES)
+    .concat(DT.webScenes ? DT.webScenes.themes : []);
 
   // What has been typed on the setup page, read back from its form so a redraw after the editor keeps it.
   function setupDraft(root) {
@@ -11907,7 +11934,9 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
     function pushState(session, away) {
       const s = session || (timer() ? timer().session() : null);
       if (!projector || !s) return;
-      projector.link.push({ type: 'state', session: Object.assign({}, s, { history: [] }),
+      const projected = Object.assign({}, s, { history: [] });
+      DT.webScenes?.preserveFootprintTurns?.(s, projected);
+      projector.link.push({ type: 'state', session: projected,
         settings: { volume: settings.volume, muted: settings.muted }, away: !!away });
     }
 
@@ -12086,6 +12115,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
       const handle = DT.setup.mount(root, {
         formats: DT.store.loadFormats(),
         lastMatch: typed || DT.store.loadLastMatch(),
+        initialTheme: new URLSearchParams((o.location || window.location).search).get('theme'),
         resumable: saved ? resumeInfo(saved) : null,
         themes: themeList(),
         canExport: !!(DT.preset.sourceParts() || DT.web),
@@ -12094,7 +12124,7 @@ DT.THEMES = [{"id": "hall", "name": "堂", "desc": "全屏色场，适合暗场�
         async onExport(format, match, theme) {
           try {
             const p = DT.preset.make(format, match, theme, DT.clock.now());
-            const parts = DT.preset.sourceParts() || await DT.web.exportSource();
+            const parts = DT.preset.sourceParts() || await DT.web.exportSource(theme);
             DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(parts, p), 'text/html');
           } catch (e) {
             console.warn('导出失败：', e);

@@ -220,9 +220,12 @@
       cell.dataset.themeId = th.id;
       const host = el('span', 'dt-setup-thumb');
       host.setAttribute('aria-hidden', 'true');   // the cell is read by its name
-      const thumb = DT.render.mount(host, { thumbnail: true });
-      thumb.update(Object.assign({}, sample, { theme: th.id }));
-      thumbs.push(thumb);
+      if (th.thumbnail) th.thumbnail(host);
+      else {
+        const thumb = DT.render.mount(host, { thumbnail: true });
+        thumb.update(Object.assign({}, sample, { theme: th.id }));
+        thumbs.push(thumb);
+      }
       cell.appendChild(host);
       cell.appendChild(el('span', 'dt-setup-theme-name', th.name || th.id));
       themeBox.appendChild(cell);
@@ -240,6 +243,7 @@
         c.tabIndex = c === chosen ? 0 : -1;
       });
       describe(chosen);
+      paintSeat();
       if (focus) chosen.focus();
     }
     function pickTheme(i, focus) {
@@ -265,7 +269,6 @@
       e.preventDefault();
       pickTheme(moves[e.code], true);
     });
-    setTheme('hall');   // until a format is chosen
 
     // ---- selection ----
     let current = -1;
@@ -300,12 +303,14 @@
     const seatNow = () => page.querySelector('input[name="proSeat"]:checked').value;
     // The boxes are moved in the page, not just drawn in the other order, so Tab and Enter go left to right too.
     function paintSeat() {
-      const right = seatNow() === 'right';
+      const fixed = !!(chosen && DT.webScenes && DT.webScenes.get(chosen.dataset.themeId));
+      const right = !fixed && seatNow() === 'right';
       const pro = field('proTeam').parentNode, con = field('conTeam').parentNode;
       seating.insertBefore(right ? con : pro, swap);
       seating.appendChild(right ? pro : con);
       seating.dataset.seat = right ? 'right' : 'left';
-      const label = '左右交换（现在正方坐在' + (right ? '右' : '左') + '边）';
+      swap.disabled = fixed;
+      const label = fixed ? '攀登主题固定正方在左、反方在右' : '左右交换（现在正方坐在' + (right ? '右' : '左') + '边）';
       swap.setAttribute('aria-label', label);
       swap.title = label;
     }
@@ -319,7 +324,7 @@
     function matchNow() {
       const match = {};
       TEXT_FIELDS.forEach(k => { match[k] = field(k).value.trim(); });
-      match.proSeat = page.querySelector('input[name="proSeat"]:checked').value;
+      match.proSeat = seating.dataset.seat;
       return match;
     }
     function start() {
@@ -373,7 +378,9 @@
 
     // Filled in before the page is attached, so the first frame has nothing to transition from.
     const wanted = options.findIndex(x => x.format.id === last.formatId);
+    setTheme('hall');
     select(wanted >= 0 ? wanted : 0);
+    if (cellOf(o.initialTheme)) { themePicked = true; setTheme(o.initialTheme); }
     root.appendChild(page);
     if (current >= 0) options[current].el.scrollIntoView({ block: 'nearest' });
 

@@ -222,7 +222,8 @@
     return saved;
   }
 
-  const themeList = () => (Array.isArray(DT.THEMES) && DT.THEMES.length ? DT.THEMES : FALLBACK_THEMES);
+  const themeList = () => (Array.isArray(DT.THEMES) && DT.THEMES.length ? DT.THEMES : FALLBACK_THEMES)
+    .concat(DT.webScenes ? DT.webScenes.themes : []);
 
   // What has been typed on the setup page, read back from its form so a redraw after the editor keeps it.
   function setupDraft(root) {
@@ -1274,7 +1275,9 @@
     function pushState(session, away) {
       const s = session || (timer() ? timer().session() : null);
       if (!projector || !s) return;
-      projector.link.push({ type: 'state', session: Object.assign({}, s, { history: [] }),
+      const projected = Object.assign({}, s, { history: [] });
+      DT.webScenes?.preserveFootprintTurns?.(s, projected);
+      projector.link.push({ type: 'state', session: projected,
         settings: { volume: settings.volume, muted: settings.muted }, away: !!away });
     }
 
@@ -1453,6 +1456,7 @@
       const handle = DT.setup.mount(root, {
         formats: DT.store.loadFormats(),
         lastMatch: typed || DT.store.loadLastMatch(),
+        initialTheme: new URLSearchParams((o.location || window.location).search).get('theme'),
         resumable: saved ? resumeInfo(saved) : null,
         themes: themeList(),
         canExport: !!(DT.preset.sourceParts() || DT.web),
@@ -1461,7 +1465,7 @@
         async onExport(format, match, theme) {
           try {
             const p = DT.preset.make(format, match, theme, DT.clock.now());
-            const parts = DT.preset.sourceParts() || await DT.web.exportSource();
+            const parts = DT.preset.sourceParts() || await DT.web.exportSource(theme);
             DT.store.saveFile(DT.preset.fileName(p), DT.preset.buildHtml(parts, p), 'text/html');
           } catch (e) {
             console.warn('导出失败：', e);

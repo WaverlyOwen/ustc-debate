@@ -119,6 +119,7 @@
   }
 
   function themeOf(id) {
+    if (DT.webScenes && DT.webScenes.get(id)) return id;
     const ids = Array.isArray(DT.THEMES) ? DT.THEMES.map(t => t.id) : BUILTIN_THEMES;
     return ids.indexOf(id) >= 0 ? id : 'hall';
   }
@@ -192,6 +193,7 @@
     const lockTimers = { pro: null, con: null };
     let theme = null;       // the theme on screen
     let paint = null;       // while that theme has a painter: its canvas, context, instance and frame bookkeeping
+    let scene = null;
     let lastView = null, lastSig = null;
     let painterWarned = false;
     let chalkSignObserver = null;
@@ -412,6 +414,8 @@
       if (id === theme) return;
       theme = id;
       stopPainter();
+      if (scene) { scene.destroy(); scene = null; }
+      if (!thumbnail && DT.webScenes && DT.webScenes.get(id)) scene = DT.webScenes.mount(stage, id);
       injectDefs(stage.ownerDocument, id);
       const spec = DT.themes.get(id);
       if (spec && typeof spec.painter === 'function') startPainter(spec.painter);
@@ -463,7 +467,7 @@
       if (destroyed || !v) return;
       const st = v.mode === 'stage' ? v.stage : null;
       const kind = st ? st.type : 'break';
-      const seat = v.proSeat === 'right' ? 'right' : 'left';
+      const seat = DT.webScenes && DT.webScenes.get(v.theme) ? 'left' : v.proSeat === 'right' ? 'right' : 'left';
       const match = v.match || {};
       const active = kind === 'dual' ? v.clocks.find(c => c.active) || null : v.clocks[0] || null;
       const idle = kind === 'dual' && !active;
@@ -540,6 +544,7 @@
 
       // What a still painter redraws for: the stage, its phase, who holds the floor and where the sides sit.
       lastView = v;
+      if (scene) scene.update(v);
       lastSig = [key, active ? active.phase : '', active ? active.side : '', seat].join('|');
       draw(v, lastSig);
     }
@@ -655,6 +660,7 @@
       stage.ownerDocument.removeEventListener('visibilitychange', onVisible);
       if (chalkSignObserver) chalkSignObserver.disconnect();
       stopPainter();
+      if (scene) scene.destroy();
       timers.forEach(id => clearTimeout(id));
       timers.clear();
       stage.remove();

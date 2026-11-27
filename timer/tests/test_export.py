@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -33,19 +34,56 @@ def dump(url, budget=8000):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+@contextmanager
+def serve_pages():
+    """Build and serve a clean Pages site under its project subpath."""
+    with tempfile.TemporaryDirectory() as tmp:
+        site = Path(tmp) / "ustc-debate"
+        for path, content in build.web_outputs(build.parse_all(build.DEFAULT_FORMATS_DIR)).items():
+            target = site / path.relative_to(build.PAGES)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content if isinstance(content, bytes) else content.encode())
+        handler = partial(SimpleHTTPRequestHandler, directory=tmp)
+        with ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                yield site, f"http://127.0.0.1:{server.server_port}/ustc-debate/"
+            finally:
+                server.shutdown()
+                thread.join()
+
+
 @unittest.skipUnless(run_js_tests.find_browser(), "needs Edge or Chrome")
 class ExportEndToEnd(unittest.TestCase):
+    def test_exported_climb_match_renders_its_scene_offline(self):
+        probe = """<output id="climb-export"></output><script>
+addEventListener('load', async () => {
+  const f = DT.BUILTIN_FORMATS.find(f => f.id === 'ustc-chongxiao-cup');
+  const p = DT.preset.make(f, {proTeam:'红杉', conTeam:'蓝海'}, 'climb-paper', 1);
+  document.getElementById('climb-export').textContent =
+    DT.preset.buildHtml(await DT.web.exportSource(p.theme), p);
+});</script>"""
+        with serve_pages() as (site, base):
+            source = (site / 'index.html').read_text(encoding='utf-8')
+            (site / 'export.html').write_text(source.replace('</body>',probe+'</body>'),encoding='utf-8')
+            match = re.search(r'<output id="climb-export">(.*?)</output>',dump(base+'export.html'),re.S)
+            self.assertIsNotNone(match)
+            page = htmllib.unescape(match[1])
+        # Take the server away before opening the exported match, including its file:// ES modules.
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'climb.html'
+            path.write_text(page,encoding='utf-8')
+            out = dump(path.as_uri())
+        self.assertRegex(out,r'class="dt-stage[^"]*has-climb-view')
+        self.assertRegex(out,r'<div[^>]*data-style="paper"[^>]*data-ready')
+        self.assertIn('data-mesh="parka"',out)
+
     def test_exported_file_opens_on_its_title_card(self):
         self.check_export(BUILT.as_uri(), "export-test.html")
 
     def test_pages_offers_the_formal_release_and_exports_an_offline_match(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            site = Path(tmp) / "ustc-debate"
-            for path, content in build.web_outputs(build.parse_all(build.DEFAULT_FORMATS_DIR)).items():
-                target = site / path.relative_to(build.PAGES)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(content if isinstance(content, bytes) else content.encode())
-
+        with serve_pages() as (site, base):
             # Serve a fixed release response while exercising the real Pages assets under a project subpath.
             index = (site / "index.html").read_text(encoding="utf-8")
             for name, response in (("released", 'Response.json({assets: [{name: "ustc-debate-timer.html"}]})'),
@@ -54,18 +92,10 @@ class ExportEndToEnd(unittest.TestCase):
                         "String(url).startsWith('https://api.github.com/') ? Promise.resolve("
                         + response + ") : realFetch(url, opts);</script>")
                 (site / (name + ".html")).write_text(index.replace("</head>", stub + "</head>"), encoding="utf-8")
-            with ThreadingHTTPServer(("127.0.0.1", 0), partial(SimpleHTTPRequestHandler, directory=tmp)) as server:
-                thread = Thread(target=server.serve_forever, daemon=True)
-                thread.start()
-                try:
-                    base = f"http://127.0.0.1:{server.server_port}/ustc-debate/"
-                    self.check_export(base, "export-from-pages.html")
-                    href = "https://github.com/WaverlyOwen/ustc-debate/releases/latest/download/" + BUILT.name
-                    self.assertIn(f'href="{href}">下载离线版</a>', dump(base + "released.html"))
-                    self.assertIn(">离线版尚未发布</a>", dump(base + "unreleased.html"))
-                finally:
-                    server.shutdown()
-                    thread.join()
+            self.check_export(base, "export-from-pages.html")
+            href = "https://github.com/WaverlyOwen/ustc-debate/releases/latest/download/" + BUILT.name
+            self.assertIn(f'href="{href}">下载离线版</a>', dump(base + "released.html"))
+            self.assertIn(">离线版尚未发布</a>", dump(base + "unreleased.html"))
 
     def check_export(self, url, filename):
         dom = dump(url + "?exportProbe=1")

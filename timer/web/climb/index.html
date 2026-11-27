@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>攀登 · 辩论计时器</title>
+<script>
+  const selected = new URLSearchParams(location.search).get('scene');
+  const variants = {poster:'poster', ink:'ink', paper:'paper', sunrise:'poster', glacier:'ink', moon:'paper'};
+  const style = Object.hasOwn(variants,selected) ? variants[selected] : 'poster';
+  location.replace('../../?theme=climb-'+style);
+</script>
+<a href="../../">前往计时器开赛页</a>
+</html>

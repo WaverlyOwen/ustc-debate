@@ -340,6 +340,7 @@
   function saveSession(s) {
     const copy = Object.assign({}, s);
     if (Array.isArray(copy.history)) copy.history = copy.history.slice(-HISTORY_LIMIT);
+    DT.webScenes?.preserveFootprintTurns?.(s, copy);
     writeJSON(KEYS.session, copy);
   }
   function clearSession() { try { store().removeItem(KEYS.session); } catch (e) { /* ignore */ } }
