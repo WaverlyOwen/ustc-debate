@@ -147,7 +147,7 @@ python timer/build.py
 
 ## 主题
 
-开赛页右栏的主题是一张缩略图网格，每格都是这个主题的真实画面，方向键移动，空格或回车选中。编辑器里是下拉框。共 8 个主题，全部由代码生成（CSS 渐变、内联 SVG、Canvas），没有任何图片或字体文件。
+开赛页右栏的主题是一张缩略图网格，每格都是这个主题的真实画面，方向键移动，空格或回车选中。编辑器里是下拉框。共 8 个主题，全部由代码生成（CSS 渐变、内联 SVG、Canvas、WebGL 着色器），没有任何图片或字体文件。
 
 网格和下拉框按用途排：先是暗场投影的，再是亮场的，抠像用的绿幕最后。
 
@@ -158,7 +158,7 @@ python timer/build.py
 | 黑板 `chalk` | 教室黑板上的粉笔排线，时间用掉就被板擦擦去 | 暗场 |
 | 构成 `construct` | 构成主义几何海报，巨大的扇形表盘从本方席位一侧转回 | 暗场 |
 | 昼 `daylight` | 浅色底，色场收成数字后的一条横带 | 亮场；弱机也流畅（不用滤镜） |
-| 墨 `ink` | 宣纸上的一道水墨笔触，朱砂对花青，时间用掉笔触就向本方席位收回 | 亮场 |
+| 墨 `ink` | 从侧面看一缸清水，朱砂对花青往里滴墨，墨的前锋随用掉的时间沉向缸底 | 亮场；要 WebGL（没有时退回一柱简化的墨） |
 | 孔版 `riso` | 两色孔版印刷海报，红蓝网点随时间变稀 | 亮场 |
 | 绿幕 `chroma` | 纯绿底，数字放在本方色底板上 | 直播抠像 |
 
@@ -188,7 +188,7 @@ python timer/build.py
 | `--digits-on-field` | 数字落在本方色场上时的颜色 |
 | `--digits-off-field` | 数字落在色场收回后露出的底上时的颜色 |
 
-可选：`--on-accent`（实心强调色上文字的颜色，比如待确认的「再点一次重置」；默认是面板色，强调色和面板色太接近的主题要另指一个，`themes.test.js` 要求 4.5:1）、`--backdrop`（任意 `background` 值，画在色场之下；里面不要放 `url()` 图片，见下面的「四条 Chromium 规则」）、`.stage-deco` 装饰层、`--text-field` / `--text-deep`（文字所在的两种底，默认是本方色和本方深色；色场够不到标题和顶栏的主题要指向真正的底色）、`--speaker-ink`（发言人一行的颜色）、`--half-ground`（双方环节每一半的底色，有画布的主题可设为 `transparent`）、`--field-ground`（数字落在色场上时真正的底色，默认是本方色；色场不是平涂本方色的主题要如实写，比如「墨」等待方的淡墨笔触、「星轨」双方环节的星云光晕）。组件的 CSS 里不写死颜色，颜色只从这些变量来。
+可选：`--on-accent`（实心强调色上文字的颜色，比如待确认的「再点一次重置」；默认是面板色，强调色和面板色太接近的主题要另指一个，`themes.test.js` 要求 4.5:1）、`--backdrop`（任意 `background` 值，画在色场之下；里面不要放 `url()` 图片，见下面的「四条 Chromium 规则」）、`.stage-deco` 装饰层、`--text-field` / `--text-deep`（文字所在的两种底，默认是本方色和本方深色；色场够不到标题和顶栏的主题要指向真正的底色）、`--speaker-ink`（发言人一行的颜色）、`--half-ground`（双方环节每一半的底色，有画布的主题可设为 `transparent`）、`--field-ground`（数字落在色场上时真正的底色，默认是本方色；色场不是平涂本方色的主题要如实写，比如「星轨」双方环节的星云光晕；「墨」的数字在墨里，`--side-color` 写的是数字背后墨最浓时的颜色）。组件的 CSS 里不写死颜色，颜色只从这些变量来。
 
 CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（单方、间隔）和每一半上的 `--remain`（双方），以及舞台和每一半上的 `--secs`、`--secs-total`（剩余与总长的整秒数）。`--used`、`--remain` 以 1/2000 为一步，`--tension` 随显示的整秒变化，值不变就不重写，主题不用自己再量化。纹理可以用 `background-image: url("data:image/svg+xml,…")`，写成字面量放在用到它的盒子上（见下面的「四条 Chromium 规则」）。
 
@@ -198,7 +198,7 @@ CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（
 - 铃声波纹 `.dt-ring` 在响铃的那个 `.dt-clock` 里、数字之下，带 `data-type`（`warn` / `end`）、`data-nth`（`1` / `2`）、`data-side`（`pro` / `con` / `none`）。`--bell-w`、`--bell-h` 是字形的宽和高（舞台宽、高的百分比），`--bell-dy` 是字形中心比时钟中心低多少；自由辩半区里还有 `--ring-to`（不出本列的最大缩放），间隔里是 1.2。它用 margin 居中，`translate` 留给主题；第一次 `animationend` 时被移除（最晚 1.5 秒）；换环节时立即移除，终止铃（单方、间隔）还没画出的第二圈也一并取消。它不能用 `mix-blend-mode`（时钟是独立的合成组），在半区里会继承那一半的变暗滤镜，也会被半区裁切
 - 舞台的 `data-bell`（`warn` / `count` / `end`）与 `data-bell-clock`（`main` / `pro` / `con`）：铃响后保留 1.5 秒，换环节时清除，减少动态效果时不设，冻结截图与缩略图里没有。投影窗口可能先收到状态、后收到铃（操作当场补响的铃，即扣时越过铃点或撤销，总是先发状态、后发铃），按它键控的终态会先闪一帧
 - 每一半的 `data-locking`：一方用完或放弃的那一刻起 1 秒（打开时已经锁定的不算），给锁定的一次性动画用；目前没有主题用它
-- `@property` 注册的 `--dim`（每一半上，发言 0、等待 1，随换边 520 毫秒过渡；按颜色或不透明度变暗的主题读它）和 `--remain`（锁定时 520 毫秒排空：按它定长短的部件——共享的水位、昼的横带、黑板的排线、绿幕底板上的本方色——随之收回。滤镜层的尺寸读它的主题（墨、孔版）先让那一层 300 毫秒淡出，再在自己的锁定规则里写 `--remain 0s linear 300ms`，一步归零。构成的表盘按 `--secs` 走，放弃时靠自己的 `--construct-sweep` 过渡转回；星轨的星云靠自己的不透明度过渡淡出）
+- `@property` 注册的 `--dim`（每一半上，发言 0、等待 1，随换边 520 毫秒过渡；按颜色或不透明度变暗的主题读它）和 `--remain`（锁定时 520 毫秒排空：按它定长短的部件——共享的水位、昼的横带、黑板的排线、绿幕底板上的本方色——随之收回。滤镜层的尺寸读它的主题（孔版）先让那一层 300 毫秒淡出，再在自己的锁定规则里写 `--remain 0s linear 300ms`，一步归零。构成的表盘按 `--secs` 走，放弃时靠自己的 `--construct-sweep` 过渡转回；星轨的星云靠自己的不透明度过渡淡出）
 - `--over-ink`：超时时数字和冒号的颜色，默认 `--accent`
 - `--colon-rest`：冒号停下时的不透明度，默认 .55。`--beat-delay`（渲染器写在时钟上）让呼吸的峰值落在秒跳上；`--colon-from`（写在冒号上）是它停下那一刻的不透明度，停下后 200 毫秒的 `dt-colon-settle` 从这里落到 `--colon-rest`，`dt-colon-wake` 在开始时从 `--colon-rest` 接上呼吸
 - 超时的「+」（`.dt-sign`）绝对定位在数字左侧，空时不透明度为 0；时钟的 `data-long` 表示分钟有两位（倒计时与超时都设）。只有超时分钟到两位（+10:00 起）且舞台为 3:2 或更方（4:3、5:4）时，「+」才回到排版里，+10:00 以下仍悬在左侧
@@ -214,24 +214,27 @@ CSS 可以读渲染器写在舞台上的 `--used`、`--tension`、`--warn-at`（
 - 不要把 `animation` 门控在 `:not(.is-entering)` 下：类移除时规则重新匹配，动画会再放一遍。只有 `transition` 可以这样门控
 - 移除一个动画不会让过渡从它的当前值起算；不要用 `animation-play-state` 做暂停与恢复
 - 计时器驱动的状态（`data-bell`、`data-locking`、只在入场时出现的层）不能进静帧；循环动画的周期要整除 10 秒
-- 不给 `font-variation-settings`、`--tension`、`--used` 加过渡；带 feTurbulence 或笔刷滤镜的层上，不放随 `--used`、`--remain`、`--dim` 连续变化的渐变或颜色（改为叠一层只变不透明度的层）；滤镜层自己的尺寸读 `--remain` 时，锁定改为淡出后一步归零（见 `ink.css`、`riso.css`），不要用共享的 520 毫秒排空
+- 不给 `font-variation-settings`、`--tension`、`--used` 加过渡；带 feTurbulence 或笔刷滤镜的层上，不放随 `--used`、`--remain`、`--dim` 连续变化的渐变或颜色（改为叠一层只变不透明度的层）；滤镜层自己的尺寸读 `--remain` 时，锁定改为淡出后一步归零（见 `riso.css`），不要用共享的 520 毫秒排空
 - 波纹不能用 `mix-blend-mode`；它在半区里继承那一半的滤镜，滤镜重的主题可以给 `.dt-half:not([data-active]) .dt-ring` 另写样式或藏起来
 
 **四条 Chromium 规则**（实测）：渲染器每一步都写 `--used`，整棵子树重算样式，下面的写法会让那个盒子连同它的滤镜每一步整盒重画，或者把滤镜画坏：
 
 1. `url()` 图片放进自定义属性再用 `var()` 引用，或者含 `url()` 图片的声明里另有任何 `var()`：每次重算都当作新图。`--backdrop` 也是这样（`stage.css` 经 `var(--backdrop)` 画它）。图片要字面写在用到它的盒子上，比如主题自己的 `.dt-backdrop::before`
 2. 同一个 `background` 或 `mask` 列表里既有 `url()` 图片又有渐变：普通元素和伪元素都会每次重画。把渐变画成 SVG 图（`linearGradient`、`rect`），或者把图片单独放到另一个盒子上
-3. 带滤镜的元素自成一层时标 `will-change: transform`：合成器每帧重跑滤镜。标 `will-change: opacity`，滤镜只画进图层一次；滤镜写在子元素（比如 `::before`）上，动的只是父元素的裁切、遮罩，或这一层的不透明度与变换（见 `ink.css`、`chalk.css`）。这一层的不透明度也会变时，两项都标：`will-change: transform, opacity`。只标 `transform`，不透明度每次离开 1 或回到 1，这一层连同其中的滤镜都要整层重新栅格化（`ink.css` 的半区笔触）
+3. 带滤镜的元素自成一层时标 `will-change: transform`：合成器每帧重跑滤镜。标 `will-change: opacity`，滤镜只画进图层一次；滤镜写在子元素（比如 `::before`）上，动的只是父元素的裁切、遮罩，或这一层的不透明度与变换（见 `chalk.css`）。这一层的不透明度也会变时，两项都标：`will-change: transform, opacity`。只标 `transform`，不透明度每次离开 1 或回到 1，这一层连同其中的滤镜都要整层重新栅格化（旧版「墨」的半区笔触就是这样）
 4. 自成一层的滤镜元素落在半像素上（`translate: -50%` 居中）：颗粒被重新采样、洗掉。用 left / top 定位
 
 **JS（可选）**：`timer/src/themes/mytheme.js`，经典脚本，调用：
 
 ```js
-DT.themes.register('mytheme', { defs, painter });
+DT.themes.register('mytheme', { defs, painter });                          // 2D 画布
+DT.themes.register('mytheme', { context: 'webgl', painter, followsClock: true });   // WebGL（墨）
 ```
 
 - `defs`：一段 SVG 标记（`<svg width="0" height="0" style="position:absolute"><defs>…</defs></svg>`），第一次用到这个主题时插入页面一次，CSS 里就能写 `filter: url(#dt-mytheme-edge)`。滤镜、图案、渐变的 id 一律以 `dt-<主题id>-` 开头，避免和别的主题冲突
-- `painter`：`(canvas, ctx) => ({ frame(view, now), resize(w, h), destroy() })`。渲染器把 canvas 放在背景之上、色场之下。不要自己开 `requestAnimationFrame`：渲染器限制在 30fps 以内，页面不可见时不调用 `frame`，系统要求减少动态效果、演示态 `frozen=1` 和缩略图里只画一帧静态画面
+- `painter`：`(canvas, ctx, {thumbnail, reducedMotion, frozen}) => ({ frame(view, now), resize(w, h), destroy(), bell?(event) })`。渲染器把 canvas 放在背景之上、色场之下。不要自己开 `requestAnimationFrame`：渲染器限制在 30fps 以内，页面不可见时不调用 `frame`，系统要求减少动态效果、演示态 `frozen=1` 和缩略图里只画一帧静态画面（舞台、阶段、发言方或席位变了才再画一帧；写了 `followsClock: true` 的画师，时钟每走过总长的 1/500 也再画一帧）。`bell` 可选：舞台每响一次铃（`warn` / `count` / `end`，带 `clock`、`key`）就告诉它一次，缩略图和减少动态时不告诉
+- `context: 'webgl'`：渲染器不对画布取 2D 上下文，`ctx` 传 `null`，也不设画布的像素尺寸；画师自己取 `webgl2`（取不到再取 `webgl`）、自己定绘图缓冲的大小（可以低于舞台像素，让 CSS 放大），取不到上下文就抛错
+- 画师在画时，舞台上有 `data-painter="live"`（启动成功后加上，停掉或出错时去掉）。CSS 靠它决定要不要自己画一个简化的替身（见 `ink.css`：没有 WebGL 时，一柱本方墨色从水面到前锋）
 - 随机数只用 `DT.themes.rng(seed)`（返回 `() => [0,1)`，用主题 id 当种子），这样截图能复现，投影窗口和操作台预览的画面一致。不要用 `Math.random()`。画面按舞台的比例画，不按像素：大小不同的舞台（投影与预览）是同一幅画
 - 画师出错（构造、`resize` 或 `frame` 抛出异常）时，渲染器停掉它、移除画布，在控制台警告一次，主题只剩 CSS 照常显示，计时和其余画面不受影响
 - 有 `mytheme.js` 就必须有 `mytheme.css`，否则构建失败

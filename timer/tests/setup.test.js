@@ -171,7 +171,7 @@
   const cell = (t, id) => t.box.querySelector('[role="radio"][data-theme-id="' + id + '"]');
   const checkedTheme = t => t.box.querySelector('[role="radio"][aria-checked="true"]').dataset.themeId;
 
-  // 15% used: the field's edge (and ink's dry brush tip) lies clear of the digits, so no thumbnail shows a digit caught
+  // 15% used: the field's edge lies clear of the digits, so no thumbnail shows a digit caught
   // half way through its change of colour.
   DT.test('setup: the thumbnail is the opening speech, running, 15% used', () => {
     const t = mount();

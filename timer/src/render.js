@@ -17,6 +17,7 @@
   const ACTIVE_COL = 58;       // percent of the width the speaking half takes in a dual stage
   const STEPS = 2000;          // --used and --remain move in steps of 1/2000: about a pixel of a 1920 px stage
   const FRAME_MS = 33;         // a theme's painter draws at most 30 frames a second
+  const CLOCK_STEPS = 500;     // a still painter that followsClock is asked again as a clock moves on this fraction
 
   const DIGITS = '<span class="dt-sign"></span><span class="dt-min"></span><span class="dt-colon">:</span>' +
     '<span class="dt-sec"></span>';
@@ -68,8 +69,13 @@
 
   // ---- the theme registry (spec §1.2): what themes/*.js add beyond their stylesheet ----
   // spec: {defs?: SVG markup put into the document once, painter?: (canvas, ctx, {thumbnail, reducedMotion,
-  // frozen}) => {frame(view, now), resize(w, h), destroy()}}. resize gets the stage's size in CSS pixels on a
-  // context already scaled to the canvas's pixel ratio; the renderer decides when frame runs.
+  // frozen}) => {frame(view, now), resize(w, h), destroy(), bell?(event)}, context?: 'webgl', followsClock?: true}.
+  // resize gets the stage's size in CSS pixels on a context already scaled to the canvas's pixel ratio; the renderer
+  // decides when frame runs. A 'webgl' painter is given no context (ctx is null): it takes its own from the canvas,
+  // throws when it gets none, and sizes the canvas's drawing buffer itself. bell, when there is one, hears each bell
+  // event the stage is pulsed with (never on a thumbnail or under reduced motion). A still painter is asked for a
+  // frame when the stage, its phase, its speaker or the seats change; one that followsClock also whenever a clock's
+  // time used moves a step (1/CLOCK_STEPS of its length), so a still that shows the time keeps showing it.
   const registry = {};
 
   // mulberry32; a string seed is hashed with 32-bit FNV-1a first. The only randomness a painter may use.
@@ -351,16 +357,20 @@
 
     // ---- the theme's painter: its canvas sits above the backdrop and below the deco and the field ----
 
-    // Size the canvas to the stage at up to 2x; true when the size changed (and the painter was told).
+    // Size the canvas to the stage at up to 2x; true when the size changed (and the painter was told). A webgl
+    // painter sizes its drawing buffer itself (ink draws at a fraction of the stage's pixels), so the renderer keeps
+    // only the size it last told it of.
     function sizeCanvas() {
       const box = stage.getBoundingClientRect();
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       const w = Math.round(box.width * ratio), h = Math.round(box.height * ratio);
-      if (paint.sized && paint.canvas.width === w && paint.canvas.height === h) return false;
-      paint.sized = true;
-      paint.canvas.width = w;
-      paint.canvas.height = h;
-      if (paint.ctx) paint.ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      if (paint.sized === w + 'x' + h) return false;
+      paint.sized = w + 'x' + h;
+      if (!paint.webgl) {
+        paint.canvas.width = w;
+        paint.canvas.height = h;
+        paint.ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      }
       if (!guard(() => paint.painter.resize(box.width, box.height))) return false;
       paint.dirty = true;
       return true;
@@ -380,20 +390,24 @@
       }
     }
 
-    function startPainter(factory) {
+    // While a painter draws, the stage says so (data-painter="live"), so the theme's stylesheet can stand in for it
+    // when there is none: a painter that fails to start, or that guard stops, takes the attribute with it.
+    function startPainter(spec) {
       const canvas = document.createElement('canvas');
       canvas.className = 'dt-canvas';
       canvas.setAttribute('aria-hidden', 'true');
       stage.insertBefore(canvas, els.deco);
-      const ctx = canvas.getContext('2d');
+      const webgl = spec.context === 'webgl';
+      const ctx = webgl ? null : canvas.getContext('2d');
       const flags = { thumbnail, reducedMotion: reducedMotion(), frozen: frozenPage() };
       paint = {
-        canvas, ctx, painter: null,
+        canvas, ctx, webgl, painter: null, followsClock: !!spec.followsClock,
         still: flags.thumbnail || flags.reducedMotion || flags.frozen,
-        at: -Infinity, sig: null, dirty: true, sized: false, observer: null,
+        at: -Infinity, sig: null, dirty: true, sized: null, observer: null,
       };
-      if (!guard(() => { paint.painter = factory(canvas, ctx, flags); })) return;
+      if (!guard(() => { paint.painter = spec.painter(canvas, ctx, flags); })) return;
       if (!sizeCanvas() && !paint) return;
+      attr(stage, 'data-painter', 'live');
       if (typeof ResizeObserver === 'function') {
         paint.observer = new ResizeObserver(() => { if (paint && sizeCanvas() && lastView) draw(lastView, lastSig); });
         paint.observer.observe(stage);
@@ -404,6 +418,7 @@
       if (!paint) return;
       const p = paint;
       paint = null;
+      attr(stage, 'data-painter', false);
       if (p.observer) p.observer.disconnect();
       try {
         if (p.painter) p.painter.destroy();
@@ -419,7 +434,7 @@
       if (!thumbnail && DT.webScenes && DT.webScenes.get(id)) scene = DT.webScenes.mount(stage, id);
       injectDefs(stage.ownerDocument, id);
       const spec = DT.themes.get(id);
-      if (spec && typeof spec.painter === 'function') startPainter(spec.painter);
+      if (spec && typeof spec.painter === 'function') startPainter(spec);
     }
 
     // Animated: at most one frame per FRAME_MS. Still (thumbnail, reduced motion, frozen demo): a frame when the
@@ -543,10 +558,14 @@
       paintProgress(v.progress || []);
       nextParts(v, idle ? st.first || 'pro' : null).forEach((s, i) => text(els.next[i], s));
 
-      // What a still painter redraws for: the stage, its phase, who holds the floor and where the sides sit.
+      // What a still painter redraws for: the stage, its phase, who holds the floor and where the sides sit; for one
+      // that followsClock, each clock's time used too, in steps.
       lastView = v;
       if (scene) scene.update(v);
       lastSig = [key, active ? active.phase : '', active ? active.side : '', seat].join('|');
+      if (paint && paint.followsClock) {
+        lastSig += '|' + v.clocks.map(c => Math.round((c.total - c.remaining) / Math.max(1, c.total) * CLOCK_STEPS)).join(',');
+      }
       draw(v, lastSig);
     }
 
@@ -645,6 +664,7 @@
         }
       }
       // 'switch' needs nothing extra: the halves' own transition is the animation.
+      if (paint && typeof paint.painter.bell === 'function') guard(() => paint.painter.bell(event));
     }
 
     function toast(message) {

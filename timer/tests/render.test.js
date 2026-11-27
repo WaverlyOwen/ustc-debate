@@ -871,4 +871,135 @@
     assert.equal(team('pro').getAttribute('data-long'), 'false');
     h.destroy();
   });
+  // ---- a theme's painter: its context, the stage's data-painter, its bell hook (2026-11-27 ink water design) ----
+
+  // Registers a painter theme for the length of fn, in DT.THEMES as the renderer needs it.
+  function withPainterTheme(id, spec, fn) {
+    DT.themes.register(id, spec);
+    const saved = DT.THEMES;
+    DT.THEMES = (saved || []).concat([{ id, name: 'x', desc: 'x', tone: 'light' }]);
+    try { return fn(); } finally { DT.THEMES = saved; }
+  }
+  const themed = (theme, idx) => E.view(E.toggle(E.goto(E.createSession(F(), MATCH, T0, { theme }), idx || 0, T0), T0), T0 + 30000);
+
+  // A painter that declares context: 'webgl' takes its own context: the renderer asks the canvas for none (a canvas
+  // that has given out a 2d context can never give a webgl one), passes null, and leaves the drawing buffer's size
+  // to the painter.
+  DT.test('render: a webgl painter is given no 2d context and sizes its own drawing buffer', () => {
+    const asked = [];
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (kind) {
+      if (this.classList.contains('dt-canvas')) asked.push(kind);
+      return getContext.apply(this, arguments);
+    };
+    let got;
+    const sized = [];
+    try {
+      withPainterTheme('zz-gl', {
+        context: 'webgl',
+        painter: (canvas, ctx) => {
+          got = ctx;
+          return { frame() {}, resize(w, h) { sized.push([w, h]); canvas.width = 7; canvas.height = 5; }, destroy() {} };
+        },
+      }, () => {
+        const h = R.mount(host());
+        h.update(themed('zz-gl'));
+        const canvas = document.querySelector('.dt-canvas');
+        assert.ok(canvas, 'the canvas is there');
+        assert.equal(got, null, 'no context is passed');
+        assert.deepEqual(asked, [], 'the renderer asked the canvas for no context');
+        assert.deepEqual(sized, [[960, 540]], 'told the stage size in CSS pixels');
+        assert.equal(canvas.width + 'x' + canvas.height, '7x5', "the buffer is the painter's");
+        h.destroy();
+      });
+      // A 2d painter is still given its context, scaled to the canvas's pixel ratio.
+      let ctx2d = null;
+      withPainterTheme('zz-2d', { painter: (canvas, ctx) => { ctx2d = ctx; return { frame() {}, resize() {}, destroy() {} }; } }, () => {
+        const h = R.mount(host());
+        h.update(themed('zz-2d'));
+        const ratio = Math.min(window.devicePixelRatio || 1, 2);
+        assert.ok(ctx2d && typeof ctx2d.fillRect === 'function', 'a 2d context');
+        assert.near(ctx2d.getTransform().a, ratio, 1e-6);
+        assert.equal(document.querySelector('.dt-canvas').width, Math.round(960 * ratio));
+        h.destroy();
+      });
+    } finally { HTMLCanvasElement.prototype.getContext = getContext; }
+  });
+
+  // The stylesheet's stand-in for a painter keys on data-painter="live": set once the painter has started, gone
+  // when it stops (another theme) or is stopped (it threw, as a webgl painter does where there is no WebGL).
+  DT.test('render: the stage carries data-painter="live" exactly while a painter draws', () => {
+    const warn = console.warn;
+    console.warn = () => {};
+    let now = 5000;
+    DT.clock.set(() => now);
+    try {
+      let fail = false;
+      withPainterTheme('zz-live', { context: 'webgl', painter: () => ({ frame() { if (fail) throw new Error('lost'); }, resize() {}, destroy() {} }) }, () => {
+        const h = R.mount(host());
+        const root = document.querySelector('.dt-stage');
+        h.update(themed('zz-live'));
+        assert.equal(root.getAttribute('data-painter'), 'live');
+        h.update(Object.assign(themed('zz-live'), { theme: 'hall' }));
+        assert.equal(root.getAttribute('data-painter'), null, 'gone with the theme');
+        h.update(themed('zz-live'));
+        assert.equal(root.getAttribute('data-painter'), 'live', 'back with it');
+        fail = true;
+        now += 1000;   // a frame is due
+        h.update(themed('zz-live'));
+        assert.equal(root.querySelector('.dt-canvas'), null, 'the painter that threw is stopped');
+        assert.equal(root.getAttribute('data-painter'), null, 'and the stage says so');
+        h.destroy();
+      });
+      withPainterTheme('zz-nogl', { context: 'webgl', painter: () => { throw new Error('no WebGL'); } }, () => {
+        const h = R.mount(host());
+        const root = document.querySelector('.dt-stage');
+        h.update(themed('zz-nogl'));
+        assert.equal(root.querySelector('.dt-canvas'), null);
+        assert.equal(root.getAttribute('data-painter'), null, 'a painter that cannot start never says it is live');
+        h.destroy();
+      });
+      withPainterTheme('zz-badsize', { painter: () => ({ frame() {}, resize() { throw new Error('size'); }, destroy() {} }) }, () => {
+        const h = R.mount(host());
+        h.update(themed('zz-badsize'));
+        assert.equal(document.querySelector('.dt-stage').getAttribute('data-painter'), null, 'nor one that fails to size');
+        h.destroy();
+      });
+    } finally { console.warn = warn; DT.clock.reset(); }
+  });
+
+  // A painter may draw the bells itself: it hears each bell the stage is pulsed with, but not on a thumbnail.
+  DT.test("render: a painter with a bell hook hears the stage's bells, and a thumbnail's never", () => {
+    const heard = [];
+    withPainterTheme('zz-bell', { painter: () => ({ frame() {}, resize() {}, destroy() {}, bell: e => heard.push(e.type + '/' + e.clock) }) }, () => {
+      const h = R.mount(host());
+      h.update(themed('zz-bell'));
+      h.pulse({ type: 'warn', clock: 'main', key: 'w30', at: T0 });
+      h.pulse({ type: 'end', clock: 'main', key: 'end', at: T0 });
+      assert.deepEqual(heard, ['warn/main', 'end/main']);
+      h.destroy();
+      const t = R.mount(host(), { thumbnail: true });
+      t.update(themed('zz-bell'));
+      t.pulse({ type: 'warn', clock: 'main', key: 'w30', at: T0 });
+      assert.deepEqual(heard, ['warn/main', 'end/main'], 'a thumbnail rings no bells');
+      t.destroy();
+    });
+  });
+
+  // A still painter is asked for a frame when what is on screen changes; one that followsClock (ink: the time used is
+  // the ink's depth) also as its clock's time moves on, a step at a time, so a reduced-motion stage keeps its time.
+  DT.test('render: a still painter that followsClock is asked again as its clock moves, one that does not is not', () => {
+    const count = {};
+    const make = id => () => ({ frame() { count[id] = (count[id] || 0) + 1; }, resize() {}, destroy() {} });
+    [['zz-follow', true], ['zz-fixed', false]].forEach(([id, follows]) => withPainterTheme(id, { followsClock: follows, painter: make(id) }, () => {
+      const t = R.mount(host(), { thumbnail: true });
+      const s = E.toggle(E.goto(E.createSession(F(), MATCH, T0, { theme: id }), 0, T0), T0);   // 3:00
+      t.update(E.view(s, T0 + 36000));
+      t.update(E.view(s, T0 + 36100));   // less than a step (1/500 of 3:00 is 360 ms)
+      t.update(E.view(s, T0 + 37000));
+      t.destroy();
+    }));
+    assert.equal(count['zz-follow'], 2, 'drawn again once its clock moved a step');
+    assert.equal(count['zz-fixed'], 1, 'drawn once');
+  });
 })();

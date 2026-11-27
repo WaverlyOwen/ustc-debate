@@ -5,7 +5,7 @@
   const PREFILL = ['proMotion', 'conMotion', 'proTeam', 'conTeam'];   // the match title is new every time
   const ENTER = ['Enter', 'NumpadEnter'];
   // What every theme thumbnail shows (spec §3.1): this stage of this format, running with this much used. At 15% the
-  // field's edge (and ink's dry brush tip) lies clear of the digits, so no thumbnail catches a digit half changed.
+  // field's edge lies clear of the digits, so no thumbnail catches a digit half changed.
   const SAMPLE = { format: 'ustc-freshman-cup', stage: '正方一辩开篇立论', used: 0.15 };
   // When the build carries other formats (build.py --formats-dir) the sample stage may not be there: a one-stage
   // format of its own stands in, so the setup page never fails to open over a thumbnail.

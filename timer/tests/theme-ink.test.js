@@ -1,19 +1,26 @@
 (function () {
+  // 墨, ink dropped into water (docs/superpowers/specs/2026-11-27-ink-water-design.md). The water and its ink are a
+  // WebGL painter; the stylesheet keeps the colours, the text, the 30 s tick and a plain column of ink for where there
+  // is no WebGL. The painter's tests read its canvas back; where this browser has no WebGL they check the stand-in.
   const E = DT.engine, R = DT.render;
   const T0 = 1000000;
-  const MATCH = { title: '测试', proMotion: '甲', conMotion: '乙', proTeam: '物理学院', conTeam: '化学院', proSeat: 'left' };
+  const MATCH = { title: '测试', proMotion: '甲方的辩题', conMotion: '乙方的辩题', proTeam: '物理学院', conTeam: '化学院', proSeat: 'left' };
   const F = () => DT.BUILTIN_FORMATS.find(f => f.id === 'ustc-freshman-cup');
   const idx = name => F().stages.findIndex(s => s.name === name);
   const OPENING = '正方一辩开篇立论';   // pro, 3:00
-  const REBUTTAL = '反方二辩驳论';
+  const REBUTTAL = '反方二辩驳论';       // con, 2:00
+  const CLOSING = '反方四辩结辩';        // con, 3:30
+  const SURFACE = 0.30, GAP = 0.04, BED = 0.955;   // ink.css: --ink-surface, --ink-gap, --ink-bed (of the height)
+  const frontAt = used => SURFACE + GAP + (BED - SURFACE - GAP) * used;
 
-  function mountInk(view, w, h) {
+  function mountInk(view, w, h, opts) {
     const box = document.getElementById('sandbox');
     box.innerHTML = '<div class="dt-stage-host" style="width:' + (w || 960) + 'px;height:' + (h || 540) + 'px"></div>';
-    const stage = R.mount(box.firstChild);
+    const stage = R.mount(box.firstChild, opts);
     stage.update(view);
     return { stage, root: box.querySelector('.dt-stage') };
   }
+  const still = (view, w, h) => mountInk(view, w, h, { thumbnail: true });
   function session(name, seat) {
     return E.goto(E.createSession(F(), Object.assign({}, MATCH, { proSeat: seat || 'left' }), T0, { theme: 'ink' }), idx(name), T0);
   }
@@ -25,6 +32,12 @@
     s = E.floor(s, 'con', T0 + 20000);
     return E.view(s, T0 + secs * 1000);
   }
+  const titleCard = seat => E.view(E.createSession(F(), Object.assign({}, MATCH, { proSeat: seat || 'left' }), T0, { theme: 'ink' }), T0);
+  const breakAt = secs => E.view(E.toggle(session('评委打分'), T0), T0 + secs * 1000);
+  function endCard() {
+    const s = DT.demo.build('end', T0, { theme: 'ink' }).session;
+    return Object.assign(E.view(s, T0), { record: E.record(s, T0) });
+  }
   function resolve(el, varName) {
     const probe = document.createElement('i');
     probe.style.color = 'var(' + varName + ')';
@@ -33,400 +46,287 @@
     probe.remove();
     return c;
   }
-  // Any CSS colour (color-mix gives oklab) as the sRGB a canvas paints for it.
   const mixer = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
-  function srgb(css) {
+  function rgbOf(css) {
     mixer.clearRect(0, 0, 1, 1);
     mixer.fillStyle = css; mixer.fillRect(0, 0, 1, 1);
     const d = mixer.getImageData(0, 0, 1, 1).data;
-    return 'rgb(' + d[0] + ', ' + d[1] + ', ' + d[2] + ')';
+    return [d[0], d[1], d[2]];
   }
-  function lum(css) {
-    const m = srgb(css).match(/rgba?\(\s*([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)/);
-    const [r, g, b] = [m[1], m[2], m[3]].map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  }
-  function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const lumOf = c => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+  const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  const contrast = (a, b) => ratio(lumOf(rgbOf(a)), lumOf(rgbOf(b)));
   const pseudo = (el, which) => getComputedStyle(el, which);
   const px = s => parseFloat(s);
-  // The ink: the field (a half's field) carries the stroke, its ::before paints it under the brush filter.
-  const ink = field => getComputedStyle(field, '::before');
-  // A field's scale on screen: a half's field keeps one size and is scaled with its column (1 for a single stage).
-  const scaleOf = field => field.getBoundingClientRect().width / field.offsetWidth;
-  // The entrance over, and every transition run out.
+  // Quiet the one warning a painter stopped for want of WebGL gives.
+  function quietly(fn) {
+    const warn = console.warn;
+    console.warn = () => {};
+    try { return fn(); } finally { console.warn = warn; }
+  }
+  // As if this machine had no WebGL: the painter cannot start, and the stylesheet stands in.
+  function withoutWebGL(fn) {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (kind) { return /webgl/.test(kind) ? null : getContext.apply(this, arguments); };
+    try { return quietly(fn); } finally { HTMLCanvasElement.prototype.getContext = getContext; }
+  }
+  let glKnown = null;
+  function hasGL() {
+    if (glKnown === null) {
+      const c = document.createElement('canvas');
+      const gl = c.getContext('webgl2') || c.getContext('webgl');
+      glKnown = !!gl;
+      const lose = gl && gl.getExtension('WEBGL_lose_context');
+      if (lose) lose.loseContext();
+    }
+    return glKnown;
+  }
+  // The painter's canvas as drawn, read back in the task that drew it (its buffer is not kept after it is shown), in
+  // stage coordinates: at(x, y) takes CSS px from the stage's corner.
+  function picture(root) {
+    const canvas = root.querySelector('.dt-canvas');
+    assert.ok(canvas && root.isConnected, 'the painter has a canvas on the page');
+    const g = document.createElement('canvas');
+    g.width = canvas.width; g.height = canvas.height;
+    const c = g.getContext('2d', { willReadFrequently: true });
+    c.drawImage(canvas, 0, 0);
+    const data = c.getImageData(0, 0, g.width, g.height).data;
+    const box = root.getBoundingClientRect();
+    const k = g.width / box.width;
+    const at = (x, y) => {
+      const i = (Math.min(g.height - 1, Math.max(0, Math.floor(y * k))) * g.width + Math.min(g.width - 1, Math.max(0, Math.floor(x * k)))) * 4;
+      return [data[i], data[i + 1], data[i + 2]];
+    };
+    // Every pixel of the buffer inside a stage rect [x0, y0, x1, y1] (CSS px).
+    const each = (r, fn) => {
+      for (let y = Math.floor(r[1] * k); y < Math.ceil(r[3] * k); y++) {
+        for (let x = Math.floor(r[0] * k); x < Math.ceil(r[2] * k); x++) {
+          if (x < 0 || y < 0 || x >= g.width || y >= g.height) continue;
+          const i = (y * g.width + x) * 4;
+          fn([data[i], data[i + 1], data[i + 2]], x / k, y / k);
+        }
+      }
+    };
+    const mean = (r, f) => { let s = 0, n = 0; each(r, c => { s += f(c); n++; }); return n ? s / n : NaN; };
+    return { at, each, mean, W: box.width, H: box.height, data, g, k };
+  }
+  const warmth = c => c[0] - c[2];
+  // The first colour in a gradient as an opaque CSS colour: color(srgb r g b / a) or rgb(a)(…).
+  function firstColour(image) {
+    let m = /color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)/.exec(image);
+    if (m) return 'rgb(' + [m[1], m[2], m[3]].map(v => Math.round(Number(v) * 255)).join(', ') + ')';
+    m = /rgba?\((\d+), (\d+), (\d+)/.exec(image);
+    return m ? 'rgb(' + m[1] + ', ' + m[2] + ', ' + m[3] + ')' : '';
+  }   // cinnabar ink pulls a pixel's red above its blue; water and indigo the other way
+  // The lowest row with ink in it, as a share of the height: a row of plain water is one colour across.
+  function lowestInk(pic, x0, x1) {
+    const step = 1 / pic.k;
+    for (let y = pic.H * 0.985; y > pic.H * SURFACE; y -= step) {
+      let lo = Infinity, hi = 0;
+      for (let x = x0; x < x1; x += step) { const l = lumOf(pic.at(x, y)); lo = Math.min(lo, l); hi = Math.max(hi, l); }
+      if (lo < 0.94 * hi) return y / pic.H;
+    }
+    return SURFACE;
+  }
+  // How many rows of a stage rect have ink in them: plain water is one colour across a row, ink is not.
+  function inkedRows(pic, r, tol) {
+    let rows = 0;
+    const step = 1 / pic.k;
+    for (let y = r[1]; y < r[3]; y += step) {
+      const c = [0, 1, 2].map(i => { let a = Infinity, b = -Infinity; for (let x = r[0]; x < r[2]; x += step) { const v = pic.at(x, y)[i]; a = Math.min(a, v); b = Math.max(b, v); } return b - a; });
+      if (Math.max.apply(null, c) > (tol || 2)) rows++;
+    }
+    return rows;
+  }
+  // The glyphs of a clock as drawn, in stage px from the stage's corner.
+  function glyphs(root, clock) {
+    const box = root.getBoundingClientRect();
+    let u = null;
+    clock.querySelectorAll('.dt-digits:not(.dt-digits-on) > span').forEach(s => {
+      const r = s.getBoundingClientRect();
+      if (!r.width) return;
+      const v = [r.left - box.left, r.top - box.top, r.right - box.left, r.bottom - box.top];
+      u = u ? [Math.min(u[0], v[0]), Math.min(u[1], v[1]), Math.max(u[2], v[2]), Math.max(u[3], v[3])] : v;
+    });
+    return u;
+  }
+  // Every transition run out.
   function settle(root) {
     root.classList.remove('is-entering');
     root.getAnimations({ subtree: true }).forEach(a => { if (a instanceof CSSTransition) a.finish(); });
   }
-  // Every transition running in the stage seated at `ms` into its run (its delay counts).
-  function seat(root, ms) {
-    root.getAnimations({ subtree: true }).forEach(a => { if (a instanceof CSSTransition) { a.pause(); a.currentTime = ms; } });
-  }
-  const anim = (root, name) => root.getAnimations({ subtree: true }).filter(a => a.animationName === name);
-  // Where the paper-coloured layer of the digits stops, in page x: --cut resolved in that layer's own box, the box
-  // its clip-path's percentages refer to. `from` is the side of the box the cut is measured from.
-  function cutX(on, from) {
-    const probe = document.createElement('i');
-    probe.style.cssText = 'position:absolute;left:0;top:0;height:1px;width:var(--cut)';
-    on.appendChild(probe);
-    const w = probe.getBoundingClientRect().width;
-    probe.remove();
-    const r = on.getBoundingClientRect();
-    return from === 'left' ? r.left + w : r.right - w;
-  }
-  // The stroke's tip in page x: its painted length (--stroke-at, the ink's first background-size) from the field's seat
-  // edge. It is measured by a probe inside the field, so a half's field, which is scaled, scales the probe with it.
-  function tipX(field, seat) {
-    // The first layer's width: the size list up to its first top-level comma, less the height after it.
-    const size = ink(field).backgroundSize;
-    let depth = 0, end = size.length;
-    for (let i = 0; i < size.length; i++) {
-      const c = size[i];
-      if (c === '(') depth++;
-      else if (c === ')') depth--;
-      else if (c === ',' && depth === 0) { end = i; break; }
-    }
-    const probe = document.createElement('i');
-    probe.style.cssText = 'position:absolute;left:0;top:0;height:1px;width:' + size.slice(0, end).trim().replace(/\s+\S+$/, '');
-    field.appendChild(probe);
-    const len = probe.getBoundingClientRect().width;
-    probe.remove();
-    assert.ok(len > 0, 'stroke length ' + ink(field).backgroundSize);
-    const f = field.getBoundingClientRect();
-    return seat === 'left' ? f.left + len : f.right - len;
-  }
 
-  DT.test('theme ink: 墨 is a light theme registered with SVG defs and no painter', () => {
+  // ---- what the theme is ----
+
+  DT.test('theme ink: 墨 is a light theme with a WebGL painter that follows the clock, and the seals\' filters', () => {
     const meta = (DT.THEMES || []).find(t => t.id === 'ink');
     assert.ok(meta, 'ink is in DT.THEMES');
     assert.equal(meta.name, '墨');
     assert.equal(meta.tone, 'light');
+    assert.ok(/水/.test(meta.desc) && /墨/.test(meta.desc), meta.desc);
     const spec = DT.themes.get('ink');
-    assert.ok(spec, 'ink is registered');
-    assert.ok(typeof spec.defs === 'string' && spec.defs.indexOf('<filter') >= 0, 'defs carry the brush filters');
-    assert.equal(spec.painter, undefined);
+    assert.equal(spec.context, 'webgl');
+    assert.equal(typeof spec.painter, 'function');
+    assert.equal(spec.followsClock, true, 'a still shows the time: the ink\'s depth');
+    ['dt-ink-seal', 'dt-ink-seal-light', 'dt-ink-drop'].forEach(id => assert.ok(spec.defs.indexOf('id="' + id + '"') >= 0, id));
+    assert.ok(!/brush/.test(spec.defs), 'no brush filters are left');
   });
 
-  DT.test('theme ink: the defs go into the document once, every id prefixed dt-ink-', () => {
-    const a = mountInk(singleAt(OPENING, 60));
-    const b = R.mount(document.getElementById('sandbox').appendChild(document.createElement('div')));
+  DT.test('theme ink: the defs go in once, every id prefixed dt-ink-, and every filter the stage uses is one of them', () => {
+    const a = still(singleAt(OPENING, 187));
+    const b = R.mount(document.getElementById('sandbox').appendChild(document.createElement('div')), { thumbnail: true });
     b.update(singleAt(OPENING, 60));
     const boxes = document.querySelectorAll('[data-dt-defs="ink"]');
     assert.equal(boxes.length, 1);
     const ids = Array.from(boxes[0].querySelectorAll('[id]')).map(n => n.id);
-    assert.ok(ids.length >= 3, ids.join(','));
     ids.forEach(id => assert.ok(id.indexOf('dt-ink-') === 0, id));
-    // Every filter the stroke refers to is one of them.
-    const refs = ink(a.root.querySelector('.dt-field')).filter.match(/#dt-ink-[\w-]+/g) || [];
-    assert.ok(refs.length >= 1, 'the field uses a brush filter');
-    refs.forEach(r => assert.ok(ids.indexOf(r.slice(1)) >= 0, r));
+    const used = [];
+    a.root.querySelectorAll('*').forEach(el => [null, '::before', '::after'].forEach(p => {
+      (getComputedStyle(el, p).filter.match(/#dt-[\w-]+/g) || []).forEach(r => used.push(r.slice(1)));
+    }));
+    assert.ok(used.length >= 2, 'the seals use them: ' + used.join(','));
+    used.forEach(r => assert.ok(ids.indexOf(r) >= 0, r));
     a.stage.destroy(); b.destroy();
   });
 
-  // The paper is one tile of feTurbulence, drawn once. render.js writes --used on every step of the clock, and Chromium
-  // paints a box's image again on every recalculation when its url() reaches the rule through var() (stage.css draws
-  // --backdrop so) or shares a list with a gradient: the tile is written out, alone, on the backdrop's ::before, and the
-  // backdrop keeps only its light. The sheet laid over a stroke as it comes in (落笔) is the same paper.
-  DT.test('theme ink: the paper is one tile written out over the backdrop\'s light, and the 落笔 sheet is the same paper', () => {
-    let rules = 0;
+  // The stroke and everything that served it are gone: the sheets over the stage and the halves, the paper's tile, the
+  // brush filters, the floor line.
+  DT.test('theme ink: no stroke, paper sheet, brush or floor line is left', () => {
+    let brushRules = 0;
     Array.from(document.styleSheets).forEach(sh => {
       let list;
       try { list = sh.cssRules; } catch (e) { return; }
       Array.from(list).forEach(function walk(r) {
         if (r.cssRules) Array.from(r.cssRules).forEach(walk);
-        if (!r.style || !/data-theme="ink"\] \.dt-backdrop::before/.test(r.selectorText || '')) return;
-        rules++;
-        const v = r.style.getPropertyValue('background-image');
-        assert.ok(/^url\("data:[^"]*"\)$/.test(v), r.selectorText + ': one image, written out: ' + v.slice(0, 40));
+        if (/data-theme="ink"/.test(r.selectorText || '') && /dt-ink-brush|feTurbulence/.test(r.cssText)) brushRules++;
       });
     });
-    assert.equal(rules, 1, 'the paper\'s rule');
-    const { stage, root } = mountInk(singleAt(OPENING, 60));
-    settle(root);
-    const backdrop = root.querySelector('.dt-backdrop'), paper = pseudo(backdrop, '::before');
-    const light = getComputedStyle(backdrop).backgroundImage;
-    assert.ok(/radial-gradient/.test(light) && !/url\(/.test(light), 'the backdrop is the light: ' + light.slice(0, 40));
-    assert.ok(/^url\("data:[^"]*"\)$/.test(paper.backgroundImage), 'one tile and nothing beside it: ' + paper.backgroundImage.slice(0, 40));
-    assert.ok(/feTurbulence/.test(paper.backgroundImage), 'paper from noise');
-    assert.equal(paper.position, 'absolute');
-    ['top', 'right', 'bottom', 'left'].forEach(k => assert.equal(paper[k], '0px', 'over the whole backdrop: ' + k));
-    // The sheet: the same tile at the same size, then the same light.
-    const sheet = getComputedStyle(root, '::after');
-    assert.equal(sheet.backgroundImage.indexOf(paper.backgroundImage), 0, 'the sheet is the same paper');
-    assert.equal(sheet.backgroundSize.split(',')[0].trim(), paper.backgroundSize);
-    assert.ok(sheet.backgroundImage.indexOf(light) > 0, 'over the same light');
-    stage.destroy();
-  });
-
-  // Spec §2.1: a wide stroke of about 44vh across the screen, its edges bled and dry-brushed by the filter.
-  DT.test('theme ink: the field is one wide brush stroke across the screen, clear of the head', () => {
-    const { stage, root } = mountInk(singleAt(OPENING, 60));
-    root.classList.remove('is-entering');   // measure the stroke at rest, not its entrance sweep
-    const box = root.getBoundingClientRect();
-    const field = root.querySelector('.dt-field');
-    const f = field.getBoundingClientRect();
-    assert.ok(f.left <= box.left && f.right >= box.right, 'it runs off both edges of the screen');
-    assert.ok(f.height >= 0.42 * box.height && f.height <= 0.5 * box.height, 'about 44% of the height: ' + f.height);
-    assert.ok(f.top > root.querySelector('.dt-head').getBoundingClientRect().bottom, 'below the stage name and speaker');
-    assert.ok(/url\("?#dt-ink-brush/.test(ink(field).filter), ink(field).filter);
-    // The filter is on the ink, not on the field: a field that is masked, scaled or faded keeps its drawn stroke.
-    assert.equal(getComputedStyle(field).filter, 'none');
-    assert.ok(['none', 'inset(0px)'].indexOf(getComputedStyle(field).clipPath) >= 0, 'the tip is the filtered stroke, not a straight cut: ' + getComputedStyle(field).clipPath);
-    stage.destroy();
-  });
-
-  // The stroke is painted as a background as long as the time left, from the speaking side's seat.
-  DT.test('theme ink: the stroke draws back toward the speaking side\'s seat', () => {
-    [[OPENING, 'left', 'left'], [OPENING, 'right', 'right'], [REBUTTAL, 'left', 'right'], [REBUTTAL, 'right', 'left']].forEach(([name, seat, from]) => {
-      const { stage, root } = mountInk(singleAt(name, 60, seat));
-      const field = root.querySelector('.dt-field');
-      const used = parseFloat(root.style.getPropertyValue('--used'));
-      const cs = ink(field);
-      const where = name + ' / ' + seat;
-      assert.equal(cs.backgroundPositionX.split(',')[0].trim(), from === 'left' ? '0%' : '100%', where);
-      // The stroke's end lands where the digits change colour: (1 - used) of the screen from the seat.
-      const stroke = px(cs.backgroundSize.split(',')[0]);
-      const fieldBox = field.getBoundingClientRect(), stageBox = root.getBoundingClientRect();
-      const offscreen = from === 'left' ? stageBox.left - fieldBox.left : fieldBox.right - stageBox.right;
-      assert.near(stroke - offscreen, (1 - used) * stageBox.width, 1.5, where);
-      stage.destroy();
-    });
-  });
-
-  // The last 7cqw of the stroke is loose hairs only (the dry tip), so the digits turn paper-coloured only over the
-  // solid body: across the hairs they stay ink, and each layer carries a thin halo of the other ground's colour.
-  DT.test('theme ink: the paper-coloured digits end where the solid body of the stroke ends, not at its dry tip', () => {
-    [[OPENING, 'left', 'left'], [OPENING, 'right', 'right'], [REBUTTAL, 'left', 'right'], [REBUTTAL, 'right', 'left']].forEach(([name, seat, from]) => {
-      const { stage, root } = mountInk(singleAt(name, 60, seat));
-      root.classList.remove('is-entering');
-      const S = root.getBoundingClientRect().width;
-      const on = root.querySelector('.dt-clock[data-clock="main"] .dt-digits-on');
-      const tip = tipX(root.querySelector('.dt-field'), from);
-      const body = from === 'left' ? tip - 0.07 * S : tip + 0.07 * S;
-      assert.near(cutX(on, 'left'), body, 2, name + ' / ' + seat);
-      stage.destroy();
-    });
-  });
-
-  DT.test('theme ink: in free debate too the digits change colour at the end of the stroke\'s body', () => {
-    ['left', 'right'].forEach(seat => {
-      const { stage, root } = mountInk(dualAt(30, seat));
-      root.classList.remove('is-entering');
-      const S = root.getBoundingClientRect().width;
-      root.querySelectorAll('.dt-half').forEach((h, i) => {
-        const from = i === 0 ? 'left' : 'right';
-        const field = h.querySelector('.dt-half-field'), k = scaleOf(field);
-        const tip = tipX(field, from);
-        // The dry tip is 7cqw of the field, scaled with it.
-        const body = from === 'left' ? tip - 0.07 * S * k : tip + 0.07 * S * k;
-        assert.near(cutX(h.querySelector('.dt-digits-on'), from), body, 2, seat + ' ' + h.dataset.side);
-      });
-      stage.destroy();
-    });
-  });
-
-  // The halo is on each glyph, not on the layer: the colon breathes on every frame of a running clock, and inside a
-  // filtered layer that makes the compositor draw the whole layer's halo again on every frame.
-  DT.test('theme ink: each glyph of the digits has a thin halo, so a stray hair crossing it does not eat its edge', () => {
-    [singleAt(OPENING, 60), dualAt(30)].forEach(view => {
+    assert.equal(brushRules, 0, 'no rule draws a brush or a paper tile');
+    [singleAt(OPENING, 0), dualAt(30)].forEach(view => {
       const { stage, root } = mountInk(view);
-      root.querySelectorAll('.dt-digits').forEach(d => {
-        assert.equal(getComputedStyle(d).filter, 'none', root.dataset.kind + ' ' + d.className + ': the layer');
-        d.querySelectorAll(':scope > span').forEach(g => {
-          const f = getComputedStyle(g).filter;
-          assert.ok(/drop-shadow/.test(f), root.dataset.kind + ' ' + d.className + ' ' + g.className + ': ' + f);
-        });
+      const where = root.dataset.kind;
+      const gone = s => s.content === 'none' || s.display === 'none';
+      assert.ok(gone(pseudo(root, '::after')), where + ': no sheet over the stage, even as it comes in');
+      root.querySelectorAll('.dt-half').forEach(h => assert.ok(gone(pseudo(h, '::after')), where + ': no sheet over a half'));
+      assert.ok(gone(pseudo(root.querySelector('.dt-backdrop'), '::before')), where + ': no paper');
+      root.querySelectorAll('.dt-field, .dt-half-field').forEach(f => assert.ok(gone(pseudo(f, '::before')), where + ': no stroke'));
+      root.querySelectorAll('.dt-floorline').forEach(l => assert.equal(getComputedStyle(l).display, 'none', where + ': no floor line'));
+      stage.destroy();
+    });
+  });
+
+  // Colours live in the stylesheet only: the painter reads these off the stage (spec 技术约束).
+  DT.test('theme ink: the palette the painter reads is the stylesheet\'s', () => {
+    const { stage, root } = still(singleAt(OPENING, 60));
+    const cs = getComputedStyle(root);
+    ['--ink-water-top', '--ink-water-deep', '--pro', '--con', '--accent', '--ink-neutral', '--ink-surface', '--ink-cap'].forEach(v =>
+      assert.ok(cs.getPropertyValue(v).trim(), v + ' is defined'));
+    assert.near(px(cs.getPropertyValue('--ink-surface')), SURFACE * 100, 0.001, 'the surface, in cqh');
+    const cap = px(cs.getPropertyValue('--ink-cap'));
+    assert.ok(cap > 0 && cap < 1, '--ink-cap ' + cap);
+    const top = rgbOf(resolve(root, '--ink-water-top')), deep = rgbOf(resolve(root, '--ink-water-deep'));
+    assert.ok(lumOf(top) > lumOf(deep), 'the water deepens toward the bed');
+    [top, deep].forEach(c => assert.ok(c[2] >= c[0], 'cool water, not cream: ' + c));
+    // Where the ink is thickest behind the digits is what the shared contrast tests read: --side-color.
+    assert.ok(/color-mix|rgb|color\(/.test(cs.getPropertyValue('--side-color')), cs.getPropertyValue('--side-color'));
+    if (hasGL()) {
+      // The bed, under the bottom bar's middle, where no ink has reached: the water there is --ink-water-deep.
+      const pic = picture(root);
+      const c = pic.at(pic.W / 2, pic.H * 0.995);
+      c.forEach((v, i) => assert.near(v, deep[i], 6, 'the painter\'s water is the stylesheet\'s: ' + c + ' vs ' + deep));
+    }
+    stage.destroy();
+  });
+
+  // ---- the digits ----
+
+  // Spec: the digits are one colour, always; never cut into two.
+  DT.test('theme ink: the digits are one colour, never cut', () => {
+    const views = [singleAt(OPENING, 60), singleAt(OPENING, 165), singleAt(OPENING, 187), singleAt(REBUTTAL, 50, 'right'),
+      dualAt(30), dualAt(30, 'right'), E.view(E.tick(E.toggle(session('自由辩论'), T0), T0 + 241000).session, T0 + 241000), breakAt(5)];
+    views.forEach(view => {
+      const { stage, root } = mountInk(view);
+      settle(root);
+      root.querySelectorAll('.dt-clock').forEach(clock => {
+        if (getComputedStyle(clock).display === 'none') return;
+        const where = root.dataset.kind + ' ' + root.dataset.phase + ' ' + clock.dataset.clock;
+        assert.equal(getComputedStyle(clock.querySelector('.dt-digits-on')).display, 'none', where + ': one layer');
+        const digits = clock.querySelector('.dt-digits:not(.dt-digits-on)');
+        assert.equal(getComputedStyle(digits).clipPath, 'none', where + ': not cut');
+        const colours = Array.from(digits.querySelectorAll('.dt-sign, .dt-min, .dt-sec')).map(s => getComputedStyle(s).color);
+        assert.ok(colours.every(c => c === colours[0]), where + ': ' + colours.join(' / '));
       });
       stage.destroy();
     });
   });
 
-  // Past the body's end the ink layer lies on the dry tip's loose cinnabar or indigo hairs (ink on cinnabar is about
-  // 2.4:1). Its paper halo is built up (three drop-shadows, the widest .02em) so each stroke of the digit keeps a band
-  // of paper round it there.
-  DT.test('theme ink: over the dry tip the ink digits keep a band of paper round each stroke', () => {
-    const { stage, root } = mountInk(singleAt(OPENING, 60), 1920, 1080);
-    const off = root.querySelector('.dt-clock[data-clock="main"] .dt-digits:not(.dt-digits-on)');
-    const f = getComputedStyle(off.querySelector('.dt-min')).filter;
-    const shadows = f.match(/drop-shadow\([^()]*(\([^()]*\))?[^()]*\)/g) || [];
-    const paper = srgb(resolve(root, '--paper-ink'));
-    const fontPx = px(getComputedStyle(off).fontSize);
-    assert.ok(shadows.length >= 3, 'a built-up halo: ' + f);
-    shadows.forEach(sh => assert.ok(sh.indexOf(paper.replace('rgb', 'rgb')) >= 0 || sh.indexOf(resolve(root, '--paper-ink')) >= 0, 'paper-coloured: ' + sh));
-    const widest = Math.max.apply(null, shadows.map(sh => { const m = sh.match(/([\d.]+)px\)?\s*$/) || sh.match(/0px 0px ([\d.]+)px/); return m ? Number(m[1]) : 0; }));
-    assert.ok(widest >= 0.019 * fontPx, 'the widest reaches .02em: ' + widest + 'px of ' + fontPx + 'px');
-    stage.destroy();
-  });
-
-  DT.test('theme ink: the brush filter follows the stage size, so a thumbnail keeps its proportions', () => {
-    const big = mountInk(singleAt(OPENING, 60), 1920, 1080);
-    const bigFilter = ink(big.root.querySelector('.dt-field')).filter;
-    big.stage.destroy();
-    const small = mountInk(singleAt(OPENING, 60), 240, 135);
-    const smallFilter = ink(small.root.querySelector('.dt-field')).filter;
-    small.stage.destroy();
-    assert.ok(bigFilter !== smallFilter, bigFilter + ' vs ' + smallFilter);
-    assert.ok(/#dt-ink-brush/.test(smallFilter), smallFilter);
-  });
-
-  // Spec §2.1: the stage type is marked with a small 朱文 seal, in the app's own words for the types. Its one column of
-  // type sits in the middle of the box (equal padding either side; a vertical-rl column would otherwise hug the right
-  // edge), large enough to read at 1366×768, where the seal also wears more lightly.
-  DT.test('theme ink: the seal\'s two characters sit centred in the box, large enough to read', () => {
-    [[1920, 1080, /dt-ink-seal"?\)/], [1366, 768, /dt-ink-seal-light/]].forEach(([w, h, filter]) => {
-      const { stage, root } = mountInk(singleAt(OPENING, 60), w, h);
-      const seal = pseudo(root.querySelector('.dt-head'), '::before');
-      assert.equal(seal.paddingLeft, seal.paddingRight, w + ': even either side');
-      assert.ok(px(seal.fontSize) >= 0.03 * h, w + ': ' + seal.fontSize);
-      const inner = px(seal.width) - (seal.boxSizing === 'border-box'
-        ? px(seal.paddingLeft) + px(seal.paddingRight) + px(seal.borderLeftWidth) + px(seal.borderRightWidth) : 0);
-      assert.near(inner, px(seal.fontSize) * px(seal.lineHeight) / px(seal.fontSize), 1.5, w + ': the box is the column wide: ' + seal.width);
-      assert.ok(filter.test(seal.filter), w + ': ' + seal.filter);
+  // Spec: no ink anywhere takes the digits below 3:1. The painter caps the ink behind them and never lets it be darker
+  // than --side-color; this reads the canvas behind the glyphs as the front passes behind them, in overtime, and in
+  // both halves of a free debate.
+  DT.test('theme ink: the ink behind the digits never takes them below 3:1', () => {
+    if (!hasGL()) return;
+    const failures = [];
+    const cases = [];
+    [0.2, 0.28, 0.36, 0.45, 0.55].forEach(u => [[OPENING, 180], [REBUTTAL, 120]].forEach(([name, secs]) =>
+      ['left', 'right'].forEach(seat => cases.push(singleAt(name, u * secs, seat)))));
+    cases.push(singleAt(CLOSING, 217), singleAt(OPENING, 200, 'right'), dualAt(30), dualAt(130), dualAt(200, 'right'), breakAt(12));
+    cases.forEach(view => {
+      const { stage, root } = still(view);
+      const pic = picture(root);
+      root.querySelectorAll('.dt-clock').forEach(clock => {
+        if (getComputedStyle(clock).display === 'none') return;
+        const g = glyphs(root, clock);
+        if (!g) return;
+        const ink = rgbOf(getComputedStyle(clock.querySelector('.dt-digits:not(.dt-digits-on) .dt-min')).color);
+        let darkest = 1;
+        pic.each(g, c => { darkest = Math.min(darkest, lumOf(c)); });
+        const c = ratio(lumOf(ink), darkest);
+        if (c < 3) failures.push(root.dataset.kind + ' ' + root.dataset.phase + ' ' + clock.dataset.clock + ' ' + root.style.getPropertyValue('--used') + ': ' + c.toFixed(2));
+      });
       stage.destroy();
     });
+    assert.ok(!failures.length, failures.join('\n'));
   });
 
-  // Spec §2.1: the stage type is marked with a small 朱文 seal, in the app's own words for the types.
-  DT.test('theme ink: a small seal names the stage type', () => {
-    const cases = [[singleAt(OPENING, 60), '单方'], [dualAt(30), '双方'],
-      [E.view(E.toggle(session('评委打分'), T0), T0 + 5000), '间隔']];
-    cases.forEach(([view, word]) => {
-      const { stage, root } = mountInk(view);
-      const seal = pseudo(root.querySelector('.dt-head'), '::before');
-      assert.equal(seal.content, '"' + word + '"', root.dataset.kind);
-      assert.ok(seal.display !== 'none' && px(seal.width) > 0, root.dataset.kind + ' seal shows');
-      stage.destroy();
-    });
-  });
-
-  // Spec §2.1: the warn bell point is a drop of ink, not a line.
-  DT.test('theme ink: the warn bell point is a drop of ink below the stroke', () => {
-    const { stage, root } = mountInk(singleAt(OPENING, 60));
-    const drop = root.querySelector('.dt-warnline');
-    const cs = getComputedStyle(drop);
-    assert.ok(!drop.hidden);
-    assert.near(px(cs.width), px(cs.height), 1, 'round');
-    assert.ok(px(cs.width) < 0.08 * root.getBoundingClientRect().height, 'a drop, not a bar: ' + cs.width);
-    assert.equal(cs.backgroundColor, resolve(root, '--ink'));
-    const d = drop.getBoundingClientRect(), f = root.querySelector('.dt-field').getBoundingClientRect();
-    assert.ok(d.top >= f.bottom - 1, 'under the stroke, on the paper');
-    // Its centre sits at the warn point, as the hairline did: 30 s of 3:00 from the seat.
-    const box = root.getBoundingClientRect();
-    assert.near((d.left + d.width / 2 - box.left) / box.width, 30 / 180, 0.01);
-    stage.destroy();
-  });
-
-  // Spec §2.1: two strokes face each other, the speaking side's is the dense one; dimming the paper would grey it. The
-  // waiting one is 淡墨: the same ink at .42 with the paper through it (the field's opacity, so the filtered stroke is
-  // not drawn again), and its brush lifted (.7 high); --field-ground says what its digits lie on.
-  DT.test('theme ink: in free debate the speaking side\'s stroke is dense and the other one pale', () => {
-    const { stage, root } = mountInk(dualAt(30));
-    const half = side => root.querySelector('.dt-half[data-side="' + side + '"]');
-    const con = half('con'), pro = half('pro');
-    assert.ok(con.hasAttribute('data-active'));
-    assert.equal(getComputedStyle(pro).filter, 'none', 'the waiting half keeps its paper');
-    const conField = con.querySelector('.dt-half-field'), proField = pro.querySelector('.dt-half-field');
-    assert.equal(resolve(conField, '--ink-stroke'), resolve(con, '--con'), 'the speaking stroke is the full colour');
-    assert.equal(resolve(proField, '--ink-stroke'), resolve(pro, '--pro'), 'the waiting one too, diluted by its opacity');
-    assert.near(px(getComputedStyle(conField).opacity), 1, 0.001, 'speaking: dense');
-    assert.near(px(getComputedStyle(proField).opacity), 0.42, 0.001, 'waiting: 淡墨');
-    assert.equal(getComputedStyle(proField).scale, '1 0.7', 'waiting: the brush lifted');
-    const dense = resolve(con, '--side-color'), pale = resolve(pro, '--field-ground');
-    assert.ok(lum(pale) > lum(resolve(pro, '--pro')) * 1.5, 'the waiting stroke is diluted: ' + pale);
-    // The digits on each stroke stay readable.
-    [[con, dense], [pro, pale]].forEach(([h, ground]) => {
-      const digits = getComputedStyle(h.querySelector('.dt-digits-on')).color;
-      assert.ok(contrast(digits, ground) >= 3, h.dataset.side + ' ' + digits + ' on ' + ground + ' ' + contrast(digits, ground).toFixed(2));
-    });
-    // Each stroke starts at its own seat, the outer edge of the screen.
-    assert.equal(ink(proField).backgroundPositionX.split(',')[0].trim(), '0%');
-    assert.equal(ink(conField).backgroundPositionX.split(',')[0].trim(), '100%');
-    stage.destroy();
-  });
-
-  DT.test('theme ink: seats swapped, the strokes still start from each side\'s own edge', () => {
-    const { stage, root } = mountInk(dualAt(30, 'right'));
-    const pos = side => ink(root.querySelector('.dt-half[data-side="' + side + '"] .dt-half-field')).backgroundPositionX.split(',')[0].trim();
-    assert.equal(pos('pro'), '100%');
-    assert.equal(pos('con'), '0%');
-    stage.destroy();
-  });
-
-  // Overtime (main spec §5.3): the digits change colour, as in every theme: ink's ochre gold, not its black (a black
-  // +0:07 reads as a calm clock from the back of a lit hall) and not the seal's red (正方's cinnabar while 反方 runs
-  // over); and a large seal stamps 超时 beside them.
-  DT.test('theme ink: overtime turns the digits ochre gold and stamps a 超时 seal', () => {
+  // Overtime: the digits turn an ochre deep enough for the ink thinned behind them then, and 超时 is stamped beside them.
+  DT.test('theme ink: overtime turns the digits ochre and stamps a 超时 seal', () => {
     const calm = mountInk(singleAt(OPENING, 60));
     const none = pseudo(calm.root.querySelector('.dt-deco-over'), '::after');
     assert.ok(none.content === 'none' || none.display === 'none', 'no stamp before time is up');
     calm.stage.destroy();
     const { stage, root } = mountInk(singleAt(OPENING, 187));
+    settle(root);   // the digits' colour eases in as a stage opens in overtime
     assert.equal(root.dataset.phase, 'over');
     const digits = getComputedStyle(root.querySelector('.dt-clock[data-clock="main"] .dt-digits')).color;
-    assert.equal(digits, resolve(root, '--accent'));
+    assert.equal(digits, resolve(root, '--over-ink'));
     assert.ok(digits !== resolve(root, '--ink'), 'not the calm ink');
-    assert.ok(contrast(digits, resolve(root, '--ground')) >= 3, 'reads on the paper: ' + contrast(digits, resolve(root, '--ground')).toFixed(2));
+    const hue = rgbOf(digits);
+    assert.ok(hue[0] > hue[1] && hue[1] > hue[2], 'ochre: ' + hue);
+    ['--side-color', '--ink-water-deep', '--ink-water-top'].forEach(g =>
+      assert.ok(contrast(digits, resolve(root, g)) >= 3, g + ': ' + contrast(digits, resolve(root, g)).toFixed(2)));
     const stamp = pseudo(root.querySelector('.dt-deco-over'), '::after');
     assert.equal(stamp.content, '"超时"');
-    assert.ok(stamp.display !== 'none');
     assert.ok(px(stamp.fontSize) >= 0.06 * root.getBoundingClientRect().height, 'a large stamp: ' + stamp.fontSize);
-    const s = root.querySelector('.dt-deco-over').getBoundingClientRect();
-    const d = root.querySelector('.dt-clock[data-clock="main"] .dt-digits').getBoundingClientRect();
-    assert.ok(s.width > 0 && d.width > 0);
+    assert.ok(/#dt-ink-seal/.test(stamp.filter), stamp.filter);
     stage.destroy();
   });
 
-  // Spec §1.5: the speaking side shows in every state. When the time runs out the ink runs out at the seat: a short
-  // dry stub of the side's colour stays at its edge, clear of the digit row (the red seal alone would read as 正方's),
-  // and at 16:9 clear of the overtime "+" too, which hangs outside the digits' box (stage.css). On a stage squarer than
-  // about 1.42:1 the "+" of +M:SS reaches into the stub when the speaking seat is on the left: there it is drawn above
-  // it.
-  DT.test('theme ink: in overtime a dry stub of the speaking side\'s ink stays at its seat', () => {
-    // What the stub keeps clear of: the digits' box, and the sign's once it has its "+".
-    const glyphs = clock => {
-      const d = clock.querySelector('.dt-digits').getBoundingClientRect(), g = clock.querySelector('.dt-sign').getBoundingClientRect();
-      return g.width ? { left: Math.min(d.left, g.left), right: Math.max(d.right, g.right) } : d;
-    };
-    [[OPENING, 'left', 'left', '--pro'], [OPENING, 'right', 'right', '--pro'], [REBUTTAL, 'left', 'right', '--con'], [REBUTTAL, 'right', 'left', '--con']].forEach(([name, seat, from, color]) => {
-      [179, 187].forEach(secs => {
-        const { stage, root } = mountInk(singleAt(name, secs, seat));
-        root.classList.remove('is-entering');
-        const where = name + ' / ' + seat + ' @' + secs;
-        const field = root.querySelector('.dt-field');
-        const box = root.getBoundingClientRect(), S = box.width;
-        assert.equal(getComputedStyle(field).opacity, '1', where);
-        assert.equal(resolve(field, '--ink-stroke'), resolve(root, color), where);
-        const onScreen = from === 'left' ? tipX(field, from) - box.left : box.right - tipX(field, from);
-        assert.ok(onScreen >= 0.05 * S && onScreen <= 0.1 * S, where + ': stub ' + onScreen);
-        const d = glyphs(root.querySelector('.dt-clock[data-clock="main"]'));
-        const clear = from === 'left' ? d.left - tipX(field, from) : tipX(field, from) - d.right;
-        assert.ok(clear > 0.09 * S, where + ': clear of the digits and their sign by ' + clear);
-        stage.destroy();
-      });
-    });
-    // 5:4, the speaking seat on the left: the "+" is drawn above the field. A hit test lists the boxes at a point in the
-    // order they paint, top first; the field takes no pointer events (stage.css), so it is given them for the test.
-    [[OPENING, 'left'], [REBUTTAL, 'right']].forEach(([name, seat]) => {
-      const { stage, root } = mountInk(singleAt(name, 187, seat), 1280, 1024);
-      root.classList.remove('is-entering');
-      const where = name + ' / ' + seat + ' at 1280x1024';
-      const field = root.querySelector('.dt-field'), sign = root.querySelector('.dt-clock[data-clock="main"] .dt-sign');
-      assert.equal(sign.textContent, '+', where);
-      scrollTo(0, Math.max(0, sign.getBoundingClientRect().top + scrollY - innerHeight / 2));
-      const g = sign.getBoundingClientRect();
-      field.style.pointerEvents = 'auto';
-      const at = document.elementsFromPoint((g.left + g.right) / 2, (g.top + g.bottom) / 2);
-      scrollTo(0, 0);
-      const over = at.findIndex(el => el.classList.contains('dt-sign')), under = at.indexOf(field);
-      assert.ok(under >= 0, where + ': the sign lies on the field');
-      assert.ok(over >= 0 && over < under, where + ': the sign is drawn above the field (' + over + ' vs ' + under + ')');
-      stage.destroy();
-    });
+  // I5: the 超时 seal is pressed on the second bell (320 ms). It fills backwards: a held fill would keep the filtered
+  // seal on a layer of its own after the press.
+  DT.test('theme ink: the 超时 seal is pressed on the second bell', () => {
+    const { stage, root } = mountInk(singleAt(OPENING, 187));
+    const seal = pseudo(root.querySelector('.dt-deco-over'), '::after');
+    assert.equal(seal.animationName, 'dt-stamp');
+    assert.equal(seal.animationDuration, '0.3s');
+    assert.equal(seal.animationDelay, '0.32s');
+    assert.equal(seal.animationFillMode, 'backwards');
+    stage.destroy();
   });
 
-  // 「暂停」 stands at .8 on the paper; emptied on resume it keeps its word (stage.css :empty::before) while it fades,
+  // 「暂停」 stands at .8 under the digits; emptied on resume it keeps its word (stage.css :empty::before) while it fades,
   // so it must still fade to 0 and not stay on screen.
-  DT.test('theme ink: 暂停 fades out on resume, it does not stay on the paper', () => {
+  DT.test('theme ink: 暂停 fades out on resume, it does not stay in the water', () => {
     let s = E.toggle(session(OPENING), T0);
     const { stage, root } = mountInk(E.view(s, T0 + 1000));
     root.classList.remove('is-entering');
@@ -443,181 +343,338 @@
     stage.destroy();
   });
 
-  // ---- motion ----
+  // ---- the tank: the surface, the front, the tick ----
 
-  // 落笔 (spec §2.1 从这一方的席位一侧落笔): the stroke stands whole from the first frame under a sheet of the same
-  // paper (the stage's ::after, over the digits too), whose edge, a brush's head, is drawn back from the seat. Only the
-  // sheet's mask moves; the stroke itself has no entrance of its own.
-  DT.test('theme ink: a new stage\'s stroke is laid from its seat, under a sheet of its paper over the stroke\'s band', () => {
-    [[OPENING, 'left', 'l'], [REBUTTAL, 'left', 'r'], [OPENING, 'right', 'r'], [REBUTTAL, 'right', 'l']].forEach(([name, seat, dir]) => {
-      const { stage, root } = mountInk(singleAt(name, 0, seat));
-      const where = name + ' / ' + seat;
-      assert.ok(root.classList.contains('is-entering'), where);
-      const sheet = getComputedStyle(root, '::after'), field = root.querySelector('.dt-field');
-      assert.equal(sheet.display, 'block', where);
-      assert.equal(sheet.zIndex, '6', where + ': over the digits');
-      assert.ok(/data:image\/svg\+xml/.test(sheet.maskImage), where + ': the brush head ' + sheet.maskImage.slice(0, 40));
-      assert.equal(sheet.animationName, 'dt-ink-lay-' + dir, where);
-      assert.equal(getComputedStyle(field).animationName, 'none', where + ': the stroke stands whole');
-      // The head covers the stroke's band, and no more.
-      const box = root.getBoundingClientRect(), f = field.getBoundingClientRect();
-      assert.near(px(sheet.maskSize.split(' ')[1]), f.height, 1, where + ': as high as the stroke');
-      assert.near(px(sheet.maskPosition.split(' ').pop()), f.top - box.top, 1, where + ': at its height');
-      root.classList.remove('is-entering');
-      assert.equal(getComputedStyle(root, '::after').display, 'none', where + ': gone with the entrance');
+  // Spec: the front's depth is the time used, linearly: just under the surface at the start, on the bed at 0.
+  DT.test('theme ink: the painter\'s ink reaches as deep as the time used, and comes back up when time is given back', () => {
+    if (!hasGL()) return;
+    const depths = [0.15, 0.4, 0.65, 0.9].map(u => {
+      const { stage, root } = still(singleAt(OPENING, u * 180), 640, 360);
+      const pic = picture(root);
+      const y = lowestInk(pic, 0, pic.W);
       stage.destroy();
+      assert.ok(y >= frontAt(u) - 0.04 && y <= frontAt(u) + 0.09, 'used ' + u + ': the ink ends at ' + y.toFixed(3) + ', its front ' + frontAt(u).toFixed(3));
+      return y;
     });
-  });
-
-  // The brush lands behind the seat's edge and ends past the far edge, where its sheet hides nothing.
-  DT.test('theme ink: the brush starts behind the seat and ends past the far edge', () => {
-    const { stage, root } = mountInk(singleAt(OPENING, 0, 'left'));
-    const W = root.getBoundingClientRect().width, u = root.querySelector('.dt-field').getBoundingClientRect().height / 48;
-    const lay = anim(root, 'dt-ink-lay-l')[0];
-    assert.ok(lay, 'the lay runs');
-    assert.equal(lay.effect.getTiming().duration, 560, 'with the stage\'s other entrances');
-    lay.pause();
-    lay.currentTime = 0;
-    const x0 = px(getComputedStyle(root, '::after').maskPosition.split(' ')[0]);
-    assert.ok(x0 + 20 * u <= 0, 'its belly behind the seat at first: ' + (x0 + 20 * u));
-    lay.currentTime = 560;
-    const x1 = px(getComputedStyle(root, '::after').maskPosition.split(' ')[0]);
-    assert.ok(x1 + 11 * u >= W, 'its last hair past the far edge at the end: ' + (x1 + 11 * u) + ' of ' + W);
+    for (let i = 1; i < depths.length; i++) assert.ok(depths[i] > depths[i - 1], 'deeper as the time goes: ' + depths.join(', '));
+    // Undo and ↑↓ give time back: the same stage shown at less time used is the picture of that moment, not of the
+    // deepest it has been.
+    const fresh = still(singleAt(OPENING, 72), 640, 360);
+    const want = picture(fresh.root).data;
+    fresh.stage.destroy();
+    const { stage, root } = still(singleAt(OPENING, 150), 640, 360);
+    stage.update(singleAt(OPENING, 72));
+    const got = picture(root).data;
     stage.destroy();
+    let diff = 0;
+    for (let i = 0; i < want.length; i++) diff = Math.max(diff, Math.abs(want[i] - got[i]));
+    assert.ok(diff <= 1, 'the front is back where 1:48 puts it: ' + diff);
   });
 
-  // In free debate each half has a sheet of its own over its stroke's band, laid from its own seat.
-  DT.test('theme ink: in free debate each stroke is laid from its own seat, under its own sheet', () => {
-    ['left', 'right'].forEach(seat => {
-      const { stage, root } = mountInk(dualAt(30, seat));
-      root.querySelectorAll('.dt-half').forEach((h, i) => {
-        const where = seat + ' ' + h.dataset.side, sheet = getComputedStyle(h, '::after'), f = getComputedStyle(h.querySelector('.dt-half-field'));
-        assert.equal(sheet.display, 'block', where);
-        assert.equal(sheet.animationName, i === 0 ? 'dt-ink-lay-l' : 'dt-ink-lay-r', where);
-        assert.near(px(sheet.top), px(f.top), 1, where + ': over the stroke');
-        assert.near(px(sheet.height), px(f.height), 1, where);
-        assert.ok(px(sheet.zIndex) > px(getComputedStyle(h.querySelector('.dt-clock')).zIndex), where + ': over the digits');
-      });
-      stage.destroy();
-    });
-  });
-
-  // Stills: a frozen demo and a thumbnail show the stroke laid, the seal pressed and the circle drawn, with nothing over
-  // them and no layer for the press.
-  DT.test('theme ink: stills and thumbnails show the stroke laid, with no sheet, press or drawing', () => {
-    const url = window.location.href;
+  // A card whose WebGL cannot build the shader gives its context back at once, rather than holding one of the
+  // browser's few live contexts until the canvas is collected; the stylesheet's column takes over.
+  DT.test('theme ink: a shader that will not build gives its WebGL context back', () => {
+    if (!hasGL()) return;
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    let lost = 0, made = 0;
+    HTMLCanvasElement.prototype.getContext = function (kind) {
+      const gl = getContext.apply(this, arguments);
+      if (!gl || !/webgl/.test(kind)) return gl;
+      made++;
+      gl.getShaderParameter = () => false;
+      gl.getShaderInfoLog = () => 'refused for the test';
+      const ext = gl.getExtension.bind(gl);
+      gl.getExtension = name => {
+        const e = ext(name);
+        if (name !== 'WEBGL_lose_context' || !e) return e;
+        return { loseContext: () => { lost++; e.loseContext(); }, restoreContext: () => e.restoreContext() };
+      };
+      return gl;
+    };
     try {
-      history.replaceState(null, '', window.location.pathname + '?demo=single&frozen=1');
-      [singleAt(OPENING, 60), dualAt(30), singleAt(OPENING, 187), E.view(E.toggle(session('评委打分'), T0), T0 + 5000)].forEach(view => {
-        const { stage, root } = mountInk(view);
-        const where = root.dataset.kind + ' ' + root.dataset.phase;
-        assert.ok(root.hasAttribute('data-still') && root.classList.contains('is-entering'), where);
-        assert.equal(getComputedStyle(root, '::after').display, 'none', where + ': no sheet');
-        root.querySelectorAll('.dt-half').forEach(h => assert.equal(getComputedStyle(h, '::after').display, 'none', where + ' half'));
-        assert.equal(pseudo(root.querySelector('.dt-deco-over'), '::after').animationName, 'none', where + ': no press');
-        assert.equal(pseudo(root.querySelector('.dt-clock[data-clock="main"]'), '::before').animationName, 'none', where + ': no drawing');
+      quietly(() => {
+        const { stage, root } = mountInk(singleAt(OPENING, 60));
+        settle(root);
+        assert.ok(made > 0, 'the painter asked for WebGL');
+        assert.equal(root.querySelector('.dt-canvas'), null, 'the painter stopped');
+        assert.ok(!root.hasAttribute('data-painter'), 'no live painter');
+        assert.ok(lost >= 1, 'its context was given back');
         stage.destroy();
       });
-    } finally { history.replaceState(null, '', url); }
-    const box = document.getElementById('sandbox');
-    box.innerHTML = '<div class="dt-stage-host" style="width:240px;height:135px"></div>';
-    const t = R.mount(box.firstChild, { thumbnail: true });
-    t.update(singleAt(OPENING, 0));
-    const root = box.querySelector('.dt-stage');
-    assert.ok(!root.classList.contains('is-entering'));
-    assert.equal(getComputedStyle(root, '::after').display, 'none', 'thumbnail');
-    t.destroy();
+    } finally { HTMLCanvasElement.prototype.getContext = getContext; }
   });
 
-  // I3: a half's field keeps one size, the speaking column's (58cqw and its tail off screen), and is scaled with its
-  // column on the divider's own spring, so a switch draws no filtered stroke again. Its layer is declared for its fade
-  // too: declared for transform alone, it is rasterized again whenever its opacity leaves 1 or comes back to it.
-  DT.test('theme ink: the half strokes keep their size through a switch and are scaled with their columns', () => {
-    let s = E.floor(session('自由辩论'), 'pro', T0);
-    const { stage, root } = mountInk(E.view(s, T0 + 10000));
-    settle(root);
-    const S = root.getBoundingClientRect().width;
-    const fields = () => Array.from(root.querySelectorAll('.dt-half')).map(h => [h, h.querySelector('.dt-half-field')]);
-    fields().forEach(([h, f]) => {
-      const layer = getComputedStyle(f).willChange;
-      assert.ok(/transform/.test(layer) && /opacity/.test(layer), h.dataset.side + ': will-change ' + layer);
+  // Without WebGL the stylesheet draws a plain column of the side's ink from the surface down to the front (--used),
+  // so the room still reads the time and who has the floor.
+  DT.test('theme ink: without WebGL a column of ink runs from the surface down to the front', () => {
+    withoutWebGL(() => {
+      [0, 1 / 3, 2 / 3, 1].forEach(u => [[OPENING, 'left', '--pro'], [REBUTTAL, 'right', '--con']].forEach(([name, seat, side]) => {
+        const secs = name === OPENING ? 180 : 120;
+        const { stage, root } = mountInk(singleAt(name, u * secs, seat));
+        settle(root);
+        const where = name + ' / ' + seat + ' @' + u.toFixed(2);
+        assert.equal(root.querySelector('.dt-canvas'), null, where + ': no canvas');
+        assert.ok(!root.hasAttribute('data-painter'), where + ': no painter');
+        const field = root.querySelector('.dt-field'), cs = getComputedStyle(field);
+        assert.ok(cs.display !== 'none' && cs.visibility === 'visible', where + ': the column shows');
+        assert.ok(/gradient/.test(cs.backgroundImage), where + ': ' + cs.backgroundImage.slice(0, 60));
+        assert.deepEqual(rgbOf(firstColour(cs.backgroundImage)), rgbOf(resolve(root, side)), where + ': in its side\'s ink');
+        const b = root.getBoundingClientRect(), f = field.getBoundingClientRect();
+        assert.near((f.top - b.top) / b.height, SURFACE, 0.005, where + ': from the surface');
+        assert.near((f.bottom - b.top) / b.height, frontAt(u) + 0.02, 0.005, where + ': to the front and its soft edge');
+        assert.ok(f.left <= b.left + 0.5 && f.right >= b.right - 0.5, where + ': across the tank');
+        stage.destroy();
+      }));
     });
-    const check = when => fields().forEach(([h, f]) => {
-      assert.near(f.offsetWidth, 0.61 * S, 1.5, when + ' ' + h.dataset.side + ': one size');
-      assert.near(scaleOf(f), h.getBoundingClientRect().width / (0.58 * S), 0.01, when + ' ' + h.dataset.side + ': scaled with its column');
+    // Where the painter draws, the column is its job.
+    if (hasGL()) {
+      const { stage, root } = mountInk(singleAt(OPENING, 60));
+      assert.equal(root.getAttribute('data-painter'), 'live');
+      assert.equal(getComputedStyle(root.querySelector('.dt-field')).visibility, 'hidden');
+      stage.destroy();
+    }
+  });
+
+  // Spec: the 30 s point is a tick on the tank's wall at the seat, at the depth the front reaches with 30 s left. It is
+  // the stylesheet's, so it shows with or without WebGL.
+  DT.test('theme ink: the 30 s point is a tick on the seat\'s wall at the depth of 30 s left', () => {
+    const check = () => [[OPENING, 'left', 'left'], [OPENING, 'right', 'right'], [REBUTTAL, 'left', 'right'], [REBUTTAL, 'right', 'left']].forEach(([name, seat, wall]) => {
+      const { stage, root } = mountInk(singleAt(name, 20, seat));
+      settle(root);
+      const where = name + ' / ' + seat;
+      const tick = root.querySelector('.dt-warnline');
+      assert.ok(!tick.hidden && getComputedStyle(tick).display !== 'none', where + ': shown');
+      const b = root.getBoundingClientRect(), r = tick.getBoundingClientRect();
+      if (wall === 'left') assert.near(r.left, b.left, 0.5, where + ': on the left wall');
+      else assert.near(r.right, b.right, 0.5, where + ': on the right wall');
+      assert.ok(r.width > 0 && r.width < 0.06 * b.width && r.height < 0.02 * b.height, where + ': a short tick ' + r.width + 'x' + r.height);
+      const warnAt = px(root.style.getPropertyValue('--warn-at'));   // the share of the time left at the bell
+      assert.near(warnAt, 30 / (name === OPENING ? 180 : 120), 1e-4);
+      assert.near(((r.top + r.bottom) / 2 - b.top) / b.height, frontAt(1 - warnAt), 0.003, where + ': at the depth of 30 s left');
+      stage.destroy();
     });
-    check('before');
-    const spring = getComputedStyle(root.querySelector('.dt-half'));
-    assert.ok(/--ink-col/.test(spring.transitionProperty), spring.transitionProperty);
-    s = E.floor(s, 'con', T0 + 20000);
-    stage.update(E.view(s, T0 + 20000));
-    [0, 130, 260, 400, 520].forEach(ms => { seat(root, ms); check('at ' + ms); });
+    check();
+    withoutWebGL(check);
+  });
+
+  // ---- the painter's water ----
+
+  // Spec 确定性: the picture is a function of the view and the stage's size, so the projector and the console's preview
+  // show one tank; and a clock that stands still is still water, drawn once.
+  DT.test('theme ink: the same view is the same water, and a standing clock is not drawn again', () => {
+    if (!hasGL()) return;
+    const a = still(dualAt(70), 640, 360), pa = picture(a.root).data;
+    const b = still(dualAt(70), 640, 360), pb = picture(b.root).data;
+    a.stage.destroy(); b.stage.destroy();
+    let same = pa.length === pb.length;
+    for (let i = 0; same && i < pa.length; i++) same = pa[i] === pb[i];
+    assert.ok(same, 'two stages, one view: one picture');
+    const draws = [];
+    const protos = [window.WebGLRenderingContext, window.WebGL2RenderingContext].filter(Boolean).map(C => C.prototype);
+    const saved = protos.map(p => p.drawArrays);
+    protos.forEach((p, i) => { p.drawArrays = function () { draws.push(1); return saved[i].apply(this, arguments); }; });
+    let now = 50000;
+    DT.clock.set(() => now);
+    try {
+      const paused = E.toggle(E.toggle(session(OPENING), T0), T0 + 40000);   // ran 40 s, then paused
+      const { stage, root } = mountInk(E.view(paused, T0 + 40000));
+      assert.equal(root.getAttribute('data-painter'), 'live');
+      now += 1000; stage.update(E.view(paused, T0 + 41000));   // the drops have fallen in
+      now += 1000; stage.update(E.view(paused, T0 + 42000));   // the layout has settled
+      const before = draws.length;
+      for (let i = 0; i < 5; i++) { now += 100; stage.update(E.view(paused, T0 + 42000 + i * 100)); }
+      assert.equal(draws.length, before, 'paused: nothing drawn');
+      const running = E.toggle(paused, T0 + 43000);
+      for (let i = 1; i <= 3; i++) { now += 100; stage.update(E.view(running, T0 + 43000 + i * 100)); }
+      assert.equal(draws.length, before + 3, 'running: the water moves');
+      stage.destroy();
+    } finally { protos.forEach((p, i) => { p.drawArrays = saved[i]; }); DT.clock.reset(); }
+  });
+
+  // Spec 入场: a new stage's drops fall in from over the surface in its first 560 ms (wall time); a still never shows it.
+  DT.test('theme ink: a new stage\'s drops fall in from over the surface, and a still has none in the air', () => {
+    if (!hasGL()) return;
+    const air = pic => { let n = 0; pic.each([0, pic.H * (SURFACE - 0.1), pic.W, pic.H * (SURFACE - 0.008)], c => { if (warmth(c) > 25) n++; }); return n; };
+    let now = 80000;
+    DT.clock.set(() => now);
+    try {
+      const view = singleAt(OPENING, 1);
+      const { stage, root } = mountInk(view, 640, 360);
+      assert.ok(root.classList.contains('is-entering'));
+      assert.ok(air(picture(root)) > 0, 'drops over the surface as the stage comes in');
+      now += 700;
+      stage.update(singleAt(OPENING, 1.7));
+      assert.equal(air(picture(root)), 0, 'in the water by 560 ms');
+      stage.destroy();
+    } finally { DT.clock.reset(); }
+    const s = still(singleAt(OPENING, 1), 640, 360);
+    assert.equal(air(picture(s.root)), 0, 'a still is landed');
+    s.stage.destroy();
+  });
+
+  // Spec 铃: a bell drops fresh ink into the speaking side that sinks to the front and melts into it, its age the time
+  // the clock has used since the bell, so it is the same drop after an undo or on the projector; without the painter a
+  // ripple round the digits is the bell.
+  DT.test('theme ink: a bell\'s drop comes and goes with the clock\'s time, and the ripple stands in without WebGL', () => {
+    if (hasGL()) {
+      let now = 90000;
+      DT.clock.set(() => now);
+      try {
+        const run = E.toggle(session(OPENING), T0);
+        const at = secs => E.view(run, T0 + secs * 1000);
+        const make = () => {
+          const box = document.getElementById('sandbox').appendChild(document.createElement('div'));
+          box.className = 'dt-stage-host';
+          box.style.cssText = 'width:640px;height:360px';
+          const h = R.mount(box);
+          h.update(at(149));
+          return { h, root: box.querySelector('.dt-stage') };
+        };
+        document.getElementById('sandbox').innerHTML = '';
+        const rung = make(), quiet = make();
+        const both = secs => { now += 1000; [rung, quiet].forEach(s => s.h.update(at(secs))); return [rung, quiet].map(s => picture(s.root).data); };
+        both(149.5);   // the drops have fallen in
+        rung.h.pulse({ type: 'warn', clock: 'main', key: 'w30', at: T0 + 150000 });
+        const differ = ([a, b]) => { let d = 0; for (let i = 0; i < a.length; i++) d = Math.max(d, Math.abs(a[i] - b[i])); return d; };
+        assert.ok(differ(both(150.5)) > 20, 'a drop falls');
+        assert.ok(differ(both(152.5)) <= 1, 'and has melted into the front 2 s on');
+        assert.ok(differ(both(150.5)) > 20, 'the clock taken back, the drop is where it was then');
+        assert.ok(differ(both(148)) <= 1, 'and before the bell there is none');
+        const ring = rung.root.querySelector('.dt-ring');
+        assert.ok(ring && getComputedStyle(ring).visibility === 'hidden', 'the drop is the bell: the ripple stands aside');
+        // A break has no speaking side and no drop: its end bell is the ripple, painter or not.
+        const b = mountInk(breakAt(29));
+        b.stage.pulse({ type: 'end', clock: 'main', key: 'end' });
+        assert.equal(getComputedStyle(b.root.querySelector('.dt-ring')).visibility, 'visible', "a break's bell is seen");
+        b.stage.destroy();
+        [rung, quiet].forEach(s => s.h.destroy());
+      } finally { DT.clock.reset(); }
+    }
+    withoutWebGL(() => {
+      const { stage, root } = mountInk(singleAt(OPENING, 150));
+      settle(root);
+      stage.pulse({ type: 'warn', clock: 'main', key: 'w30' });
+      const ring = root.querySelector('.dt-clock[data-clock="main"] .dt-ring');
+      assert.ok(ring, 'a ring');
+      const cs = getComputedStyle(ring);
+      assert.equal(cs.visibility, 'visible', 'seen where there is no painter');
+      assert.equal(cs.animationName, 'dt-ink-ripple');
+      assert.equal(cs.animationDuration, '1.1s');
+      assert.ok(px(cs.borderTopWidth) > 0, 'a ripple\'s line');
+      stage.destroy();
+    });
+  });
+
+  // Spec 超时: a thin thread of the accent's ink keeps falling from the surface at the speaking seat.
+  DT.test('theme ink: overtime is a thread of ochre ink falling at the speaking seat', () => {
+    if (!hasGL()) return;
+    [['left', 'right'], ['right', 'left']].forEach(([seat, wall]) => {
+      const { stage, root } = still(singleAt(CLOSING, 217, seat), 960, 540);   // 反方: its seat is the one 正方 is not on
+      const pic = picture(root);
+      const ochre = (x0, x1) => { let n = 0; pic.each([x0, pic.H * (SURFACE + 0.02), x1, pic.H * 0.9], c => { if (c[0] - c[2] > 40 && c[1] - c[2] > 15) n++; }); return n; };
+      const near = wall === 'left' ? ochre(0, pic.W * 0.15) : ochre(pic.W * 0.85, pic.W);
+      const far = wall === 'left' ? ochre(pic.W * 0.85, pic.W) : ochre(0, pic.W * 0.15);
+      assert.ok(near > 100 && far === 0, seat + ': at the ' + wall + ' wall: ' + near + ' / ' + far);
+      stage.destroy();
+    });
+    const calm = still(singleAt(CLOSING, 100), 960, 540);
+    const pic = picture(calm.root);
+    let n = 0;
+    pic.each([0, 0, pic.W, pic.H], c => { if (c[0] - c[2] > 40 && c[1] - c[2] > 15) n++; });
+    assert.equal(n, 0, 'none before the time is up');
+    calm.stage.destroy();
+  });
+
+  // ---- free debate ----
+
+  // Spec 自由辩: each half is a column of water of its own, its own ink sinking with its own clock; the waiting side's
+  // ink is paler, so the speaker shows at a glance.
+  DT.test('theme ink: in free debate each half is its own column of its own ink, the speaker\'s the denser', () => {
+    ['left', 'right'].forEach(seat => {
+      const view = dualAt(130, seat);   // 反方 speaking, 110 s used; 正方 waiting, 20 s used
+      if (hasGL()) {
+        const { stage, root } = still(view);
+        const pic = picture(root);
+        const box = root.getBoundingClientRect();
+        const half = side => {
+          const r = root.querySelector('.dt-half[data-side="' + side + '"]').getBoundingClientRect();
+          return [r.left - box.left + 0.03 * pic.H, pic.H * (SURFACE + 0.005), r.right - box.left - 0.03 * pic.H, pic.H * 0.9];
+        };
+        const pro = half('pro'), con = half('con');
+        const water = warmth(pic.at(pic.W / 2, pic.H * 0.995));
+        assert.ok(pic.mean(pro, warmth) > water + 6, seat + ': 正方\'s half is cinnabar: ' + pic.mean(pro, warmth).toFixed(1) + ' vs ' + water);
+        assert.ok(pic.mean(con, warmth) < water - 2, seat + ': 反方\'s half is indigo: ' + pic.mean(con, warmth).toFixed(1));
+        const dark = r => pic.mean([r[0], r[1], r[2], pic.H * (SURFACE + 0.12)], c => 1 - lumOf(c));
+        assert.ok(dark(con) > dark(pro) * 1.4, seat + ': the speaker\'s ink is the denser: ' + dark(con).toFixed(3) + ' vs ' + dark(pro).toFixed(3));
+        // Each sinks by its own clock: 反方 (110 s of 4:00) well below 正方 (20 s).
+        const lowPro = lowestInk(pic, pro[0], pro[2]), lowCon = lowestInk(pic, con[0], con[2]);
+        assert.ok(lowCon > lowPro + 0.15, seat + ': ' + lowCon.toFixed(3) + ' below ' + lowPro.toFixed(3));
+        assert.near(lowCon, frontAt(110 / 240) + 0.025, 0.065, seat + ': 反方\'s front');
+        stage.destroy();
+      }
+      withoutWebGL(() => {
+        const { stage, root } = mountInk(view);
+        settle(root);
+        const f = side => root.querySelector('.dt-half[data-side="' + side + '"] .dt-half-field');
+        const b = root.getBoundingClientRect();
+        const bottom = side => (f(side).getBoundingClientRect().bottom - b.top) / b.height;
+        assert.near(bottom('con'), frontAt(110 / 240) + 0.02, 0.006, seat + ': 反方\'s column to its front');
+        assert.near(bottom('pro'), frontAt(20 / 240) + 0.02, 0.006, seat + ': 正方\'s to its own');
+        assert.ok(px(getComputedStyle(f('pro')).opacity) < px(getComputedStyle(f('con')).opacity), seat + ': the waiting column paler');
+        stage.destroy();
+      });
+    });
+  });
+
+  // The halves have no glass between them and no floor line; the waiting half is not greyed by the shared filter (its
+  // ink pales instead), so its digits stay as crisp as the speaker's.
+  DT.test('theme ink: the halves part without glass, and the waiting half keeps crisp digits', () => {
+    const { stage, root } = mountInk(dualAt(30));
     settle(root);
-    check('after');
+    root.querySelectorAll('.dt-half').forEach(h => {
+      assert.equal(getComputedStyle(h).boxShadow, 'none', h.dataset.side + ': no glass');
+      assert.equal(getComputedStyle(h).filter, 'none', h.dataset.side + ': not greyed');
+      assert.equal(getComputedStyle(h).backgroundColor, 'rgba(0, 0, 0, 0)', h.dataset.side + ': the water shows through');
+    });
     stage.destroy();
   });
 
-  // I2: 提笔再落笔 in sequence. The yielding brush lifts at once (0-260 ms), the taking one presses after it (220-520 ms);
-  // the digits on each stroke, their halo and their colon change colour in one step where the stroke under them reads
-  // alike for paper and ink digits: the lifting side's at 130 ms, the pressing side's at 260 ms.
-  DT.test('theme ink: on a switch the yielding brush lifts first and the taking one presses after it, the digits stepping with them', () => {
-    let s = E.floor(session('自由辩论'), 'pro', T0);
-    const { stage, root } = mountInk(E.view(s, T0 + 10000));
-    settle(root);
-    const half = side => root.querySelector('.dt-half[data-side="' + side + '"]');
-    const paper = resolve(root, '--paper-ink'), inkC = resolve(root, '--ink');
-    s = E.floor(s, 'con', T0 + 20000);
-    stage.update(E.view(s, T0 + 20000));
-    const dim = side => px(getComputedStyle(half(side)).getPropertyValue('--dim'));
-    const digits = side => { const on = half(side).querySelector('.dt-digits-on');
-      const c = getComputedStyle(on).color;
-      assert.equal(getComputedStyle(on.querySelector('.dt-colon')).color, c, side + ': the colon with its digits');
-      return c; };
-    const halo = side => getComputedStyle(half(side).querySelector('.dt-digits-on .dt-min')).filter;
-    seat(root, 120);
-    assert.ok(dim('pro') > 0.3 && dim('pro') < 0.6, 'pro lifting: ' + dim('pro'));
-    assert.equal(dim('con'), 1, 'con waits for it');
-    assert.equal(digits('pro'), paper, 'pro still paper digits on its dense stroke');
-    seat(root, 140);
-    assert.equal(digits('pro'), inkC, 'pro: ink digits as its stroke pales');
-    assert.ok(halo('pro').indexOf(paper) >= 0 || /242, 243, 238/.test(halo('pro')), 'with a paper halo: ' + halo('pro'));
-    seat(root, 250);
-    assert.ok(dim('con') < 1 && dim('con') > 0.4, 'con pressing: ' + dim('con'));
-    assert.equal(digits('con'), inkC, 'con still ink digits');
-    seat(root, 270);
-    assert.equal(digits('con'), paper, 'con: paper digits on its dense stroke');
-    seat(root, 520);
-    assert.near(dim('pro'), 1, 0.001); assert.near(dim('con'), 0, 0.001);
-    stage.destroy();
-  });
-
-  // A yield (已放弃): the stroke fades where it lay in 300 ms, keeping its length; --remain, which sets its length, steps
-  // to 0 only once it is gone (eased, it would draw the filtered stroke again on every frame).
-  DT.test('theme ink: a yielded stroke fades where it lay, and its length goes only once it is gone', () => {
+  // Spec 放弃 / 锁定: a yield clears that column's ink in 300 ms; a side out of time keeps its ink on the bed, paler.
+  DT.test('theme ink: a yielded side\'s ink clears in 300 ms; one out of time stays on the bed', () => {
     let s = E.floor(session('自由辩论'), 'pro', T0);
     const { stage, root } = mountInk(E.view(s, T0 + 30000));
     settle(root);
-    const pro = root.querySelector('.dt-half[data-side="pro"]'), field = pro.querySelector('.dt-half-field');
-    const len = () => ink(field).backgroundSize.split(',')[0];
-    const before = len();
     s = E.yieldTime(s, T0 + 30000);
     stage.update(E.view(s, T0 + 30000));
+    const pro = root.querySelector('.dt-half[data-side="pro"]');
     assert.ok(pro.hasAttribute('data-locked'));
-    seat(root, 150);
-    const op = px(getComputedStyle(field).opacity);
-    assert.ok(op > 0.05 && op < 0.95, 'fading: ' + op);
-    assert.equal(len(), before, 'at its length');
-    seat(root, 290);
-    assert.equal(len(), before, 'still at its length');
-    seat(root, 310);
-    assert.equal(px(getComputedStyle(field).opacity), 0);
-    assert.equal(px(getComputedStyle(pro).getPropertyValue('--remain')), 0, 'its time goes once it is gone');
+    const clear = pro.getAnimations().find(a => a.transitionProperty === '--ink-clear');
+    assert.ok(clear, 'the painter\'s --ink-clear runs');
+    assert.equal(clear.effect.getTiming().duration, 300);
+    clear.finish();
+    assert.equal(px(getComputedStyle(pro).getPropertyValue('--ink-clear')), 1);
     stage.destroy();
+    if (!hasGL()) return;
+    // The two kinds of lock, as stills (landed): 正方 yielded at 30 s; 正方 out of time.
+    const yielded = () => E.view(E.yieldTime(E.floor(session('自由辩论'), 'pro', T0), T0 + 30000), T0 + 30000);
+    const out = () => E.view(E.tick(E.toggle(session('自由辩论'), T0), T0 + 241000).session, T0 + 241000);
+    [[yielded, 'yielded'], [out, 'out']].forEach(([view, how]) => {
+      const m = still(view());   // one at a time: a stage taken out of the page has no picture to read
+      assert.ok(m.root.isConnected);
+      const pic = picture(m.root);
+      const box = m.root.getBoundingClientRect(), r = m.root.querySelector('.dt-half[data-side="pro"]').getBoundingClientRect();
+      const x0 = r.left - box.left + 0.03 * pic.H, x1 = r.right - box.left - 0.03 * pic.H;
+      const rows = inkedRows(pic, [x0, pic.H * (SURFACE + 0.01), x1, pic.H * 0.97]);
+      if (how === 'yielded') assert.equal(rows, 0, 'a yield leaves clear water');
+      else {
+        assert.ok(rows > 0.3 * pic.H * 0.6, 'out of time: its ink is still there: ' + rows + ' rows');
+        assert.ok(lowestInk(pic, x0, x1) > BED - 0.05, 'on the bed: ' + lowestInk(pic, x0, x1));
+      }
+      m.stage.destroy();
+    });
   });
 
-  // A half out of time puts 时间到 (已放弃) where its digits were, at the clock's centre: ink hangs a half's 「暂停」 21cqh
-  // lower, under the stroke, and the locked half takes its word back up (ink.css). Only the word's own animations are
-  // finished: a running colon's breath is a loop, and a loop cannot be finished.
+  // A half out of time puts 时间到 (已放弃) where its digits were, at the clock's centre.
   DT.test('theme ink: a locked half\'s word stands where its digits were', () => {
     ['left', 'right'].forEach(seat => [[960, 540], [1024, 768]].forEach(([w, h]) => [['out', '时间到'], ['yield', '已放弃']].forEach(([how, word]) => {
       let s = session('自由辩论', seat), t;
@@ -638,75 +695,112 @@
     })));
   });
 
-  // I6: the bell is ink blooming in the paper behind the digits: a frayed tide line that spreads and fades, drawn once
-  // under the drop's filter; the end bell's second bloom spreads further.
-  DT.test('theme ink: a bell is a bloom of ink behind the digits, not a gold ring', () => {
-    const { stage, root } = mountInk(singleAt(OPENING, 150));
-    settle(root);
-    stage.pulse({ type: 'warn', clock: 'main' });
-    const ring = root.querySelector('.dt-clock[data-clock="main"] .dt-ring');
-    assert.ok(ring, 'a ring');
-    const cs = getComputedStyle(ring);
-    assert.equal(cs.animationName, 'dt-ink-bloom');
-    assert.equal(cs.animationDuration, '1.1s', 'the shared ring\'s length');
-    assert.equal(cs.borderTopWidth, '0px', 'no ruled border');
-    assert.ok(/#dt-ink-drop/.test(getComputedStyle(ring, '::before').filter), 'frayed by the paper\'s fibres');
-    assert.equal(cs.zIndex, '-1', 'under the digits');
-    const second = document.createElement('i');
-    second.className = 'dt-ring'; second.dataset.nth = '2';
-    ring.parentNode.appendChild(second);
-    // Where each bloom stops: its last frame's scale (read before animationend removes the ring).
-    const last = el => { el.getAnimations().forEach(a => a.finish()); return px(getComputedStyle(el).scale); };
-    const a = last(ring), b = last(second);
-    assert.ok(a > 1.2 && a < 1.65, 'the bloom spreads, short of the shared ring\'s reach: ' + a);
-    assert.ok(b > a && b <= 1.65, 'the second spreads further: ' + b);
-    stage.destroy();
-  });
+  // ---- the cards, and the thumbnail ----
 
-  // I5: the 超时 seal is pressed on the second bell (320 ms), once the gold digits are read. It fills backwards: a held
-  // fill would keep the filtered seal on a layer of its own after the press.
-  DT.test('theme ink: the 超时 seal is pressed on the second bell', () => {
-    const { stage, root } = mountInk(singleAt(OPENING, 187));
-    const seal = pseudo(root.querySelector('.dt-deco-over'), '::after');
-    assert.equal(seal.animationName, 'dt-stamp');
-    assert.equal(seal.animationDuration, '0.3s');
-    assert.equal(seal.animationDelay, '0.32s');
-    assert.equal(seal.animationFillMode, 'backwards');
-    stage.destroy();
-  });
-
-  // I9: the break's 圆相 is drawn as the break comes in, once round from where it begins, while the clock rises; at rest
-  // it is the circle as it always was.
-  DT.test('theme ink: the break\'s 圆相 is drawn as the break comes in', () => {
-    const { stage, root } = mountInk(E.view(E.toggle(session('评委打分'), T0), T0 + 5000));
-    const circle = () => pseudo(root.querySelector('.dt-clock[data-clock="main"]'), '::before');
-    assert.equal(circle().animationName, 'dt-ink-enso');
-    assert.equal(circle().animationDelay, '0.14s');
-    assert.equal((circle().maskImage.match(/conic-gradient/g) || []).length, 2, 'the drawing and the circle');
-    root.classList.remove('is-entering');
-    assert.equal(circle().animationName, 'none');
-    assert.equal((circle().maskImage.match(/conic-gradient/g) || []).length, 1, 'the circle alone');
-    stage.destroy();
-  });
-
-  // I10: the speaker's floor line is a dry brush line in their own ink, a fixed length, written out from their seat as
-  // their brush presses and drawn back into it as it lifts; as a free debate comes in it is written after the stroke.
-  DT.test('theme ink: the floor line is a brush line in the speaker\'s ink, written out from their seat', () => {
+  // Spec 卡片: the title card's two drops bloom each on its own side; the break's neutral drop sinks in the middle;
+  // the end card's two inks lie in layers.
+  DT.test('theme ink: the cards: two blooms on their own sides, a grey drop in the middle, two layers at the end', () => {
+    if (!hasGL()) return;
     ['left', 'right'].forEach(seat => {
-      const { stage, root } = mountInk(dualAt(30, seat));
-      root.querySelectorAll('.dt-half').forEach((h, i) => {
-        const line = h.querySelector('.dt-floorline'), cs = getComputedStyle(line), where = seat + ' ' + h.dataset.side;
-        assert.equal(cs.backgroundColor, resolve(h, '--side-color'), where + ': in its ink');
-        assert.near(px(cs.transformOrigin.split(' ')[0]), i === 0 ? 0 : line.offsetWidth, 1, where + ': from its seat');
-        assert.ok(cs.clipPath.indexOf('polygon') === 0, where + ': tapering');
-        if (h.hasAttribute('data-active')) {
-          assert.equal(cs.animationName, 'dt-ink-write', where + ': written as the stage comes in');
-          assert.equal(cs.transitionDelay, '0.22s', where + ': pressed after the other lifts');
-        } else {
-          assert.equal(cs.transitionDuration, '0.26s', where + ': drawn back as it lifts');
-        }
-      });
+      const { stage, root } = still(titleCard(seat));
+      const pic = picture(root);
+      const third = i => [pic.W * i / 3, pic.H * 0.2, pic.W * (i + 1) / 3, pic.H * 0.9];
+      const [l, r] = [pic.mean(third(0), warmth), pic.mean(third(2), warmth)];
+      const warm = seat === 'left' ? l - r : r - l;
+      assert.ok(warm > 10, 'title / ' + seat + ': 正方\'s ink on its own side, 反方\'s on the other: ' + l.toFixed(1) + ' / ' + r.toFixed(1));
+      // and the blooms keep to their sides, clear of the motions in the middle
+      const dark = rr => pic.mean(rr, c => 1 - lumOf(c));
+      const mid = dark([pic.W * 0.42, pic.H * 0.2, pic.W * 0.58, pic.H * 0.9]);
+      assert.ok(mid < dark(third(0)) && mid < dark(third(2)), 'title / ' + seat + ': the middle is the clearest: ' + mid.toFixed(3));
       stage.destroy();
     });
+    {
+      const { stage, root } = still(breakAt(12));
+      const pic = picture(root);
+      const dark = r => pic.mean(r, c => 1 - lumOf(c));
+      const mid = dark([pic.W * 0.4, pic.H * 0.2, pic.W * 0.6, pic.H * 0.7]);
+      const side = dark([0, pic.H * 0.2, pic.W * 0.15, pic.H * 0.7]);
+      assert.ok(mid > side + 0.04, 'break: the drop is in the middle: ' + mid.toFixed(3) + ' vs ' + side.toFixed(3));
+      let tinted = 0;
+      pic.each([pic.W * 0.3, pic.H * 0.2, pic.W * 0.7, pic.H * 0.7], c => { if (Math.abs(warmth(c)) > 30) tinted++; });
+      assert.equal(tinted, 0, 'break: neutral ink, neither side\'s');
+      stage.destroy();
+    }
+    {
+      const { stage, root } = still(endCard(), 960, 540);
+      const pic = picture(root);
+      const band = (y0, y1) => pic.mean([0, pic.H * y0, pic.W * 0.2, pic.H * y1], warmth);
+      const over = band(0.3, 0.45);   // the clear water over the layers
+      assert.ok(band(0.64, 0.76) > over + 6, 'end: 正方\'s ink in the upper layer: ' + band(0.64, 0.76).toFixed(1) + ' vs ' + over.toFixed(1));
+      assert.ok(band(0.84, 0.95) < band(0.64, 0.76) - 15, 'end: 反方\'s in the lower: ' + band(0.84, 0.95).toFixed(1));
+      stage.destroy();
+    }
+  });
+
+  // The setup page's thumbnails are tiny: the ink must still read as ink in water there.
+  DT.test('theme ink: a thumbnail is still ink in water', () => {
+    if (!hasGL()) {
+      withoutWebGL(() => {
+        const { stage, root } = still(singleAt(OPENING, 27), 240, 135);
+        assert.equal(getComputedStyle(root.querySelector('.dt-field')).visibility, 'visible');
+        stage.destroy();
+      });
+      return;
+    }
+    const { stage, root } = still(singleAt(OPENING, 27), 240, 135);   // setup.js's sample: 15% used
+    assert.equal(root.getAttribute('data-painter'), 'live');
+    const pic = picture(root);
+    assert.ok(pic.g.width >= 240, 'drawn at the thumbnail\'s own pixels: ' + pic.g.width);
+    let inked = 0, n = 0;
+    const water = warmth(pic.at(pic.W / 2, pic.H * 0.995));
+    pic.each([0, pic.H * SURFACE, pic.W, pic.H * 0.6], c => { n++; if (warmth(c) > water + 15) inked++; });
+    assert.ok(inked > 0.04 * n && inked < 0.7 * n, 'drops of ink, not a wash: ' + inked + ' of ' + n);
+    stage.destroy();
+  });
+
+  // ---- the seals ----
+
+  // The stage type is marked with a small 朱文 seal, in the app's own words for the types. Its one column of type sits
+  // in the middle of the box, large enough to read at 1366×768, where the seal also wears more lightly.
+  DT.test('theme ink: the seal\'s two characters sit centred in the box, large enough to read', () => {
+    [[1920, 1080, /dt-ink-seal"?\)/], [1366, 768, /dt-ink-seal-light/]].forEach(([w, h, filter]) => {
+      const { stage, root } = mountInk(singleAt(OPENING, 60), w, h);
+      const seal = pseudo(root.querySelector('.dt-head'), '::before');
+      assert.equal(seal.paddingLeft, seal.paddingRight, w + ': even either side');
+      assert.ok(px(seal.fontSize) >= 0.03 * h, w + ': ' + seal.fontSize);
+      const inner = px(seal.width) - (seal.boxSizing === 'border-box'
+        ? px(seal.paddingLeft) + px(seal.paddingRight) + px(seal.borderLeftWidth) + px(seal.borderRightWidth) : 0);
+      assert.near(inner, px(seal.fontSize) * px(seal.lineHeight) / px(seal.fontSize), 1.5, w + ': the box is the column wide: ' + seal.width);
+      assert.ok(filter.test(seal.filter), w + ': ' + seal.filter);
+      stage.destroy();
+    });
+  });
+
+  DT.test('theme ink: a small seal names the stage type', () => {
+    [[singleAt(OPENING, 60), '单方'], [dualAt(30), '双方'], [breakAt(5), '间隔'], [endCard(), '终局']].forEach(([view, word]) => {
+      const { stage, root } = mountInk(view);
+      const seal = pseudo(root.querySelector('.dt-head'), '::before');
+      assert.equal(seal.content, '"' + word + '"', root.dataset.kind);
+      assert.ok(seal.display !== 'none' && px(seal.width) > 0, root.dataset.kind + ' seal shows');
+      stage.destroy();
+    });
+  });
+
+  // The stage name, the speaker and the top bar are in the air over the tank; the surface is under them and over the
+  // digits.
+  DT.test('theme ink: the surface lies under the stage name and over the digits', () => {
+    [[1920, 1080], [1024, 768]].forEach(([w, h]) => [singleAt(OPENING, 60), dualAt(30)].forEach(view => {
+      const { stage, root } = mountInk(view, w, h);
+      settle(root);
+      const b = root.getBoundingClientRect();
+      const surface = b.top + SURFACE * b.height;
+      const where = root.dataset.kind + ' ' + w + 'x' + h;
+      assert.ok(root.querySelector('.dt-head').getBoundingClientRect().bottom < surface, where + ': the head is in the air');
+      root.querySelectorAll('.dt-clock').forEach(c => {
+        const g = glyphs(root, c);
+        if (g) assert.ok(g[1] + b.top > surface, where + ': the digits are in the water');
+      });
+      stage.destroy();
+    }));
   });
 })();
