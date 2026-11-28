@@ -9,6 +9,26 @@ from test_export import dump, serve_pages
 
 @unittest.skipUnless(find_browser(), "needs Edge or Chrome")
 class ClimbLoadingTests(unittest.TestCase):
+    def test_setup_shows_the_shared_sample_clock_without_loading_the_scene(self):
+        probe = r"""<output id="sample"></output><script>
+addEventListener('load', () => {
+  const thumb = document.querySelector('[data-theme-id="climb-poster"] .dt-setup-thumb');
+  const digits = thumb?.querySelector('.climb-time');
+  const reference = document.querySelector('[data-theme-id="hall"] .dt-clock .dt-digits');
+  const inside = (a, b) => a.width > 0 && a.height > 0 && a.left >= b.left &&
+    a.right <= b.right && a.top >= b.top && a.bottom <= b.bottom;
+  const loaded = performance.getEntriesByType('resource').some(r => /\/(?:match-view|three\.core)\.js$/.test(r.name));
+  document.getElementById('sample').textContent = digits && /\d:\d\d/.test(digits.textContent) &&
+    digits.textContent === reference?.textContent && inside(digits.getBoundingClientRect(), thumb.getBoundingClientRect()) &&
+    !loaded ? 'ok' : 'missing, clipped, or loaded the live scene';
+});
+</script>"""
+        with serve_pages() as (site, url):
+            index = (site / 'index.html').read_text(encoding='utf-8')
+            (site / 'sample.html').write_text(index.replace('</body>', probe+'</body>'), encoding='utf-8')
+            dom = dump(url+'sample.html?demo=setup')
+        self.assertEqual(re.search(r'<output id="sample">(.*?)</output>', dom)[1], 'ok')
+
     def run_probe(self, code, *, module_prefix="", landscape=None):
         page = """<!doctype html><meta charset="utf-8">
 <link rel="stylesheet" href="web/climb/match.css">

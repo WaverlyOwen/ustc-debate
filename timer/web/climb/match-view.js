@@ -42,6 +42,7 @@ export function createMatchView(host, finishLoading) {
   </svg><div class="climb-round"><strong></strong><span></span></div>
   <div class="climb-readouts">${sides.map(clockPanel).join('')}</div>`;
   const scene = host.querySelector('.climb-match-scene');
+  let viewport = scene.getBoundingClientRect();
   const round = host.querySelector('.climb-round');
   const readouts = host.querySelector('.climb-readouts');
   const panels = sides.map(side => {
@@ -97,7 +98,7 @@ export function createMatchView(host, finishLoading) {
     if (destroyed || !data || !visible || doc.hidden) return;
     const elapsed = frameClock.sample(now,snap);
     if (elapsed === null) { schedule(); return; }
-    if (!scene.clientWidth || !scene.clientHeight) { frameClock.reset(); return; }
+    if (viewport.width < 2 || viewport.height < 2) { frameClock.reset(); return; }
     const dt = Math.min(.18,elapsed);
     const still = data.still || motionPreference.matches;
     if (data.used) camera.cameraTime = speakingTime(data.used);
@@ -130,12 +131,10 @@ export function createMatchView(host, finishLoading) {
         // createLandscape resolves its named layers once. Embedded previews can share a document.
         for (const layer of scene.querySelectorAll('g[data-layer]')) layer.removeAttribute('id');
       }
-      draw(data.progress, still ? 0 : visualTime, moving, shot, dt, snap || still, data.secondsPerTeam, data.footprintClock);
+      draw(data.progress, still ? 0 : visualTime, moving, shot, dt, snap || still, data.secondsPerTeam, data.footprintClock, viewport);
       if (!host.hasAttribute('data-ready')) {
         const face = scene.querySelector('[data-layer="mountain"] path[d]:not([d=""])');
         if (!face || /NaN|Infinity/.test(face.getAttribute('d'))) {
-          const bounds = scene.getBoundingClientRect();
-          if (bounds.width < 2 || bounds.height < 2) return;
           throw Error('山体首帧缺少有效路径');
         }
         host.setAttribute('data-ready','');
@@ -168,7 +167,10 @@ export function createMatchView(host, finishLoading) {
     raf = 0;
     frameClock.reset();
   }
-  const size = new win.ResizeObserver(refresh);
+  const size = new win.ResizeObserver(([entry]) => {
+    viewport = entry.contentRect;
+    refresh();
+  });
   size.observe(host);
   const intersection = new win.IntersectionObserver(entries => {
     visible = entries[entries.length-1].isIntersecting;
@@ -211,7 +213,7 @@ export function createMatchView(host, finishLoading) {
       if (key !== previousKey && (data.phase === 'title' || data.phase === 'ended')) snap = true;
       previousKey = key;
       previousPose = pose;
-      if (!draw && visible && !doc.hidden && scene.clientWidth && scene.clientHeight) {
+      if (!draw && visible && !doc.hidden && viewport.width >= 2 && viewport.height >= 2) {
         paint(win.performance.now());
       } else {
         schedule();

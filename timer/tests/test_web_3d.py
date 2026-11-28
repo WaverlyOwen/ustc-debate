@@ -131,6 +131,12 @@ try {
   check(stage.classList.contains('has-climb-view'), 'Match scene did not mount');
   check(stage.dataset.theme === 'climb-poster' && stage.querySelector('.dt-climb-host').dataset.style === 'poster',
     'Saved ink match did not project the poster');
+  const E=DT.engine, speech=E.toggle(E.goto(restored,restored.timeline.findIndex(s=>s.type==='single'),0),0);
+  view.update(E.view(speech,1000));
+  const fallbackStyle=stage.style.cssText, next=E.view(speech,4000);
+  view.update(next);
+  check(stage.style.cssText===fallbackStyle && stage.querySelector('.climb-clock:not([hidden]) .climb-time').textContent===
+    next.clocks[0].text, 'Updating the visible clock invalidated inherited fallback styles');
   for (const [width,height] of [[320,844],[1280,800]]) {
     screen.style.width=width+'px'; screen.style.height=height+'px';
     const round=stage.querySelector('.climb-round'), footer=stage.querySelector('.dt-bottom');
@@ -368,6 +374,7 @@ try {
       return Object.assign(out,{x:500+35*dot(relative,right), y:350-35*dot(relative,up),
         depth:150-dot(relative,eye), scale:35});
     }
+    project.width=1000; project.height=700;
     pose.draw(figures,project);
     check(!figures.querySelector('image,use'), 'Found a sprite in the climber artwork');
     // Compare actual SVG outlines to the model's independently projected vertices.
@@ -394,6 +401,40 @@ try {
         'Drawn '+solid.bone+' facets do not project from their bone in view '+angle);
     }
     visible.push(visibleFaces);
+    if (angle===.12) {
+      const original=figures.querySelector('path[data-mesh="parka"]');
+      const outline=original.getAttribute('d');
+      const mutations=new MutationObserver(()=>{});
+      mutations.observe(original.parentNode,{subtree:true,attributes:true,attributeFilter:['d']});
+      pose.draw(figures,project,true);
+      const canvas=figures.querySelector('[data-moving-parties] canvas');
+      check(canvas?.width && !original.getBoundingClientRect().width && !mutations.takeRecords().length,
+        'Moving figures still update the SVG');
+      mutations.disconnect();
+      const reference=document.createElement('canvas');
+      reference.width=canvas.width; reference.height=canvas.height;
+      const ctx=reference.getContext('2d');
+      ctx.scale(canvas.width/1000,canvas.height/700); ctx.lineJoin='round'; ctx.lineCap='round';
+      for (const shape of figures.querySelectorAll('path[data-part][d]')) {
+        const path=new Path2D(shape.getAttribute('d'));
+        const fill=shape.getAttribute('fill'), stroke=shape.getAttribute('stroke');
+        if (fill!=='none') {ctx.fillStyle=fill; ctx.fill(path);}
+        if (stroke!=='none') {ctx.strokeStyle=stroke; ctx.lineWidth=Number(shape.getAttribute('stroke-width')); ctx.stroke(path);}
+      }
+      const expected=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+      const actual=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+      let opaque=0,different=0;
+      for (let i=3;i<actual.length;i+=4) {
+        if (expected[i]>100) opaque++;
+        for (let n=0;n<4;n++) {
+          if (Math.abs(actual[i-n]-expected[i-n])>30) {different++;break;}
+        }
+      }
+      check(opaque>500 && different<opaque*.035, 'Moving figures diverged from the clock pose: '+different+'/'+opaque);
+      pose.draw(figures,project);
+      check(original.getBoundingClientRect().width && original.getAttribute('d')===outline &&
+        !canvas.getBoundingClientRect().width, 'Still figures did not resume');
+    }
   }
   for (let i=0; i<visible.length; i++) {
     const other = visible[(i+1)%visible.length];
@@ -664,6 +705,8 @@ try {
 import { createLandscape } from './landscape.js';
 try {
   const state={autoFollowObstacles:'pro'}, svg=document.querySelector('svg');
+  // Inspect the vector fallback so boot and coat outlines can be measured per frame.
+  HTMLCanvasElement.prototype.getContext=()=>null;
   const draw=createLandscape(svg,state);
   for (let i=0;i<80;i++) {
     const elapsed=.946*540+i/8, remaining=540-elapsed;

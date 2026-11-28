@@ -5,7 +5,8 @@
   const entry = document.currentScript?.src;
   const moduleURL = entry ? new URL('./climb/match-view.js', entry).href : 'expedition/climb/match-view.js';
   const sides = ['pro', 'con'];
-  function thumbnail(host) {
+  function thumbnail(host, sample) {
+    host.classList.add('dt-stage-host', 'climb-thumb');
     host.innerHTML='<svg width="100%" height="100%" viewBox="0 0 176 78" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
       '<rect width="176" height="78" fill="#f5d5ae"/><circle cx="137" cy="18" r="9" fill="#e39364"/>'+
       '<path d="M0 45 23 26 43 39 64 22 90 42 137 24 176 39V78H0Z" fill="#786071"/>'+
@@ -14,7 +15,15 @@
       '<path d="m8 68 33-16-9 8 17-5-12 10 16-2-27 12Zm100-28 7-12 5 10-4-2 6 11-7-6-11 6Zm30 10 34 12 4 12-23-9 4 4-27-12Z" fill="#51495a"/>'+
       '<path d="M0 76 29 66 60 70 77 64 106 68 146 57 176 59V78H0Z" fill="#9f777b"/>'+
       '<path d="m41 58 2-5 2 4-1 3Zm7-3 2-5 2 4-1 2Z" fill="#ae352d"/>'+
-      '<path d="m140 51 2-5 2 4-1 3Zm7 3 2-5 2 4-1 3Z" fill="#1b597e"/></svg>';
+      '<path d="m140 51 2-5 2 4-1 3Zm7 3 2-5 2 4-1 3Z" fill="#1b597e"/></svg>'+
+      '<span class="climb-round"><strong></strong></span><span class="climb-readouts" data-layout="single">'+
+      '<span class="climb-clock"><span class="climb-clock-label"><b class="climb-side"></b></span>'+
+      '<span class="climb-time"></span></span></span>';
+    const clock = sample.clocks[0];
+    host.querySelector('.climb-round strong').textContent = sample.stage.name;
+    host.querySelector('.climb-clock').dataset.side = clock.side || 'neutral';
+    host.querySelector('.climb-side').textContent = clock.label;
+    host.querySelector('.climb-time').textContent = clock.text;
   }
 
   const theme = {id:'climb-poster', name:'攀登', tone:'light', thumbnail,

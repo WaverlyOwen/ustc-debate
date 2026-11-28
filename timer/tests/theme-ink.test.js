@@ -1,6 +1,6 @@
 (function () {
   // 墨, ink dropped into water (docs/superpowers/specs/2026-11-27-ink-water-design.md). The water and its ink are a
-  // WebGL painter; the stylesheet keeps the colours, the text, the 30 s tick and a plain column of ink for where there
+  // WebGL painter; the stylesheet keeps the colours, the text and a plain column of ink for where there
   // is no WebGL. The painter's tests read its canvas back; where this browser has no WebGL they check the stand-in.
   const E = DT.engine, R = DT.render;
   const T0 = 1000000;
@@ -10,9 +10,9 @@
   const OPENING = '正方一辩开篇立论';   // pro, 3:00
   const REBUTTAL = '反方二辩驳论';       // con, 2:00
   const CLOSING = '反方四辩结辩';        // con, 3:30
-  const SURFACE = 0.30, GAP = 0.04, BED = 0.955;   // ink.css: --ink-surface, --ink-gap, --ink-bed (of the height)
-  const frontAt = used => SURFACE + GAP + (BED - SURFACE - GAP) * used;
-  const singleFront = used => GAP + (1 - GAP) * used;
+  const GAP = 0.04, BED = 0.955;
+  const surfaceOf = root => parseFloat(getComputedStyle(root).getPropertyValue('--ink-surface')) / 100;
+  const frontAt = (surface, used, bed = BED) => surface + GAP + (bed - surface - GAP) * used;
 
   function mountInk(view, w, h, opts) {
     const box = document.getElementById('sandbox');
@@ -110,7 +110,7 @@
       }
     };
     const mean = (r, f) => { let s = 0, n = 0; each(r, c => { s += f(c); n++; }); return n ? s / n : NaN; };
-    return { at, each, mean, W: box.width, H: box.height, data, g, k };
+    return { at, each, mean, surface: surfaceOf(root), W: box.width, H: box.height, data, g, k };
   }
   const warmth = c => c[0] - c[2];
   // The first colour in a gradient as an opaque CSS colour: color(srgb r g b / a) or rgb(a)(…).
@@ -123,12 +123,12 @@
   // The lowest row with ink in it, as a share of the height: a row of plain water is one colour across.
   function lowestInk(pic, x0, x1) {
     const step = 1 / pic.k;
-    for (let y = pic.H * 0.985; y > pic.H * SURFACE; y -= step) {
+    for (let y = pic.H * 0.985; y > pic.H * pic.surface; y -= step) {
       let lo = Infinity, hi = 0;
       for (let x = x0; x < x1; x += step) { const l = lumOf(pic.at(x, y)); lo = Math.min(lo, l); hi = Math.max(hi, l); }
       if (lo < 0.94 * hi) return y / pic.H;
     }
-    return SURFACE;
+    return pic.surface;
   }
   // How many rows of a stage rect have ink in them: plain water is one colour across a row, ink is not.
   function inkedRows(pic, r, tol) {
@@ -253,7 +253,7 @@
     const cs = getComputedStyle(root);
     ['--ink-water-top', '--ink-water-deep', '--pro', '--con', '--accent', '--ink-neutral', '--ink-surface', '--ink-cap'].forEach(v =>
       assert.ok(cs.getPropertyValue(v).trim(), v + ' is defined'));
-    assert.equal(px(cs.getPropertyValue('--ink-surface')), 0, 'the single-stage tank begins at the top edge');
+    assert.ok(surfaceOf(root) > 0, 'a visible surface below the heading');
     const cap = px(cs.getPropertyValue('--ink-cap'));
     assert.ok(cap > 0 && cap < 1, '--ink-cap ' + cap);
     const top = rgbOf(resolve(root, '--ink-water-top')), deep = rgbOf(resolve(root, '--ink-water-deep'));
@@ -374,7 +374,7 @@
     stage.destroy();
   });
 
-  // ---- the tank: the surface, the front, the tick ----
+  // ---- the tank: the surface and the front ----
 
   DT.test('theme ink: starting the clock keeps the ink already in the water', () => {
     if (!hasGL()) return;
@@ -392,7 +392,7 @@
       stage.update(E.view(run, first));
       const after = picture(root);
       let n = 0, changed = 0;
-      before.each([0, 0, before.W, before.H * 0.25], (rgb, x, y) => {
+      before.each([0, before.H * before.surface, before.W, before.H * (before.surface + .25)], (rgb, x, y) => {
         if (warmth(rgb) < 15) return;
         n++;
         const next = after.at(x + 0.1, y + 0.1);
@@ -432,7 +432,8 @@
       const { stage, root } = still(singleAt(name, 0), 800, 360);
       const frame = progress => { stage.update(singleAt(name, progress * duration)); return picture(root); };
       const ink = (pic, x0, x1, y0, y1) => pic.mean([
-        pic.W * (sign > 0 ? x0 : 1 - x1), pic.H * y0, pic.W * (sign > 0 ? x1 : 1 - x0), pic.H * y1
+        pic.W * (sign > 0 ? x0 : 1 - x1), pic.H * (pic.surface + (1 - pic.surface) * y0),
+        pic.W * (sign > 0 ? x1 : 1 - x0), pic.H * (pic.surface + (1 - pic.surface) * y1)
       ], rgb => sign > 0 ? Number(warmth(rgb) > 38) : Number(warmth(rgb) < -26));
       try {
         const early = frame(0.015), spread = frame(0.12), second = frame(0.16);
@@ -456,7 +457,7 @@
     const bounds = () => root.querySelector('.dt-half[data-side="pro"]').getBoundingClientRect();
     const center = pic => {
       let sum = 0, weight = 0;
-      pic.each([0, pic.H * SURFACE, pic.W / 2, pic.H * BED], (rgb, x) => {
+      pic.each([0, pic.H * pic.surface, pic.W / 2, pic.H * BED], (rgb, x) => {
         const tint = Math.max(0, warmth(rgb));
         sum += x * tint; weight += tint;
       });
@@ -540,8 +541,8 @@
         assert.ok(/gradient/.test(cs.backgroundImage), where + ': ' + cs.backgroundImage.slice(0, 60));
         assert.deepEqual(rgbOf(firstColour(cs.backgroundImage)), rgbOf(resolve(root, side)), where + ': in its side\'s ink');
         const b = root.getBoundingClientRect(), f = field.getBoundingClientRect();
-        assert.near((f.top - b.top) / b.height, 0, 0.005, where + ': from the top edge');
-        assert.near((f.bottom - b.top) / b.height, singleFront(u) + 0.02, 0.005, where + ': to the front and its soft edge');
+        assert.near((f.top - b.top) / b.height, surfaceOf(root), 0.005, where + ': from the surface');
+        assert.near((f.bottom - b.top) / b.height, frontAt(surfaceOf(root), u, 1) + 0.02, 0.005, where + ': to the front and its soft edge');
         assert.ok(f.left <= b.left + 0.5 && f.right >= b.right - 0.5, where + ': across the tank');
         stage.destroy();
       }));
@@ -555,24 +556,16 @@
     }
   });
 
-  // Spec: the 30 s point is a tick on the tank's wall at the seat, at the depth the front reaches with 30 s left. It is
-  // the stylesheet's, so it shows with or without WebGL.
-  DT.test('theme ink: the 30 s point is a tick on the seat\'s wall at the depth of 30 s left', () => {
-    const check = () => [[OPENING, 'left', 'left'], [OPENING, 'right', 'right'], [REBUTTAL, 'left', 'right'], [REBUTTAL, 'right', 'left']].forEach(([name, seat, wall]) => {
-      const { stage, root } = mountInk(singleAt(name, 20, seat));
-      settle(root);
-      const where = name + ' / ' + seat;
-      const tick = root.querySelector('.dt-warnline');
-      assert.ok(!tick.hidden && getComputedStyle(tick).display !== 'none', where + ': shown');
-      const b = root.getBoundingClientRect(), r = tick.getBoundingClientRect();
-      if (wall === 'left') assert.near(r.left, b.left, 0.5, where + ': on the left wall');
-      else assert.near(r.right, b.right, 0.5, where + ': on the right wall');
-      assert.ok(r.width > 0 && r.width < 0.06 * b.width && r.height < 0.02 * b.height, where + ': a short tick ' + r.width + 'x' + r.height);
-      const warnAt = px(root.style.getPropertyValue('--warn-at'));   // the share of the time left at the bell
-      assert.near(warnAt, 30 / (name === OPENING ? 180 : 120), 1e-4);
-      assert.near(((r.top + r.bottom) / 2 - b.top) / b.height, singleFront(1 - warnAt), 0.003, where + ': at the depth of 30 s left');
-      stage.destroy();
-    });
+  DT.test('theme ink: neither seat displays a warning notch before or during the warning', () => {
+    const check = () => [OPENING, REBUTTAL].forEach(name => ['left', 'right'].forEach(seat => {
+      const { stage, root } = still(singleAt(name, 20, seat));
+      try {
+        for (const secs of [20, name === OPENING ? 151 : 91]) {
+          stage.update(singleAt(name, secs, seat));
+          assert.equal(getComputedStyle(root.querySelector('.dt-warnline')).display, 'none', name + ' / ' + seat);
+        }
+      } finally { stage.destroy(); }
+    }));
     check();
     withoutWebGL(check);
   });
@@ -646,26 +639,94 @@
     } finally { protos.forEach((p, i) => { p.drawArrays = saved[i]; }); DT.clock.reset(); }
   });
 
-  // Spec 入场: a new stage's drops fall in from over the surface in its first 560 ms (wall time); a still never shows it.
-  DT.test('theme ink: a new stage\'s drops fall in from over the surface, and a still has none in the air', () => {
+  // Track the silhouette of the coloured bead in the air, separately from the existing dye below it.
+  function beadHeight(pic, x, pigment) {
+    let count = 0, sum = 0;
+    pic.each([pic.W*x - pic.H*.02, pic.H*(pic.surface-.13), pic.W*x + pic.H*.02, pic.H*(pic.surface-.004)],
+      (rgb, _, y) => {
+        if (pigment === 'pro' ? warmth(rgb)>30 : pigment === 'con' ? warmth(rgb)<-32 : rgb[0]<150) {
+          count++; sum += y;
+        }
+      });
+    return count ? sum / count / pic.H : null;
+  }
+
+  DT.test('theme ink: a new speaking tank receives its first bead before the underwater bloom', () => {
     if (!hasGL()) return;
-    const air = pic => { let n = 0; pic.each([0, pic.H * (SURFACE - 0.1), pic.W, pic.H * (SURFACE - 0.008)], c => { if (warmth(c) > 25) n++; }); return n; };
-    let now = 80000;
-    DT.clock.set(() => now);
+    let now = T0;
+    DT.clock.set(()=>now);
+    const view = E.view(session(OPENING),T0), {stage,root} = mountInk(view,640,360);
     try {
-      const speaking = E.floor(session('自由辩论'), 'pro', T0);
-      const view = E.view(speaking, T0 + 1000);
-      const { stage, root } = mountInk(view, 640, 360);
-      assert.ok(root.classList.contains('is-entering'));
-      assert.ok(air(picture(root)) > 0, 'drops over the surface as the stage comes in');
-      now += 700;
-      stage.update(E.view(speaking, T0 + 1700));
-      assert.equal(air(picture(root)), 0, 'in the water by 560 ms');
-      stage.destroy();
-    } finally { DT.clock.reset(); }
-    const s = still(E.view(E.floor(session('自由辩论'), 'pro', T0), T0 + 1000), 640, 360);
-    assert.equal(air(picture(s.root)), 0, 'a still is landed');
-    s.stage.destroy();
+      const frame = ms => { now = T0+ms; stage.update(view); return picture(root); };
+      const pigment = pic => pic.mean([pic.W*.20,pic.H*(pic.surface+.004),pic.W*.36,pic.H*(pic.surface+.15)],
+        rgb=>Number(warmth(rgb)>30));
+      const early = frame(120), falling = frame(450), landed = frame(950);
+      const high = beadHeight(early,.28,'pro'), low = beadHeight(falling,.28,'pro');
+      assert.ok(high!==null && low!==null && low>high+.025,'first bead descends');
+      assert.equal(pigment(falling),0,'water stays clear under the airborne bead');
+      assert.ok(pigment(landed)>.01 && beadHeight(landed,.28,'pro')===null,'first bead entered and opened');
+    } finally { stage.destroy(); DT.clock.reset(); }
+  });
+
+  DT.test('theme ink: every later speaking and break drop falls through air at its own injection point', () => {
+    if (!hasGL()) return;
+    for (const [view, side, secs] of [[s=>singleAt(OPENING,s),'pro',180],
+      [s=>singleAt(REBUTTAL,s),'con',120],[breakAt,'neutral',30]]) {
+      const {stage,root} = mountInk(view(0),640,360);
+      try {
+        for (const [at, position] of [[.14,.78],[.34,.09],[.55,.90],[.77,.48]]) {
+          const x = side==='con' ? 1-position : side==='neutral' ? .3+.4*position : position;
+          const sample = offset => { stage.update(view(at*secs+offset)); return beadHeight(picture(root),x,side); };
+          const high = sample(-.50), low = sample(-.22);
+          assert.ok(high!==null && low!==null && low>high+.012, side+' drop '+at+' descends: '+high+' to '+low);
+          assert.equal(sample(.8),null,side+' drop '+at+' has landed');
+        }
+      } finally { stage.destroy(); }
+    }
+  });
+
+  DT.test('theme ink: each speaker releases all five drops through the surface across handoffs', () => {
+    if (!hasGL()) return;
+    for (const [name, seat] of [['正反方二辩对辩','left'],['自由辩论','right']]) {
+      let s = session(name,seat), now = T0;
+      const {stage, root} = mountInk(E.view(s,now),640,360), used = {pro:0,con:0};
+      try {
+        for (const [fraction, pos] of [[0,.445],[.14,.36],[.34,.475],[.55,.29],[.77,.42]]) {
+          for (const side of ['pro','con']) {
+            const x = (side==='pro') === (seat==='left') ? pos : 1-pos;
+            s = E.floor(s,side,now);
+            const clock = E.view(s,now).clocks.find(c=>c.id===side);
+            const threshold = fraction*clock.total;
+            now += threshold-used[side];
+            const bead = (state,t) => { stage.update(E.view(state,t)); return beadHeight(picture(root),x,side); };
+            const high = bead(s,now+140), low = bead(s,now+460);
+            assert.ok(high!==null && low!==null && low>high+.02, name+' '+side+' drop '+fraction+' falls');
+            if (fraction===0 && side==='con') {
+              const paused = E.pause(s,now+460);
+              assert.near(bead(paused,now+1600),low,.004,'pausing holds the airborne drop');
+              assert.near(bead(JSON.parse(JSON.stringify(paused)),now+2600),low,.004,'restored flight is at the same height');
+            }
+            assert.equal(bead(s,now+1000),null,'landed at the speaking side');
+            now += 1000; used[side] = threshold+1000;
+          }
+        }
+      } finally { stage.destroy(); }
+    }
+  });
+
+  DT.test('theme ink: switching speakers mid-flight lets both beads reach the shared surface', () => {
+    if (!hasGL()) return;
+    const pro = E.floor(session('自由辩论'),'pro',T0);
+    const con = E.floor(pro,'con',T0+220);
+    const {stage,root} = mountInk(E.view(pro,T0),640,360);
+    const sample = ms => { stage.update(E.view(con,T0+ms)); return picture(root); };
+    try {
+      const both = sample(430), one = sample(800), landed = sample(1300);
+      const red = beadHeight(both,.445,'pro'), blue = beadHeight(both,.555,'con');
+      assert.ok(red!==null && blue!==null && red>blue+.012,'earlier bead leads the second in flight');
+      assert.ok(beadHeight(one,.445,'pro')===null && beadHeight(one,.555,'con')!==null,'red reaches water first');
+      assert.equal(beadHeight(landed,.555,'con'),null,'blue lands too');
+    } finally { stage.destroy(); }
   });
 
   // Spec 铃: a bell drops fresh ink into the speaking side that sinks to the front and melts into it, its age the time
@@ -727,7 +788,7 @@
     [['left', 'right'], ['right', 'left']].forEach(([seat, wall]) => {
       const { stage, root } = still(singleAt(CLOSING, 217, seat), 960, 540);   // 反方: its seat is the one 正方 is not on
       const pic = picture(root);
-      const ochre = (x0, x1) => { let n = 0; pic.each([x0, pic.H * (SURFACE + 0.02), x1, pic.H * 0.9], c => { if (c[0] - c[2] > 40 && c[1] - c[2] > 15) n++; }); return n; };
+      const ochre = (x0, x1) => { let n = 0; pic.each([x0, pic.H * (pic.surface + 0.02), x1, pic.H * 0.9], c => { if (c[0] - c[2] > 40 && c[1] - c[2] > 15) n++; }); return n; };
       const near = wall === 'left' ? ochre(0, pic.W * 0.15) : ochre(pic.W * 0.85, pic.W);
       const far = wall === 'left' ? ochre(pic.W * 0.85, pic.W) : ochre(0, pic.W * 0.15);
       assert.ok(near > 100 && far === 0, seat + ': at the ' + wall + ' wall: ' + near + ' / ' + far);
@@ -762,7 +823,7 @@
         stage.update(view(b));
         const second = picture(root);
         let changed = 0;
-        first.each([first.W * 0.38, first.H * SURFACE, first.W * 0.62, first.H * BED], (rgb, x, y) => {
+        first.each([first.W * 0.38, first.H * first.surface, first.W * 0.62, first.H * BED], (rgb, x, y) => {
           const next = second.at(x + 0.1, y + 0.1);
           if (rgb.some((channel, i) => Math.abs(channel - next[i]) > 8)) changed++;
         });
@@ -784,7 +845,7 @@
         const box = root.getBoundingClientRect();
         const half = side => {
           const r = root.querySelector('.dt-half[data-side="' + side + '"]').getBoundingClientRect();
-          return [r.left - box.left + 0.03 * pic.H, pic.H * (SURFACE + 0.005), r.right - box.left - 0.03 * pic.H, pic.H * 0.9];
+          return [r.left - box.left + 0.03 * pic.H, pic.H * (pic.surface + 0.005), r.right - box.left - 0.03 * pic.H, pic.H * 0.9];
         };
         const pro = half('pro'), con = half('con');
         assert.ok(pic.mean(pro, c => warmth(c) > 15 ? 1 : 0) > 0.01, seat + ': cinnabar in the pro half');
@@ -800,7 +861,7 @@
           return count;
         };
         assert.ok(changed(pro) > 100, seat + ': the speaker stirs the water around the earlier ink');
-        const center = [pic.W * 0.48, pic.H * (SURFACE + 0.015), pic.W * 0.52, pic.H * BED];
+        const center = [pic.W * 0.48, pic.H * (pic.surface + 0.015), pic.W * 0.52, pic.H * BED];
         assert.ok(changed(center) > 20, seat + ': pigment moves through the center');
         assert.ok(changed(con) > 100, seat + ': the speaking drop moves');
         stage.destroy();
@@ -811,8 +872,8 @@
         const f = side => root.querySelector('.dt-half[data-side="' + side + '"] .dt-half-field');
         const b = root.getBoundingClientRect();
         const bottom = side => (f(side).getBoundingClientRect().bottom - b.top) / b.height;
-        assert.near(bottom('con'), frontAt(110 / 240) + 0.02, 0.006, seat + ': 反方\'s column to its front');
-        assert.near(bottom('pro'), frontAt(20 / 240) + 0.02, 0.006, seat + ': 正方\'s to its own');
+        assert.near(bottom('con'), frontAt(surfaceOf(root), 110 / 240) + 0.02, 0.006, seat + ': 反方\'s column to its front');
+        assert.near(bottom('pro'), frontAt(surfaceOf(root), 20 / 240) + 0.02, 0.006, seat + ': 正方\'s to its own');
         assert.ok(px(getComputedStyle(f('pro')).opacity) < px(getComputedStyle(f('con')).opacity), seat + ': the waiting column paler');
         stage.destroy();
       });
@@ -868,7 +929,7 @@
       const pic = picture(m.root);
       const box = m.root.getBoundingClientRect(), r = m.root.querySelector('.dt-half[data-side="pro"]').getBoundingClientRect();
       const x0 = r.left - box.left + 0.03 * pic.H, x1 = r.right - box.left - 0.03 * pic.H;
-      const rows = inkedRows(pic, [x0, pic.H * (SURFACE + 0.01), x1, pic.H * 0.97]);
+      const rows = inkedRows(pic, [x0, pic.H * (pic.surface + 0.01), x1, pic.H * 0.97]);
       if (how === 'yielded') assert.ok(rows > 0, 'the pigment stays when the floor is yielded');
       else {
         assert.ok(rows > 0.3 * pic.H * 0.6, 'out of time: its ink is still there: ' + rows + ' rows');
@@ -959,7 +1020,8 @@
     assert.ok(pic.g.width >= 240, 'drawn at the thumbnail\'s own pixels: ' + pic.g.width);
     let inked = 0, n = 0;
     const water = warmth(pic.at(pic.W / 2, pic.H * 0.995));
-    pic.each([0, pic.H * SURFACE, pic.W, pic.H * 0.6], c => { n++; if (warmth(c) > water + 15) inked++; });
+    const upperTank = [0, pic.H * pic.surface, pic.W, pic.H * (pic.surface + .6 * (1 - pic.surface))];
+    pic.each(upperTank, c => { n++; if (warmth(c) > water + 15) inked++; });
     assert.ok(inked > 0.04 * n && inked < 0.7 * n, 'drops of ink, not a wash: ' + inked + ' of ' + n);
     stage.destroy();
   });
@@ -992,20 +1054,37 @@
     });
   });
 
-  DT.test('theme ink: the single-stage tank fills the page and the dual-stage header sits above the surface', () => {
-    [[1920, 1080], [1024, 768]].forEach(([w, h]) => [singleAt(OPENING, 60), dualAt(30)].forEach(view => {
-      const { stage, root } = mountInk(view, w, h);
-      settle(root);
-      const b = root.getBoundingClientRect();
-      const surface = b.top + px(getComputedStyle(root).getPropertyValue('--ink-surface')) * b.height / 100;
-      const where = root.dataset.kind + ' ' + w + 'x' + h;
-      if (root.dataset.kind === 'single') assert.equal(surface, b.top, where + ': water covers the header');
-      else assert.ok(root.querySelector('.dt-head').getBoundingClientRect().bottom < surface, where + ': the head is in the air');
-      root.querySelectorAll('.dt-clock').forEach(c => {
-        const g = glyphs(root, c);
-        if (g) assert.ok(g[1] + b.top > surface, where + ': the digits are in the water');
-      });
-      stage.destroy();
-    }));
+  DT.test('theme ink: a distinct waterline clears the stage lettering and the break retains its original level', () => {
+    const views = [singleAt(OPENING, 60), dualAt(30), titleCard(), breakAt(5), endCard()];
+    const wrapped = singleAt(OPENING, 60);
+    wrapped.stage = { ...wrapped.stage, name:'正方第一轮针对反方结辩提出的问题进行限时回应与补充说明' };
+    views.push(wrapped);
+    const check = () => views.forEach(view => {
+      const { stage, root } = still(view, view === wrapped ? 360 : 800, 450);
+      try {
+        const surface = surfaceOf(root), box = root.getBoundingClientRect();
+        if (view.stage && view.stage.type !== 'break') {
+          const head = root.querySelector('.dt-head').getBoundingClientRect();
+          assert.near(surface - (head.bottom - box.top) / box.height, .016, .005, 'waterline directly below the text');
+          if (view === wrapped) {
+            const title = root.querySelector('.dt-title');
+            assert.ok(title.offsetHeight > 1.5 * px(getComputedStyle(title).lineHeight), 'title occupies two lines');
+          }
+        } else if (view.stage) assert.equal(surface, .19, 'original break waterline');
+        for (const el of root.querySelectorAll('.dt-top, .dt-head, .dt-team')) {
+          assert.equal(getComputedStyle(el).backgroundColor, 'rgba(0, 0, 0, 0)', 'the header row is clear');
+        }
+        for (const el of root.querySelectorAll('.dt-top span, .dt-title, .dt-speaker, .dt-team-name')) {
+          if (el.textContent && el.getBoundingClientRect().width) assert.ok(getComputedStyle(el).textShadow !== 'none', 'light behind ' + el.textContent);
+        }
+        if (root.dataset.painter === 'live') {
+          const pic = picture(root), y = surface * pic.H, x = pic.W * .94;
+          const above = pic.at(x, y - 5), edge = pic.at(x, y), below = pic.at(x, y + 4);
+          assert.ok(edge[0] + 6 < Math.min(above[0], below[0]), view.mode + ': visible surface in clear water');
+        }
+      } finally { stage.destroy(); }
+    });
+    check();
+    withoutWebGL(check);
   });
 })();

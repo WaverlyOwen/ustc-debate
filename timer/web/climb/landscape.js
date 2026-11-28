@@ -4,6 +4,7 @@ import { createParties } from './climbers.js';
 import { mountHorizon } from './horizon.js';
 import { mountSnow } from './snow.js';
 import { mountFootprints } from './footprints.js';
+import { movingLayer } from './moving-layer.js';
 
 const ns = 'http://www.w3.org/2000/svg';
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
@@ -14,35 +15,6 @@ function path(parent, attributes = {}) {
   for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
   parent.appendChild(node);
   return node;
-}
-
-// Keep the moving mountain in the same SVG stacking position as the still
-// artwork. One bitmap repaint avoids reparsing thousands of SVG path strings
-// when a pan changes every projected coordinate.
-function movingLayer(group) {
-  const doc=group.ownerDocument, win=doc.defaultView;
-  if (!win?.SVGForeignObjectElement) return null;
-  const layer=doc.createElementNS(ns,'foreignObject'), canvas=doc.createElement('canvas');
-  const ctx=canvas.getContext?.('2d');
-  if (!ctx) return null;
-  layer.setAttribute('data-moving-mountain','');
-  layer.style.pointerEvents='none';
-  canvas.style.cssText='display:block;width:100%;height:100%';
-  layer.appendChild(canvas);
-  group.after(layer);
-  let cssWidth=0,cssHeight=0;
-  return {layer,begin(width,height,ratio) {
-    const w=Math.max(1,Math.round(width*ratio)),h=Math.max(1,Math.round(height*ratio));
-    if (canvas.width!==w || canvas.height!==h || cssWidth!==width || cssHeight!==height) {
-      cssWidth=width;cssHeight=height;
-      canvas.width=w; canvas.height=h;
-      layer.setAttribute('width',width); layer.setAttribute('height',height);
-      ctx.setTransform(w/width,0,0,h/height,0,0);
-      ctx.lineWidth=.62; ctx.lineJoin='round';
-    }
-    ctx.clearRect(0,0,width,height);
-    return ctx;
-  }};
 }
 
 // Project each shared mountain vertex once. The depth order only depends on
@@ -217,7 +189,7 @@ export function mountMountain(group, faces) {
   }
   let raster, wasRaster=false,lastRatio=1;
   return (project, yaw, pitch, width, height, viewKey, motion=false) => {
-    if (motion && raster===undefined) raster=movingLayer(group);
+    if (motion && raster===undefined) raster=movingLayer(group,'data-moving-mountain');
     const useRaster=Boolean(motion && raster);
     const ratio=useRaster ? Math.min(2,group.ownerDocument.defaultView.devicePixelRatio||1) : 1;
     if (viewKey===lastView && width===viewWidth && height===viewHeight && useRaster===wasRaster && ratio===lastRatio) return;
@@ -228,6 +200,7 @@ export function mountMountain(group, faces) {
     }
     wasRaster=useRaster;lastRatio=ratio;
     const ctx=useRaster ? raster.begin(width,height,ratio) : null;
+    if (ctx) ctx.lineWidth=.62;
     lastView=viewKey;
     frame++;
     visible.length=0;
@@ -426,8 +399,8 @@ export function createLandscape(svg, cameraState = {}) {
     return result;
   }
 
-  return function draw(progress, time, moving, shot, dt, snap = false, secondsPerTeam, footprintClock) {
-    const bounds = svg.getBoundingClientRect();
+  return function draw(progress, time, moving, shot, dt, snap = false, secondsPerTeam, footprintClock,
+    bounds = svg.getBoundingClientRect()) {
     if (bounds.width < 2 || bounds.height < 2) return;
     if (Math.round(bounds.width) !== width || Math.round(bounds.height) !== height) {
       width = Math.round(bounds.width); height = Math.round(bounds.height);
@@ -556,7 +529,7 @@ export function createLandscape(svg, cameraState = {}) {
     const viewKey=width+'x'+height+'/'+matrix.elements.map(n=>Math.round(n*1e6)).join('/');
     drawMountain(project,rig.yaw,pitch,width,height,viewKey,!immediate);
     drawTracks(project,viewKey,progress,secondsPerTeam,parties.members,footprintClock);
-    parties.draw(groups.parties,project);
+    parties.draw(groups.parties,project,!immediate);
     weather.sample(camera,project,width,height,atmosphereTime,reducedMotion);
     weather.paint(project.terrainDepth);
   };

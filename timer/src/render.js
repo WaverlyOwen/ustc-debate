@@ -168,7 +168,7 @@
     const els = {
       deco: $('.dt-deco'), field: $('.dt-field'), warnline: $('.dt-warnline'),
       match: $('.dt-match'), format: $('.dt-format'),
-      title: $('.dt-title'), speaker: $('.dt-speaker'),
+      head: $('.dt-head'), title: $('.dt-title'), speaker: $('.dt-speaker'),
       halves: $('.dt-halves'),
       motions: { pro: $('.dt-motion[data-side="pro"]'), con: $('.dt-motion[data-side="con"]') },
       teams: $('.dt-teams'),
@@ -205,6 +205,7 @@
     let lastView = null, lastSig = null;
     let painterWarned = false;
     let chalkSignObserver = null;
+    let inkHeaderObserver = null;
 
     function later(fn, ms) {
       const id = setTimeout(() => { timers.delete(id); fn(); }, ms);
@@ -480,6 +481,31 @@
       }
     }
 
+    function watchInkHeader(speaking) {
+      if (inkHeaderObserver) inkHeaderObserver.disconnect();
+      inkHeaderObserver = null;
+      if (!speaking) {
+        stage.style.removeProperty('--ink-header-bottom');
+        return;
+      }
+      function measure() {
+        const height = stage.clientHeight;
+        if (!height) return false;
+        const level = ((els.head.offsetTop + els.head.offsetHeight) / height * 100 + 1.6).toFixed(2);
+        if (stage.style.getPropertyValue('--ink-header-bottom') === level) return false;
+        cssVar(stage, '--ink-header-bottom', level);
+        return true;
+      }
+      measure();
+      if (typeof ResizeObserver === 'function') {
+        inkHeaderObserver = new ResizeObserver(() => {
+          if (measure() && paint && lastView) { paint.dirty = true; draw(lastView, lastSig); }
+        });
+        inkHeaderObserver.observe(els.head);
+        inkHeaderObserver.observe(stage);
+      }
+    }
+
     function update(v) {
       if (destroyed || !v) return;
       const st = v.mode === 'stage' ? v.stage : null;
@@ -491,7 +517,8 @@
       settle(kind === 'dual' ? v.clocks.map(c => [clocks[c.id], c]) : st ? [[clocks.main, active]] : []);
 
       const key = v.mode + '|' + (st ? st.id : '');
-      if (key !== lastKey) { lastKey = key; clearLocking(); clearBell(); clearRings(); enter(); }
+      const stageChanged = key !== lastKey;
+      if (stageChanged) { lastKey = key; clearLocking(); clearBell(); clearRings(); enter(); }
       if (seat !== lastSeat) {
         lastSeat = seat;
         seatOrder(els.halves, halves.pro.el, halves.con.el, seat);
@@ -504,22 +531,27 @@
       attr(stage, 'data-phase', active ? active.phase : 'calm');
       attr(stage, 'data-running', v.running ? 'true' : 'false');
       const themeId = themeOf(v.theme);
+      const themeChanged = themeId !== theme;
       attr(stage, 'data-theme', themeId);
       useTheme(themeId);
       attr(stage, 'data-pro-seat', seat);
       attr(stage, 'data-long', st && Array.from(st.name).length > LONG_TITLE ? 'true' : 'false');
-      cssVar(stage, '--used', kind !== 'dual' && active ? quantize(1 - active.fraction) : 0);
-      cssVar(stage, '--tension', tension(active, kind));
-      // Whole seconds left on the clock that holds the floor, and its length: they change once a second.
-      cssVar(stage, '--secs', active ? wholeSecs(active) : 0);
-      cssVar(stage, '--secs-total', active ? totalSecs(active) : 0);
-      cssVar(stage, '--warn-at', v.warnAt || 0);
+      // The mountain has its own readouts. Inheriting a changing fallback field
+      // through thousands of scene nodes would rebuild their styles on every tick.
+      if (!scene || !stage.classList.contains('has-climb-view')) {
+        cssVar(stage, '--used', kind !== 'dual' && active ? quantize(1 - active.fraction) : 0);
+        cssVar(stage, '--tension', tension(active, kind));
+        cssVar(stage, '--secs', active ? wholeSecs(active) : 0);
+        cssVar(stage, '--secs-total', active ? totalSecs(active) : 0);
+        cssVar(stage, '--warn-at', v.warnAt || 0);
+      }
       attr(els.warnline, 'hidden', !st || v.warnAt === null || v.warnAt === undefined);
 
       text(els.match, match.title || '');
       text(els.format, v.formatName || '');
       text(els.title, st ? st.name : v.mode === 'end' ? '比赛结束' : '');
       text(els.speaker, st ? st.speaker : '');
+      if (themeChanged || stageChanged) watchInkHeader(themeId === 'ink' && (kind === 'single' || kind === 'dual'));
 
       if (st && kind !== 'dual') paintClock(clocks.main, active, kind);
       watchChalkSign(themeId === 'chalk' && kind === 'single' && active.phase === 'over');
@@ -684,6 +716,7 @@
       destroyed = true;
       stage.ownerDocument.removeEventListener('visibilitychange', onVisible);
       if (chalkSignObserver) chalkSignObserver.disconnect();
+      if (inkHeaderObserver) inkHeaderObserver.disconnect();
       stopPainter();
       if (scene) scene.destroy();
       timers.forEach(id => clearTimeout(id));

@@ -1312,7 +1312,7 @@ export function createParties() {
       delete member.step.plants;
     }
     for (const pair of pairs) joinPartners(pair,terrain.surface);
-    return { members, draw: (group, project) => render(group, project, members, terrain) };
+    return { members, draw: (group, project, motion) => render(group, project, members, terrain, motion) };
   }
   sample.footfalls=(terrain,side,progress,secondsPerTeam={})=>{
     const course=courseFor(terrain);

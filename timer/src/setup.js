@@ -220,10 +220,11 @@
       cell.dataset.themeId = th.id;
       const host = el('span', 'dt-setup-thumb');
       host.setAttribute('aria-hidden', 'true');   // the cell is read by its name
-      if (th.thumbnail) th.thumbnail(host);
+      const view = Object.assign({}, sample, { theme: th.id });
+      if (th.thumbnail) th.thumbnail(host, view);
       else {
         const thumb = DT.render.mount(host, { thumbnail: true });
-        thumb.update(Object.assign({}, sample, { theme: th.id }));
+        thumb.update(view);
         thumbs.push(thumb);
       }
       cell.appendChild(host);

@@ -9,14 +9,14 @@
   --pro: #A3321F;           /* 朱砂: cinnabar, as dense ink; thinned in water it goes to a warm pink */
   --con: #2C4B5F;           /* 花青: indigo; thinned it goes to a grey-blue */
   --ink-neutral: #3A3D42;   /* the break's grey-black ink */
-  --ground: #EEF2F1;        /* the air above the water on cards and in free debate */
+  --ground: #EEF2F1;
   --ink-water-top: #E4ECED; /* cool, clear water: lit from above, a little deeper in colour toward the bed */
   --ink-water-deep: #C9D7DB;
   --pro-deep: var(--ink-water-deep);   /* where there is no ink: the water itself, at its deepest */
   --con-deep: var(--ink-water-deep);
   --ink: #1B1D21;
   --ink-dim: rgb(27 29 33 / .7);
-  --accent: #8C5D16;        /* 赭金: ochre gold, the overtime thread and the warn tick */
+  --accent: #8C5D16;        /* 赭金: ochre gold for overtime and the warning colon */
   --on-accent: #F2F3EE;     /* words on a solid accent (an armed 重置 / 退出) */
   --seal: #B8341F;          /* seal paste, brighter than the cinnabar ink */
   --digits-on-field: var(--ink);
@@ -32,11 +32,10 @@
   --text-deep: var(--ground);
 }
 
-/* The tank. --ink-surface is where the water's surface is, in cqh from the top: under the stage name and the speaker,
-   over the digits. The front of a stage's ink is --ink-gap under it at the start and at --ink-bed when its time is
-   up; render.js's --used runs it down in between, linearly. The painter reads --ink-surface and --ink-cap. */
+/* Speaking stages place the surface just below the heading. Breaks keep their fixed water level. */
 .dt-stage[data-theme="ink"] {
-  --ink-surface: 30;
+  --ink-surface: 19;
+  --ink-air: var(--ground);
   --ink-gap: 4;
   --ink-bed: 95.5;
   --ink-cap: .62;           /* the most ink, of its full strength, left behind the digits */
@@ -46,17 +45,18 @@
   --side-color: color-mix(in srgb, var(--ink-side) calc(var(--ink-cap) * 100%), var(--ink-water-deep));
   --ink-front: calc((var(--ink-surface) + var(--ink-gap) + (var(--ink-bed) - var(--ink-surface) - var(--ink-gap)) * var(--used)) * 1cqh);
   background: var(--ground);
-  /* The water under the air, for whatever the painter does not cover: its surface a fine darker line with the
-     meniscus's light under it. */
-  --backdrop: linear-gradient(to bottom, var(--ground) calc(var(--ink-surface) * 1cqh - 1px),
+  --backdrop: linear-gradient(to bottom, var(--ink-air) calc(var(--ink-surface) * 1cqh - 1px),
     color-mix(in srgb, var(--ink-water-deep) 70%, var(--ink)) calc(var(--ink-surface) * 1cqh - 1px) calc(var(--ink-surface) * 1cqh + 1px),
     color-mix(in srgb, var(--ink-water-top) 55%, white) calc(var(--ink-surface) * 1cqh + 2px),
     var(--ink-water-top) calc(var(--ink-surface) * 1cqh + 2.5cqh), var(--ink-water-deep));
 }
+.dt-stage[data-theme="ink"][data-mode="stage"]:is([data-kind="single"], [data-kind="dual"]) {
+  --ink-surface: var(--ink-header-bottom, 30);
+  --ink-air: var(--ink-water-top);
+}
 .dt-stage[data-theme="ink"][data-side="pro"] { --ink-side: var(--pro); }
 .dt-stage[data-theme="ink"][data-side="con"] { --ink-side: var(--con); }
 .dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"] {
-  --ink-surface: 0;
   --ink-bed: 100;
   --text-field: var(--side-color);
   --text-deep: var(--side-deep);
@@ -65,10 +65,7 @@
 .dt-stage[data-theme="ink"][data-kind="single"] { --ink-cap: .48; }
 /* Overtime: the ink behind the digits is thinned further, so the ochre digits keep 3:1 on it. */
 .dt-stage[data-theme="ink"][data-phase="over"] { --ink-cap: .22; }
-/* The cards set their water higher: their text is in it, not under the air. */
-.dt-stage[data-theme="ink"][data-mode="title"] { --ink-surface: 15; }
-.dt-stage[data-theme="ink"][data-mode="end"] { --ink-surface: 21; --ink-cap-text: .12; }   /* the record's small type, gold too */
-.dt-stage[data-theme="ink"][data-kind="break"] { --ink-surface: 19; }
+.dt-stage[data-theme="ink"][data-mode="end"] { --ink-cap-text: .12; }   /* the record's small type, gold too */
 
 /* ---- the digits: one colour, never cut ---- */
 
@@ -118,26 +115,7 @@
 .dt-stage[data-theme="ink"].is-entering .dt-half .dt-half-field { animation: dt-ink-pour 560ms var(--ease-out) backwards; }
 @keyframes dt-ink-pour { from { clip-path: inset(0 0 100% 0); } }
 
-/* ---- the warn bell point: a tick on the tank's wall at the seat, at the depth the front reaches with 30 s left ---- */
-
-.dt-stage[data-theme="ink"] .dt-warnline {
-  inset: auto;
-  top: calc((var(--ink-surface) + var(--ink-gap) + (var(--ink-bed) - var(--ink-surface) - var(--ink-gap)) * (1 - var(--warn-at))) * 1cqh);
-  left: 0;
-  width: 3.4cqw;
-  height: .6cqh;
-  margin: -.3cqh 0 0;
-  background: var(--accent);
-  clip-path: polygon(0 0, 100% 35%, 100% 65%, 0 100%);   /* a notch cut into the wall, sharp at its tip */
-  -webkit-mask-image: none;
-  mask-image: none;
-}
-.dt-stage[data-theme="ink"][data-pro-seat="right"][data-side="pro"] .dt-warnline,
-.dt-stage[data-theme="ink"][data-pro-seat="left"][data-side="con"] .dt-warnline {
-  left: auto;
-  right: 0;
-  clip-path: polygon(100% 0, 0 35%, 0 65%, 100% 100%);
-}
+.dt-stage[data-theme="ink"] .dt-warnline { display: none; }
 
 /* ---- the bell: a ripple through the water round the digits (the painter's drop is the bell where it draws) ---- */
 
@@ -185,6 +163,10 @@
 
 .dt-stage[data-theme="ink"] .dt-speaker { font-family: var(--font-title); letter-spacing: .18em; }
 .dt-stage[data-theme="ink"] .dt-top { font-family: var(--font-title); letter-spacing: .16em; }
+.dt-stage[data-theme="ink"] :is(.dt-top span, .dt-title, .dt-speaker, .dt-team),
+.dt-stage[data-theme="ink"] .dt-head::before {
+  text-shadow: 0 0 .06em rgb(255 255 255 / .9), 0 0 .16em rgb(255 255 255 / .8), 0 0 .28em rgb(255 255 255 / .55);
+}
 
 /* Overtime: a larger seal, pressed at a slant against the digits' upper corner, on the second bell, once the ochre
    digits have been read. The press only scales and fades it (it fills backwards: a held fill would keep the filtered

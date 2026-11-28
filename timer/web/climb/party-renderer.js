@@ -1,5 +1,6 @@
 import { createClimberModel, kneeSection, posedVertex } from './climber-model.js';
 import { bridgeRopePath, visiblePolygonPath } from './surface-occlusion.js';
+import { movingLayer } from './moving-layer.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const dot = (a,b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
@@ -27,19 +28,22 @@ function preparePart(part) {
       normal[1] += (p[2]-q[2])*(p[0]+q[0]);
       normal[2] += (p[0]-q[0])*(p[1]+q[1]);
     }
-    return { ...spec, normal, flexible:weights && indices.some(i=>weights[i]>0) };
+    return { ...spec, normal, flexible:weights && indices.some(i=>weights[i]>0),
+      paint:{indices, bone:part.bone, name:part.name || part.bone} };
   });
   return { ...part, faces, points:part.vertices.map(()=>({})), world:[0,0,0] };
 }
 
 function lighting() {
-  const cache = new Map();
+  const hardSurfaces = new Map(), fabrics = new Map();
   return (base, illumination, fabric) => {
     // Additional tonal steps model the rounded bevels of the trousers.
     const steps = fabric ? 22 : 14;
     const band = Math.round(clamp((illumination+.55)/1.55,0,1)*steps);
-    const key = base+'/'+steps+'/'+band;
-    if (cache.has(key)) return cache.get(key);
+    const cache = fabric ? fabrics : hardSurfaces;
+    let bands = cache.get(base);
+    if (!bands) { bands = []; cache.set(base,bands); }
+    if (bands[band]) return bands[band];
     const t = band/steps, amount = fabric ? .65+.56*t : .69+.45*t;
     const warm = [12,5,-2];
     const rgb = [1,3,5].map((start,i) => {
@@ -47,7 +51,7 @@ function lighting() {
       return Math.round(clamp(channel*amount + warm[i]*t,0,255)).toString(16).padStart(2,'0');
     });
     const value = '#'+rgb.join('');
-    cache.set(key,value);
+    bands[band]=value;
     return value;
   };
 }
@@ -91,7 +95,7 @@ function snowIntersection(a,b,project) {
   return mix(a.x,b.x,t).toFixed(2)+','+mix(a.y,b.y,t).toFixed(2);
 }
 
-function addPart(queue,part,bone,shade,project,owner) {
+function addPart(queue,part,bone,shade,project,owner,raster) {
   const points = part.points;
   // The cofactor transforms normals correctly even on stretched shin/pole bones.
   const nx = cross(bone.y,bone.z), ny = cross(bone.z,bone.x), nz = cross(bone.x,bone.y);
@@ -140,7 +144,7 @@ function addPart(queue,part,bone,shade,project,owner) {
       }
     }
     let d=exact;
-    if (d===null) {
+    if (d===null && (!raster || clipped)) {
       d='';
       for (let i=0; i<ids.length; i++) {
         const a = points[ids[i]], b = points[ids[(i+1)%ids.length]];
@@ -150,8 +154,15 @@ function addPart(queue,part,bone,shade,project,owner) {
       if (!d) continue;
       d+='Z';
     }
-    queue.push({ depth:depth/ids.length, d, clipped:exact!==null, color:shade(face.color,intensity,part.knee),
-      bone:part.bone, name:part.name || part.bone, location:bone.location, owner:bone.location && owner });
+    const paint=face.paint;
+    paint.depth=depth/ids.length;
+    paint.d=d;
+    paint.points=points;
+    paint.clipped=exact!==null;
+    paint.color=shade(face.color,intensity,part.knee);
+    paint.location=bone.location;
+    paint.owner=bone.location && owner;
+    queue.push(paint);
   }
 }
 
@@ -191,18 +202,58 @@ function addRope(queue,a,b,member,project,terrain) {
   }
 }
 
+// Projected vertices stay valid until the next frame. Trace them directly;
+// only ropes and faces cut by terrain need the silhouette clipping path.
+function paintFaces(ctx,queue) {
+  for (const face of queue) {
+    if (face.bone==='rope') {
+      ctx.lineWidth=face.width;
+      ctx.lineCap=face.linecap || 'round';
+      ctx.strokeStyle=face.color;
+      ctx.stroke(new Path2D(face.d));
+      continue;
+    }
+    ctx.fillStyle=face.color;
+    ctx.strokeStyle=face.color;
+    ctx.lineWidth=.32;
+    if (face.d!==null) {
+      const path=new Path2D(face.d);
+      ctx.fill(path);
+      if (!face.clipped) ctx.stroke(path);
+    } else {
+      const ids=face.indices, points=face.points, start=points[ids[0]];
+      ctx.beginPath();
+      ctx.moveTo(start.x,start.y);
+      for (let i=1; i<ids.length; i++) {
+        const p=points[ids[i]];
+        ctx.lineTo(p.x,p.y);
+      }
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    }
+  }
+}
+
 export function createPartyRenderer() {
   let art;
   function mount(parent,members) {
     parent.replaceChildren();
     const shadows = svg(parent,'g',{fill:'#343742', opacity:'.20'});
-    return { parent, shade:lighting(), shadows:members.map(()=>svg(shadows,'path')),
+    return { parent, shade:lighting(), queue:[], shadows:members.map(()=>svg(shadows,'path')),
       people:members.map(member=>createClimberModel(member.person).map(preparePart)),
       layer:svg(parent,'g',{'stroke-linejoin':'round','stroke-linecap':'round'}), slots:[] };
   }
-  return function render(parent,project,members,terrain) {
+  return function render(parent,project,members,terrain,motion=false) {
     if (!art || art.parent!==parent) art = mount(parent,members);
-    const queue = [];
+    if (motion && art.raster===undefined) art.raster=movingLayer(art.layer,'data-moving-parties');
+    const raster=motion && art.raster;
+    if (art.raster && art.showRaster!==Boolean(raster)) {
+      art.raster.layer.style.display=raster?'':'none';
+      art.layer.style.display=raster?'none':'';
+      art.showRaster=Boolean(raster);
+    }
+    const queue = art.queue;
+    queue.length = 0;
     for (let i=0; i<members.length; i++) {
       const member = members[i], shadow = member.groundShadow || [];
       if (member.rank>0) {
@@ -222,14 +273,20 @@ export function createPartyRenderer() {
       art.shadows[i].setAttribute('d',shadowVisible ?
         'M'+cloud.map(p=>p.x.toFixed(1)+','+p.y.toFixed(1)).join('L')+'Z' : '');
       const knees=[0,1].map(leg=>kneeSection(member.bones['thigh'+leg],member.bones['shin'+leg]));
+      const owner=member.side+'-'+member.rank;
       for (const part of art.people[i]) {
         const bone = member.bones[part.bone] || member.carriedTools?.[part.bone];
         if (!bone) continue;
         transformPart(part,bone,project,part.knee && knees[part.knee.leg]);
-        addPart(queue,part,bone,art.shade,project,member.side+'-'+member.rank);
+        addPart(queue,part,bone,art.shade,project,owner,raster);
       }
     }
     queue.sort((a,b)=>b.depth-a.depth);
+    if (raster) {
+      const ratio=Math.min(2,parent.ownerDocument.defaultView.devicePixelRatio || 1);
+      paintFaces(raster.begin(project.width,project.height,ratio),queue);
+      return;
+    }
     let count=0;
     function attr(slot,key,value) {
       if (slot[key]===value) return;
