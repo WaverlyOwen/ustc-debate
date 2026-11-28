@@ -2,6 +2,8 @@
 
 华语辩论计时器支持在线和离线开赛、计时与投影。打开[网页版](https://waverlyowen.github.io/ustc-debate/)即可使用。开赛页的「下载离线版」指向最新正式版的 `ustc-debate-timer.html`。把这一个文件拷到比赛电脑上，用 Edge 双击打开即可。[查看正式版本](https://github.com/WaverlyOwen/ustc-debate/releases)
 
+计时器原创代码采用 PolyForm Noncommercial 1.0.0，允许非商业使用。协议还明确允许教育机构等列明组织使用，资助来源不影响这项许可。超出协议范围的商业使用须另行获得授权。[协议原文](../LICENSES/PolyForm-Noncommercial-1.0.0.txt) · [商业授权申请方式](../LICENSE)
+
 ## 开一场
 
 打开文件后先到开赛页：

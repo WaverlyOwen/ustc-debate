@@ -286,7 +286,11 @@ def dev_index_html():
 def core_assets(formats):
     css = "".join(f"/* === {p.relative_to(SRC).as_posix()} === */\n{_source_text(p)}\n"
                   for p in style_files())
-    js = _themes_js()
+    # The match exporter copies this bundle, including its license, into each standalone HTML file.
+    root = HERE.parent
+    notices = [root / "LICENSE", root / "LICENSES/PolyForm-Noncommercial-1.0.0.txt", root / "LICENSES/CC-BY-NC-4.0.txt"]
+    license_text = "\n\n".join(p.read_text(encoding="utf-8").rstrip() for p in notices)
+    js = f"/*!\n{license_text}\n*/\n" + _themes_js()
     js += "".join(f"/* === {p.relative_to(SRC).as_posix()} === */\n{_script_text(p, formats)}\n"
                   for p in script_files())
     js = re.sub(r"</script", r"<\/script", js, flags=re.I)

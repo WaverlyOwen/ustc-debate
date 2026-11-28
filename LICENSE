@@ -1,0 +1,15 @@
+ustc-debate 许可证说明
+
+本项目的原创作品按以下范围分别采用两份标准许可证。
+
+软件采用 PolyForm Noncommercial License 1.0.0，包括辩论计时器、构建和检查脚本、LaTeX 文档类及其他程序代码。
+协议原文见 LICENSES/PolyForm-Noncommercial-1.0.0.txt
+官方地址：https://polyformproject.org/licenses/noncommercial/1.0.0
+
+内容采用 Creative Commons Attribution-NonCommercial 4.0 International（CC BY-NC 4.0），包括备赛文档、辩稿、赛制说明、写作模板、技能说明及其他原创图文资料。
+协议原文见 LICENSES/CC-BY-NC-4.0.txt
+官方地址：https://creativecommons.org/licenses/by-nc/4.0/
+
+第三方组件和引用材料按各自的许可或其他适用依据使用。Sumi 和 Three.js 各自适用其随附的 MIT 许可证。
+
+需要上述许可范围以外的商业授权，可通过项目仓库 https://github.com/WaverlyOwen/ustc-debate 联系维护者，向相应权利人申请。

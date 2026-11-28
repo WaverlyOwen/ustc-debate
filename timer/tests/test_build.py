@@ -276,8 +276,14 @@ class InlineTests(unittest.TestCase):
         import re
         self.assertIsNone(re.search(r'<script[^>]+src=', self.html))
         self.assertIsNone(re.search(r'<link[^>]+href=', self.html))
-        self.assertNotIn("http://", self.html.replace("http://www.w3.org", ""))
-        self.assertNotIn("https://", self.html)
+        # The official license texts contain URLs in the bundle's opening comment.
+        root = build.HERE.parent
+        paths = [root / "LICENSE", root / "LICENSES/PolyForm-Noncommercial-1.0.0.txt", root / "LICENSES/CC-BY-NC-4.0.txt"]
+        notice = "/*!\n" + "\n\n".join(p.read_text(encoding="utf-8").rstrip() for p in paths) + "\n*/"
+        self.assertIn('<script id="dt-main">\n' + notice, self.html)
+        page = self.html.replace(notice, "", 1)
+        self.assertNotIn("http://", page.replace("http://www.w3.org", ""))
+        self.assertNotIn("https://", page)
 
     def test_every_source_is_inlined_in_order(self):
         positions = [self.html.index(f"=== {name} ===") for name in build.ORDER]
