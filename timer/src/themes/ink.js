@@ -10,13 +10,15 @@
   const MIN_ROWS = 400;        // a small stage (the console's preview) draws at least this many rows, or its own
   const MAX_ROWS = 900;
   const ENTER_MS = 560;        // a new stage's drops fall to its front (wall time, the one thing that is)
-  const DROP_PERIOD = 6.6;     // speaking seconds between groups, including a short rest on the bed
-  const SINK_S = 5.8;          // play Sumi's full descent in this much speaking time
-  // Entry x in the tank and delay in speaking seconds. Neighbouring plumes meet at different depths.
-  const DROPS = [[0.28, 0], [0.64, 0.15], [0.45, 0.53], [0.77, 0.86], [0.54, 1.18]];
-  const DROP_FPS = 30;
-  const LAST_FRAME = Math.round(SINK_S * DROP_FPS);
-  const MASK_W = 384, MASK_H = 288;    // the 4:3 water tank in Sumi's side-view study
+  // Drop positions are fractions of the tank width and entry times are fractions of each speaker's clock.
+  const DROPS = [[0.28, 0], [0.78, 0.14], [0.09, 0.34], [0.90, 0.55], [0.48, 0.77]];
+  const FLUID_SECONDS = 23;
+  const SUMI_HZ = 60;          // native integration rate of Sumi's fluidPainter
+  const LAST_FRAME = FLUID_SECONDS * SUMI_HZ - 1;
+  const DUEL_LAST_FRAME = 2 * FLUID_SECONDS * SUMI_HZ - 1;
+  const DUEL_X = [0.445, 0.36, 0.475, 0.29, 0.42];  // mirrored entry points for the two pigments
+  const NOT_DROPPED = 2;  // later than the end of the shared timeline at 1
+  const MASK_W = 384, MASK_H = 240;
   const BELL_S = 1.1;          // a bell's drop falls to the front in this much time used...
   const MELT_S = 0.6;          // ...and melts into it in this much more
   const PAD = 0.012;           // a box the ink is thinned in reaches this far past its text...
@@ -26,11 +28,11 @@
   const SETTLE_MS = 800;       // the layout is read on every frame for this long after anything that moves it changes
   const RING_GAP_S = 0.32;     // an end bell's second drop (render.js RING_GAP_MS)
   const DIM = 0.5;             // the waiting side's ink at half strength
-  const LOCK_FADE = 0.3;       // a side out of time keeps 1 - LOCK_FADE of its ink, on the bed; a yield clears it all
+  const LOCK_FADE = 0.3;       // locked clocks retain their ink at reduced strength
 
   // ---- the shader ----
-  // Every length is in stage heights: p.x runs 0..aspect, p.y 0 (top) .. 1 (bottom). Each pixel belongs to one
-  // column of water (a free debate's half, or the whole stage), whose ink sinks with its own clock. The ink's
+  // Every length is in stage heights: p.x runs 0..aspect, p.y 0 (top) .. 1 (bottom). Live debate stages sample one
+  // Sumi tank across the stage. The decorative scenes can use separate columns. Their ink's
   // density D at a pixel is the sum of its column's plumes (a vortex-ring head and its stem each) and a veil of old,
   // diffused ink between the surface and the front, all looked up through a few steps of curl noise (older ink,
   // higher up, has been stirred further), then textured with filaments that are sharp near the front and soft above
@@ -44,13 +46,13 @@
     'uniform vec2 uRes;',          // the drawing buffer, px
     'uniform float uAspect;',      // stage width / height
     'uniform sampler2D uNoise;',
-    'uniform sampler2D uInk0, uInk1, uRest;',
-    'uniform float uDropScale;',
-    'uniform vec4 uDrop[2];',     // current x, previous x, old ink opacity, new ink opacity
+    'uniform sampler2D uInk0, uNext0, uInk1, uNext1;',
+    'uniform float uDuel;',
+    'uniform vec4 uDrop[2];',     // x at the two walls, bed y, opacity
     'uniform vec3 uAir, uTop, uDeep;',   // linear rgb: the air over the tank, the water under its surface, at its bed
     'uniform float uSurface;',
     'uniform vec4 uSplit;',        // where the columns part, the axis (0 x, 1 y), the clear band either side, columns
-    'uniform vec4 uColA[2];',      // top of its ink, its front, - , how much of its ink is left (dimmed, cleared)
+    'uniform vec4 uColA[2];',      // ink top, front, fractional Sumi frame, strength
     'uniform vec4 uColB[2];',      // x0, x1, seat (+1 at x0, -1 at x1, 0 none), veil
     'uniform vec4 uColC[2];',      // seed, how far across its old ink has spread, flowing drops
     'uniform vec4 uColD[2];',      // the drift of its water: two offsets, wrapped
@@ -221,19 +223,22 @@
     '  Dt = mix(Dt, min(Dt, 0.15), max(m.x, m.y));',
     '  vec3 col = water * exp(-(D * K + Dt * uKThread));',
     // Composite the original Sumi side-view opacity at the water's scale. Its shape and movement come from Sumi.
-    '  if (A.z >= 0.0) {',
+    '  if (uDuel > 0.5 && A.z >= 0.0) {',
+    '    vec4 tank = uDrop[0];',
+    '    vec2 coord = vec2((p.x - tank.x) / (tank.y - tank.x), (p.y - uSurface) / (tank.z - uSurface));',
+    '    vec4 dye = mix(texture2D(uInk0, coord), texture2D(uNext0, coord), fract(A.z));',
+    '    float con = dye.b / max(dye.r + dye.b, 0.0001);',
+    '    float right = tank.y > tank.x ? con : 1.0 - con;',
+    '    vec3 pigment = mix(enc(uDeep * exp(-uK[0])), enc(uDeep * exp(-uK[1])), right);',
+    '    col = lin(mix(enc(col), pigment, dye.a * tank.w * wet * step(coord.y, 1.0)));',
+    '    F = mix(uFloor[0], uFloor[1], right); FT = mix(uFloorT[0], uFloorT[1], right);',
+    '  } else if (A.z >= 0.0) {',
     '    vec4 drop = mix(uDrop[0], uDrop[1], side);',
-    '    float height = (' + BED.toFixed(4) + ' - uSurface) * uDropScale;',
-    '    float y = (p.y - uSurface) / height;',
-    '    float w = min(height * ' + (MASK_W / MASK_H).toFixed(4) + ', B.y - B.x);',
-    '    vec2 centers = clamp(drop.xy, vec2(B.x + w * 0.5), vec2(B.y - w * 0.5));',
-    '    vec2 u = 0.5 + (p.x - centers) / w;',
-    '    vec2 edges = 1.0 - smoothstep(vec2(0.48), vec2(0.5), abs(u - 0.5));',
-    '    vec2 coord = vec2(u.x, y);',
-    '    float fresh = side < 0.5 ? texture2D(uInk0, coord).r : texture2D(uInk1, coord).r;',
-    '    float old = texture2D(uRest, vec2(u.y, y)).r * drop.z * edges.y;',
-    '    float opacity = (1.0 - (1.0 - fresh * drop.w * edges.x) * (1.0 - old)) * A.w * wet * (1.0 - apart);',
-    '    opacity *= 1.0 - smoothstep(0.99, 1.0, y);',
+    '    vec2 coord = vec2((p.x - drop.x) / (drop.y - drop.x), (p.y - uSurface) / (drop.z - uSurface));',
+    '    float ink = side < 0.5 ? mix(texture2D(uInk0, coord).a, texture2D(uNext0, coord).a, fract(A.z))',
+    '                           : mix(texture2D(uInk1, coord).a, texture2D(uNext1, coord).a, fract(A.z));',
+    '    float opacity = ink * drop.w * A.w * wet * (1.0 - apart);',
+    '    opacity *= step(0.0, coord.x) * step(coord.x, 1.0) * step(coord.y, 1.0);',
     '    col = lin(mix(enc(col), enc(uDeep * exp(-K)), opacity));',
     '  }',
     '  float line = exp(-pow((p.y - S) / 0.0017, 2.0));',
@@ -336,8 +341,8 @@
 
   // The uniforms, in the order they are packed: each a name and its length in floats.
   const LAYOUT = [
-    ['uRes', 2], ['uAspect', 1], ['uAir', 3], ['uTop', 3], ['uDeep', 3], ['uSurface', 1], ['uSplit', 4],
-    ['uColA', 8], ['uColB', 8], ['uColC', 8], ['uColD', 8], ['uDrop', 8], ['uDropScale', 1], ['uK', 6], ['uFloor', 6], ['uFloorT', 6],
+    ['uRes', 2], ['uAspect', 1], ['uAir', 3], ['uTop', 3], ['uDeep', 3], ['uSurface', 1], ['uSplit', 4], ['uDuel', 1],
+    ['uColA', 8], ['uColB', 8], ['uColC', 8], ['uColD', 8], ['uDrop', 8], ['uK', 6], ['uFloor', 6], ['uFloorT', 6],
     ['uN', 1], ['uP', 4 * NP], ['uQ', 4 * NP], ['uW', 4 * NP], ['uBox', 4 * NB], ['uDigits', 1], ['uCaps', 4], ['uRipple', 4 * NR],
     ['uThread', 4], ['uThreadB', 4], ['uKThread', 3],
   ];
@@ -373,21 +378,20 @@
     return m ? Number(m[1]) * 1000 : null;
   }
 
-  // Sumi integrates forwards in 1/60 s steps. Keep the opacity frames that have actually been shown so that
-  // pauses, repeated drops and a second clock can reuse them. All 175 frames together take less than 19 MiB.
-  const masks = [];
-  let source = null, consumers = 0;
-  function closeSource() {
-    if (!source) return;
+  // Single-colour stages reuse the same Sumi frames. A dual stage owns its tank because its
+  // injection times depend on the speakers. Each cache holds at most 16 canvases (under 6 MiB).
+  const singleTank = { masks: new Map(), sources: [null, null] };
+  const MASK_CACHE_SIZE = 16;
+  let consumers = 0;
+  function closeSource(source) {
     for (const layer of source.layers) {
       if (layer.painter) layer.painter.dispose();
       else layer.gl?.getExtension('WEBGL_lose_context')?.loseContext();
       layer.canvas.remove();
     }
-    source = null;
   }
 
-  function openSource() {
+  function openSource(tank) {
     const layers = [];
     const layer = () => {
       const canvas = document.createElement('canvas');
@@ -400,57 +404,86 @@
       if (!gl) throw new Error('墨：Sumi 无法取得 WebGL');
       return target;
     };
-    const sample = document.createElement('canvas');
-    sample.width = MASK_W; sample.height = MASK_H;
-    source = { layers, fluid: false, sample: sample.getContext('2d', { willReadFrequently: true }), frame: -1 };
+    const source = { layers, fluid: false, frame: -1 };
     try {
       const first = layer(), gl = first.gl;
       const options = { seed: 1, color: '#000000', swirl: 0.6 };
-      const fluidSeconds = 11.8, tracedSeconds = 5.25;
-      const dropsAt = run => DROPS.map(([x, delay]) => [x, 0.1, delay * run / SINK_S]);
+      const shared = !!tank.starts;
+      const fluidSeconds = shared ? 2 * FLUID_SECONDS : FLUID_SECONDS;
+      const tracedSeconds = shared ? 18 : 11.5;
+      const dropsAt = run => shared ? tank.starts.map((start, i) => {
+        const x = DUEL_X[Math.floor(i / 2)];
+        return [i % 2 ? 1 - x : x, 0.075, start * run, i % 2 ? '#0000ff' : '#ff0000'];
+      }) : DROPS.map(([x, progress]) => [x, 0.075, progress * run]);
       const info = gl.getExtension('WEBGL_debug_renderer_info');
       const software = info && /swiftshader|llvmpipe|software rasterizer|basic render driver/i.test(gl.getParameter(info.UNMASKED_RENDERER_WEBGL));
-      // The original fluid solver injects all five into the same velocity field.
-      if (!software) first.painter = SumiInk.fluidPainter(first.canvas, gl, dropsAt(fluidSeconds), options, fluidSeconds);
+      // The original fluid solver injects every drop into the same velocity field.
+      let drops = dropsAt(fluidSeconds);
+      if (!software) first.painter = SumiInk.fluidPainter(first.canvas, gl, drops, options, fluidSeconds);
       source.fluid = !!first.painter;
       if (!source.fluid) {
-        // Sumi's original traced shader has three uniform slots. Composite its batches on one timeline.
-        const drops = dropsAt(tracedSeconds);
-        for (let i = 0; i < drops.length; i += 3) {
+        drops = dropsAt(tracedSeconds);
+        // Single-colour playback retains its original batches. In a debate every drop contributes
+        // to the same traced velocity field, including an earlier drop from the other side.
+        const batchSize = shared ? drops.length : 3;
+        for (let i = 0; i < drops.length; i += batchSize) {
           const target = i === 0 ? first : layer();
-          target.painter = SumiInk.tracedSide(target.canvas, target.gl, drops.slice(i, i + 3), options, tracedSeconds);
+          target.painter = SumiInk.tracedSide(target.canvas, target.gl, drops.slice(i, i + batchSize), options, tracedSeconds);
           if (!target.painter) throw new Error('墨：Sumi 无法绘制墨滴');
         }
       }
+      if (shared) source.updateStarts = () => {
+        drops.forEach((drop, i) => { drop[2] = tank.starts[i] * first.painter.duration; });
+        first.painter.updateStarts?.();
+      };
+      return source;
     } catch (e) {
-      closeSource();
+      closeSource(source);
       throw e;
     }
   }
 
-  function dropMask(frame) {
-    if (masks[frame]) return masks[frame];
-    if (source && ((source.fluid && frame < source.frame) || source.layers.some(layer => layer.gl.isContextLost()))) closeSource();
-    if (!source) openSource();
-    const { sample, layers } = source;
+  function dropMask(frame, side, tank) {
+    const { masks, sources } = tank;
+    let mask = masks.get(frame);
+    if (mask) {
+      masks.delete(frame);
+      masks.set(frame, mask);
+      return mask;
+    }
+    let source = sources[side];
+    if (source && ((source.fluid && frame < source.frame) || source.layers.some(layer => layer.gl.isContextLost()))) {
+      closeSource(source);
+      source = sources[side] = null;
+    }
+    if (!source) source = sources[side] = openSource(tank);
+    if (masks.size === MASK_CACHE_SIZE) {
+      const oldest = masks.keys().next().value;
+      mask = masks.get(oldest);
+      masks.delete(oldest);
+    } else {
+      mask = document.createElement('canvas');
+      mask.width = MASK_W; mask.height = MASK_H;
+    }
+    const sample = mask.getContext('2d'), layers = source.layers;
     // The traced rendition settles higher in its canvas. Frame that tank around its actual descent.
-    const crop = source.fluid ? 1 : 0.74;
+    const crop = source.fluid ? 1 : 0.80;
     for (const { painter, canvas, gl } of layers) {
-      painter.draw(Math.max(1 / 120, painter.duration * frame / LAST_FRAME));
+      // The solver advances while its clock is below this time. Sampling inside the step avoids
+      // duplicating or skipping a step due to floating-point rounding at an exact 1/60 boundary.
+      painter.draw(source.fluid ? (frame + 0.5) / SUMI_HZ :
+        Math.max(1 / 120, painter.duration * frame / (tank.starts ? DUEL_LAST_FRAME : LAST_FRAME)));
       if (gl.isContextLost()) {
-        closeSource();
+        closeSource(source);
+        sources[side] = null;
         throw new Error('墨：Sumi 的画布丢了');
       }
       sample.globalCompositeOperation = canvas === layers[0].canvas ? 'copy' : 'source-over';
-      sample.drawImage(canvas, canvas.width * (1 - crop) / 2, 0, canvas.width * crop, canvas.height * crop, 0, 0, MASK_W, MASK_H);
+      sample.drawImage(canvas, 0, 0, canvas.width, canvas.height * crop, 0, 0, MASK_W, MASK_H);
     }
-    const rgba = sample.getImageData(0, 0, MASK_W, MASK_H).data;
-    const alpha = new Uint8Array(MASK_W * MASK_H);
-    for (let i = 0; i < alpha.length; i++) alpha[i] = rgba[4 * i + 3];
     source.frame = frame;
-    masks[frame] = alpha;
-    if (frame === LAST_FRAME) closeSource();
-    return alpha;
+    masks.set(frame, mask);
+    return mask;
   }
 
   function painter(canvas, ctx, flags) {
@@ -471,17 +504,17 @@
     const loc = {};
     LAYOUT.forEach(([name, n]) => { loc[name] = gl.getUniformLocation(prog, name + (ARRAYS.indexOf(name) >= 0 ? '[0]' : '')); });
     const uNoise = gl.getUniformLocation(prog, 'uNoise');
-    const format = gl.R8 ? gl.RED : gl.LUMINANCE;
-    const internalFormat = gl.R8 || gl.LUMINANCE;
-    const inkTextures = ['uInk0', 'uInk1', 'uRest'].map(name => {
+    const inkSamplers = ['uInk0', 'uNext0', 'uInk1', 'uNext1'].map(name => gl.getUniformLocation(prog, name));
+    const duelTank = { masks: new Map(), sources: [null], starts: Array(DROPS.length * 2).fill(NOT_DROPPED) };
+    const inkTextures = inkSamplers.map(() => {
       const texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 1, 1, 0, format, gl.UNSIGNED_BYTE, new Uint8Array(1));
-      return { texture, location: gl.getUniformLocation(prog, name), frame: -1 };
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, MASK_W, MASK_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      return { texture, frame: -1 };
     });
     consumers++;
     const buf = gl.createBuffer();
@@ -506,6 +539,52 @@
     const plumeCache = {};
     let drawn = null;          // the uniforms last drawn
     const u = new Float32Array(FLOATS);
+
+    // Translate each speaker's five milestones to time in the shared tank. Settled turns survive
+    // pause, undo, reload and projection. Only the current turn grows between actions.
+    function duelFrame(v) {
+      const clocks = ['pro', 'con'].map(side => v.clocks.find(c => c.id === side));
+      const total = clocks[0].total + clocks[1].total;
+      const used = clocks.map(c => Math.max(0, c.total - (c.yielded || c.remaining)));
+      const spent = [0, 0], starts = Array(2 * DROPS.length).fill(NOT_DROPPED);
+      let elapsed = 0;
+      function turn(side, duration) {
+        const i = side === 'pro' ? 0 : 1;
+        const end = spent[i] + Math.min(duration, Math.max(0, used[i] - spent[i]));
+        DROPS.forEach(([, fraction], j) => {
+          const threshold = fraction * clocks[i].total, slot = 2 * j + i;
+          if (starts[slot] !== NOT_DROPPED || threshold < spent[i] || threshold > end) return;
+          const at = (elapsed + threshold - spent[i]) / total;
+          // Two integration steps leave room for the already displayed interpolation neighbour at a handoff.
+          starts[slot] = at > 0 ? (Math.ceil(at * (DUEL_LAST_FRAME + 1)) + 2) / (DUEL_LAST_FRAME + 1) : 0;
+        });
+        elapsed += end - spent[i];
+        spent[i] = end;
+      }
+      for (const [side, ms] of v.turns || []) turn(side, ms);
+      clocks.forEach((c, i) => { if (used[i] > spent[i] || c.active) turn(c.id, used[i] - spent[i]); });
+
+      let changedAt = NOT_DROPPED;
+      starts.forEach((start, i) => {
+        if (start !== duelTank.starts[i]) changedAt = Math.min(changedAt, start, duelTank.starts[i]);
+      });
+      if (changedAt !== NOT_DROPPED) {
+        duelTank.starts = starts;
+        const cut = Math.floor(changedAt * DUEL_LAST_FRAME);
+        const source = duelTank.sources[0];
+        if (source && source.fluid && source.frame >= cut) {
+          closeSource(source);
+          duelTank.sources[0] = null;
+        } else if (source) source.updateStarts();
+        for (const f of duelTank.masks.keys()) if (f >= cut) duelTank.masks.delete(f);
+        for (const slot of inkTextures) if (slot.tank === duelTank && slot.frame >= cut) slot.frame = -1;
+        drawn = null;
+      }
+      const landed = starts.filter(start => start < NOT_DROPPED);
+      if (!landed.length) return -1;
+      const at = motionless ? Math.max(...landed) + 0.01 : elapsed / total;
+      return clamp01(at) * DUEL_LAST_FRAME;
+    }
 
     const stageEl = () => canvas.parentNode;
 
@@ -583,11 +662,12 @@
     function measure(el) {
       const box = el.getBoundingClientRect();
       const halves = Array.from(el.querySelectorAll('.dt-half')).map(h => ({
-        side: h.getAttribute('data-side') === 'con' ? 'con' : 'pro', rect: rectOf(h, box),
+        side: h.getAttribute('data-side') === 'con' ? 'con' : 'pro',
         dim: varOf(h, '--dim'), clear: varOf(h, '--ink-clear'), clock: clockBox(sel(h, '.dt-clock'), box),
       }));
       return {
         aspect: box.width / Math.max(1, box.height), halves,
+        top: el.dataset.kind === 'single' ? Array.from(el.querySelectorAll('.dt-top span'), node => pad(rectOf(node, box))) : [],
         clock: clockBox(sel(el, '.dt-clock[data-clock="main"]'), box), head: pad(rectOf(sel(el, '.dt-head'), box)),
         motions: pad(rectOf(sel(el, '.dt-motions'), box)), teams: pad(rectOf(sel(el, '.dt-teams'), box)),
         record: pad(rectOf(sel(el, '.dt-record'), box)), next: pad(rectOf(sel(el, '.dt-next'), box)),
@@ -620,16 +700,17 @@
       const S = palette.surface;
       const seat = v.proSeat === 'right' ? 'right' : 'left';
       const st = v.mode === 'stage' ? v.stage : null;
-      const sc = { aspect, dropScale: v.mode === 'title' ? 1.25 : 1, columns: [], plumes: [], digits: [], text: [], ripples: [], thread: null, split: { at: 0, axis: 0, band: 0 } };
+      const sc = { aspect, columns: [], plumes: [], digits: [], text: [], ripples: [], thread: null, split: { at: 0, axis: 0, band: 0 } };
       const entering = enterAt !== null && !still ? clamp01((now - enterAt) / ENTER_MS) : 1;
       const timeOf = ms => (motionless ? STILL_T : ms / 1000);
-      const frontOf = used => S + GAP + (BED - S - GAP) * clamp01(used);
+      const bed = st?.type === 'single' ? 1 : BED;
+      const frontOf = used => S + GAP + (bed - S - GAP) * clamp01(used);
       const usedOf = c => Math.max(0, c.total - c.remaining);
       const across = (c, at) => (c.seat >= 0 ? c.x0 + at * (c.x1 - c.x0) : c.x1 - at * (c.x1 - c.x0));
       // A column of water, x0..x1, its seat (+1 at x0, -1 at x1, 0 none), its ink, its turbulence's time t (s), the top
       // and front of its ink; its old ink pours in with the drops as the stage comes in.
       const column = o => {
-        const c = Object.assign({ top: S, veil: 1, amount: 1, seat: 0, spread: 1 }, o);
+        const c = Object.assign({ top: S, veil: 0, amount: 1, seat: 0, spread: 1 }, o);
         c.flow = st && !motionless ? 1 : 0;
         c.veil *= clamp01(entering * 1.6 - 0.2);
         c.seed = seedOf(o.seedKey);
@@ -641,14 +722,13 @@
         return c;
       };
       // Schedule each side's Sumi drops using only its own elapsed speaking time.
-      const rain = (c, list) => {
-        const cycle = Math.floor(c.t / DROP_PERIOD), age = c.t - cycle * DROP_PERIOD;
-        const x = across(c, list[cycle % list.length].at);
-        const previous = across(c, list[(cycle + list.length - 1) % list.length].at);
-        c.frame = motionless ? LAST_FRAME : Math.round(clamp01(age / SINK_S) * LAST_FRAME);
-        c.drop = [x, previous, cycle && !motionless ? (1 - easeOut(age / 2.4)) * entering : 0,
-          still ? 1 : easeOut((entering - 0.2) / 0.8)];
+      const rain = (c, progress, inset = 0) => {
+        // Reduced motion holds a still for each entry until the next drop is due.
+        const at = motionless ? DROPS.reduce((last, [, start]) => progress >= start ? start + 0.01 : last, 0) : progress;
+        c.frame = clamp01(at) * LAST_FRAME;
+        c.drop = [across(c, inset), across(c, 1 - inset), bed, still ? 1 : easeOut((entering - 0.2) / 0.8)];
         if (entering < 0.2) {
+          const x = c.drop[0] + (c.drop[1] - c.drop[0]) * DROPS[0][0];
           const fall = entering / 0.2;
           sc.plumes.push({ x, y: S - 0.042 * (1 - fall * fall), r: 0.011, s: 1.6, col: sc.columns.indexOf(c),
             phase: 0, top: S, kind: 4, squash: 0, lean: 0, stem: 0 });
@@ -709,8 +789,8 @@
         const left = seat === 'left' ? 'pro' : 'con', right = left === 'pro' ? 'con' : 'pro';
         [[left, 0, aspect / 2, 1], [right, aspect / 2, aspect, -1]].forEach(([side, x0, x1, dir], i) => {
           const c = column({ x0, x1, seat: dir, ink: side, t: 31 + 7 * i, front: 0.66, veil: 0.3, seedKey: 'title/' + side });
-          c.frame = Math.round((0.28 + i * 0.08) * LAST_FRAME);
-          c.drop = [across(c, 0.27), 0, 0, easeOut(entering)];
+          c.frame = (0.095 + i * 0.015) * LAST_FRAME;
+          c.drop = [across(c, 0), across(c, 1), BED, easeOut(entering)];
         });
         sc.split = { at: aspect / 2, axis: 0, band: 0.03 };
         sc.text.push(m.motions, m.teams);
@@ -724,20 +804,26 @@
         sc.split = { at: 0.775 - lift, axis: 1, band: 0.012 };
         sc.text.push(m.head, m.record);
       } else if (st && st.type === 'dual') {
-        // Each half its own column of water, parted where the halves meet (on the divider's spring).
-        const split = m.halves[0] && m.halves[0].rect ? m.halves[0].rect[2] : aspect / 2;
+        sc.duel = true;
+        const frame = duelFrame(v);
+        const split = aspect / 2;
         m.halves.forEach((h, i) => {
           const clock = v.clocks.find(c => c.id === h.side);
           if (!clock) return;
           let used = usedOf(clock);
           const yielded = clock.locked && clock.yielded > 0;
-          if (yielded) used = Math.max(0, clock.total - clock.yielded);   // its ink stays where it was as it clears
-          const amount = (1 - DIM * h.dim) * (yielded ? 1 - h.clear : 1 - LOCK_FADE * h.clear);
+          if (yielded) used = Math.max(0, clock.total - clock.yielded);
+          const amount = (1 - DIM * h.dim) * (1 - LOCK_FADE * h.clear);
           const c = column({ x0: i ? split : 0, x1: i ? aspect : split, seat: i ? -1 : 1, ink: h.side, t: timeOf(used),
             front: frontOf(used / Math.max(1, clock.total)), amount, seedKey: st.id + '/' + h.side });
           const list = plumes(st.id + '/' + h.side, 3, 0.7);
-          rain(c, list);
-          if (clock.locked && !yielded) c.frame = LAST_FRAME;
+          c.frame = frame;
+          c.drop = [seat === 'left' ? 0 : aspect, seat === 'left' ? aspect : 0, BED, easeOut(entering)];
+          if (clock.active && entering < 0.2) {
+            const x = aspect * (i === 0 ? DUEL_X[0] : 1 - DUEL_X[0]), fall = entering / 0.2;
+            sc.plumes.push({ x, y: S - 0.042 * (1 - fall * fall), r: 0.011, s: 1.6, col: i,
+              phase: 0, top: S, kind: 4, squash: 0, lean: 0, stem: 0 });
+          }
           bellDrops(c, i, h.side, clock, list);
           sc.digits.push(h.clock);
         });
@@ -748,9 +834,9 @@
         const total = clock ? Math.max(1, clock.total) : 1;
         if (st.type === 'break') {
           // Neutral ink sinks in the middle during the break.
-          const c = column({ x0: 0, x1: aspect, ink: 'neutral', t: timeOf(used), front: frontOf(used / total), veil: 0.8, spread: 0,
+          const c = column({ x0: 0, x1: aspect, ink: 'neutral', t: timeOf(used), front: frontOf(used / total), spread: 0,
             seedKey: 'break/' + st.id });
-          rain(c, [{ at: 0.5 }]);
+          rain(c, used / total, 0.30);
           sc.digits.push(m.clock);
           sc.text.push(m.head, m.motions);
         } else {
@@ -759,7 +845,8 @@
           const c = column({ x0: 0, x1: aspect, seat: left ? 1 : -1, ink: side, t: timeOf(used), front: frontOf(used / total),
             seedKey: st.id + '/' + side });
           const list = plumes(st.id + '/' + side, 4, 0.8);
-          rain(c, list);
+          rain(c, used / total);
+          sc.text.push(m.head, ...m.top);
           bellDrops(c, 0, 'main', clock, list);
           if (clock && clock.phase === 'over') {
             // The time spilling over: a thread of the accent's ink falling from the surface at the seat, reaching the
@@ -781,7 +868,7 @@
       const set = (name, i, values) => { for (let k = 0; k < values.length; k++) u[OFFSET[name] + i + k] = values[k]; };
       set('uRes', 0, [canvas.width, canvas.height]);
       set('uAspect', 0, [sc.aspect]);
-      set('uDropScale', 0, [sc.dropScale]);
+      set('uDuel', 0, [sc.duel ? 1 : 0]);
       set('uAir', 0, pal.air); set('uTop', 0, pal.top); set('uDeep', 0, pal.deep);
       set('uSurface', 0, [pal.surface]);
       set('uSplit', 0, [sc.split.at, sc.split.axis, sc.split.band, sc.columns.length]);
@@ -828,14 +915,20 @@
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.uniform1i(uNoise, 0);
-      inkTextures.forEach((slot, i) => {
+      const left = values[OFFSET.uColA + 2], right = values[OFFSET.uColA + 6];
+      const tank = values[OFFSET.uDuel] ? duelTank : singleTank;
+      const frames = [Math.floor(left), Math.ceil(left), Math.floor(right), Math.ceil(right)];
+      frames.forEach((frame, i) => {
+        // The previous upper neighbour becomes the next lower one. Rebind its existing texture.
+        const slot = frame < 0 ? inkTextures[0] : inkTextures.find(s => s.tank === tank && s.frame === frame) ||
+          inkTextures.find(s => s.tank !== tank || s.frame < 0 || !frames.includes(s.frame));
         gl.activeTexture(gl.TEXTURE1 + i);
         gl.bindTexture(gl.TEXTURE_2D, slot.texture);
-        gl.uniform1i(slot.location, i + 1);
-        const frame = i < 2 ? values[OFFSET.uColA + 4 * i + 2] :
-          (values[OFFSET.uDrop + 2] || values[OFFSET.uDrop + 6] ? LAST_FRAME : -1);
-        if (frame >= 0 && frame !== slot.frame) {
-          gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, MASK_W, MASK_H, 0, format, gl.UNSIGNED_BYTE, dropMask(frame));
+        gl.uniform1i(inkSamplers[i], i + 1);
+        if (frame >= 0 && (frame !== slot.frame || slot.tank !== tank)) {
+          gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, tank === duelTank);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, dropMask(frame, i < 2 || tank === duelTank ? 0 : 1, tank));
+          slot.tank = tank;
           slot.frame = frame;
         }
       });
@@ -907,7 +1000,12 @@
       destroy() {
         drawn = null;
         try {
-          if (--consumers === 0) closeSource();
+          const tanks = --consumers === 0 ? [singleTank, duelTank] : [duelTank];
+          for (const tank of tanks) {
+            tank.sources.forEach(source => { if (source) closeSource(source); });
+            tank.sources.fill(null);
+            tank.masks.clear();
+          }
           inkTextures.forEach(slot => gl.deleteTexture(slot.texture));
           gl.deleteTexture(tex);
           gl.deleteBuffer(buf);
@@ -941,6 +1039,7 @@
 
   DT.themes.register('ink', {
     context: 'webgl',
+    frameInterval: 0,
     followsClock: true,
     painter,
     defs: '<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>' + SEAL + DROP + '</defs></svg>',

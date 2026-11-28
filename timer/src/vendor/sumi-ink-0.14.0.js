@@ -1,9 +1,10 @@
 /* TenguByte Sumi v0.14.0, github.com/tengubyte/sumi @ 19c6ef8dbd20c156374c475e0190b6c8e8cd2985.
    Original side-view fluid and traced renderers, bundled with esbuild 0.25.12.
-   To reproduce, copy src/core/inkDrop.ts to src/core/timerInkSide.ts in that checkout and append:
+   Upstream entry points: copy src/core/inkDrop.ts to src/core/timerInkSide.ts in that checkout and append:
    export function tracedSide(canvas, gl, drops, options, run) { return tracedPainter(canvas, gl, DROP_FRAGMENT, drops, options, run); }
    Bundle the following two exports from stdin with --bundle --format=iife --global-name=SumiInk --target=es2020 --charset=utf8:
    export { fluidPainter } from "./src/core/dropFluid.ts"; export { tracedSide } from "./src/core/timerInkSide.ts";
+   Local adaptation: the traced side renderer sizes its drop uniforms and accepts updated entry times for a live debate.
 
 MIT License
 
@@ -431,8 +432,8 @@ uniform vec2 size;
 uniform float time;
 uniform float seed;
 uniform float swirl;
-uniform vec4 drops[3];
-uniform vec3 colors[3];
+uniform vec4 drops[DROP_SLOTS];
+uniform vec3 colors[DROP_SLOTS];
 ${NOISE_GLSL}
 const float A = 0.05;
 const float RC = 0.065;
@@ -477,7 +478,8 @@ vec2 ringFlow(vec2 p, vec4 d, float tau, float aspect) {
 }
 
 vec2 velocity(vec2 p, float tau, float aspect) {
-  vec2 v = ringFlow(p, drops[0], tau, aspect) + ringFlow(p, drops[1], tau, aspect) + ringFlow(p, drops[2], tau, aspect);
+  vec2 v = vec2(0.0);
+  for (int j = 0; j < DROP_SLOTS; j++) v += ringFlow(p, drops[j], tau, aspect);
   // Where the water moves, a curl of noise frays it. A curl has no divergence, so ink never bunches up.
   vec2 o = vec2(seed, tau * 0.25);
   vec2 grad = 10.0 * noiseGrad(p * 10.0 + o) + 10.0 * noiseGrad(p * 20.0 - o);
@@ -498,7 +500,7 @@ void main() {
   vec2 p = vec2(gl_FragCoord.x / size.y, 1.0 - gl_FragCoord.y / size.y);
   // Ink only ever reaches a box round each drop's path, so the rest of the canvas skips the trace.
   bool near = false;
-  for (int j = 0; j < 3; j++) {
+  for (int j = 0; j < DROP_SLOTS; j++) {
     vec4 d = drops[j];
     vec2 r = p - vec2(d.x * aspect, d.y);
     near = near || (d.w > 0.5 && time >= d.z && abs(r.x) < 0.24 && r.y > -0.12 && r.y < sunk(time - d.z) + 0.22);
@@ -512,25 +514,24 @@ void main() {
   float span = 1.0 - exp(-time / T);
   vec2 q = p;
   float tau = time;
-  vec3 got = vec3(-1.0);
+  float got[DROP_SLOTS];
+  for (int j = 0; j < DROP_SLOTS; j++) got[j] = -1.0;
   for (int k = 0; k < K; k++) {
     float next = -T * log(1.0 - (1.0 - float(k + 1) / float(K)) * span);
     float h = tau - next;
     vec2 mid = q - 0.5 * h * velocity(q, tau, aspect);
     q -= h * velocity(mid, tau - 0.5 * h, aspect);
     tau = next;
-    for (int j = 0; j < 3; j++) {
+    for (int j = 0; j < DROP_SLOTS; j++) {
       vec4 d = drops[j];
-      float g = j == 0 ? got.x : j == 1 ? got.y : got.z;
-      if (d.w > 0.5 && time >= d.z && g < 0.0 && tau <= d.z + 1e-4) {
-        float b = blob(q, d, aspect, time - d.z);
-        if (j == 0) got.x = b; else if (j == 1) got.y = b; else got.z = b;
+      if (d.w > 0.5 && time >= d.z && got[j] < 0.0 && tau <= d.z + 1e-4) {
+        got[j] = blob(q, d, aspect, time - d.z);
       }
     }
   }
   vec4 col = vec4(0.0);
-  for (int j = 0; j < 3; j++) {
-    float rho = max(j == 0 ? got.x : j == 1 ? got.y : got.z, 0.0);
+  for (int j = 0; j < DROP_SLOTS; j++) {
+    float rho = max(got[j], 0.0);
     // The ink thins as it spreads, from near black to a grey wash.
     float sigma = 3.5 * (0.3 + 0.7 * exp(-max(time - drops[j].z, 0.0) / 3.0));
     float a = (1.0 - exp(-sigma * rho)) * 0.97;
@@ -542,15 +543,16 @@ void main() {
   // src/core/timerInkSide.ts
   var MAX_PIXELS = 5e5;
   function tracedPainter(canvas, gl, fragment, drops, options, run, look) {
-    const at = coverProgram(gl, fragment);
+    const at = coverProgram(gl, "#define DROP_SLOTS " + drops.length + "\n" + fragment);
     if (!at) return null;
-    const packed = new Float32Array(12);
-    const colors = new Float32Array(9);
+    const packed = new Float32Array(4 * drops.length);
+    const colors = new Float32Array(3 * drops.length);
     drops.forEach(([x, y, start = 0, color], i) => {
       packed.set([x, y, Math.max(start, 0), 1], i * 4);
       colors.set(rgb(color ?? options.color ?? "#161314"), i * 3);
     });
-    gl.uniform4fv(at("drops"), packed);
+    const uDrops = at("drops");
+    gl.uniform4fv(uDrops, packed);
     gl.uniform3fv(at("colors"), colors);
     gl.uniform1f(at("seed"), random(options.seed ?? 1)() * 50);
     gl.uniform1f(at("swirl"), Math.min(Math.max(options.swirl ?? 0.6, 0), 2));
@@ -559,6 +561,10 @@ void main() {
     const uSize = at("size");
     const uTime = at("time");
     return {
+      updateStarts() {
+        drops.forEach((drop, i) => { packed[i * 4 + 2] = drop[2]; });
+        gl.uniform4fv(uDrops, packed);
+      },
       duration: run / speed,
       draw(seconds) {
         fitCanvas(gl, canvas, MAX_PIXELS);

@@ -16,7 +16,7 @@
   const LOCKING_MS = 1000;     // how long a half that has just run out or yielded carries data-locking
   const ACTIVE_COL = 58;       // percent of the width the speaking half takes in a dual stage
   const STEPS = 2000;          // --used and --remain move in steps of 1/2000: about a pixel of a 1920 px stage
-  const FRAME_MS = 33;         // a theme's painter draws at most 30 frames a second
+  const FRAME_MS = 33;         // default interval for animated theme painters
   const CLOCK_STEPS = 500;     // a still painter that followsClock is asked again as a clock moves on this fraction
 
   const DIGITS = '<span class="dt-sign"></span><span class="dt-min"></span><span class="dt-colon">:</span>' +
@@ -69,7 +69,8 @@
 
   // ---- the theme registry (spec §1.2): what themes/*.js add beyond their stylesheet ----
   // spec: {defs?: SVG markup put into the document once, painter?: (canvas, ctx, {thumbnail, reducedMotion,
-  // frozen}) => {frame(view, now), resize(w, h), destroy(), bell?(event)}, context?: 'webgl', followsClock?: true}.
+  // frozen}) => {frame(view, now), resize(w, h), destroy(), bell?(event)}, context?: 'webgl', followsClock?: true,
+  // frameInterval?: number}. A zero interval lets live animation follow the display refresh.
   // resize gets the stage's size in CSS pixels on a context already scaled to the canvas's pixel ratio; the renderer
   // decides when frame runs. A 'webgl' painter is given no context (ctx is null): it takes its own from the canvas,
   // throws when it gets none, and sizes the canvas's drawing buffer itself. bell, when there is one, hears each bell
@@ -401,7 +402,7 @@
       const ctx = webgl ? null : canvas.getContext('2d');
       const flags = { thumbnail, reducedMotion: reducedMotion(), frozen: frozenPage() };
       paint = {
-        canvas, ctx, webgl, painter: null, followsClock: !!spec.followsClock,
+        canvas, ctx, webgl, painter: null, followsClock: !!spec.followsClock, interval: spec.frameInterval ?? FRAME_MS,
         still: flags.thumbnail || flags.reducedMotion || flags.frozen,
         at: -Infinity, sig: null, dirty: true, sized: null, observer: null,
       };
@@ -437,12 +438,12 @@
       if (spec && typeof spec.painter === 'function') startPainter(spec);
     }
 
-    // Animated: at most one frame per FRAME_MS. Still (thumbnail, reduced motion, frozen demo): a frame when the
+    // Animated: at the theme's interval. Still (thumbnail, reduced motion, frozen demo): a frame when the
     // painter starts, when the stage is resized and when what is on screen changes. Never while the page is hidden.
     function draw(v, sig) {
       if (!paint || stage.ownerDocument.hidden) return;
       const now = DT.clock.now();
-      if (paint.still ? !paint.dirty && sig === paint.sig : now - paint.at < FRAME_MS) return;
+      if (paint.still ? !paint.dirty && sig === paint.sig : now - paint.at < paint.interval) return;
       paint.at = now;
       paint.sig = sig;
       paint.dirty = false;
@@ -533,6 +534,7 @@
           attr(h.el, 'data-active', !idle && c.active);
           attr(h.el, 'data-locked', c.locked);
           cssVar(h.el, '--remain', c.locked ? 0 : quantize(c.fraction));
+          if (themeId === 'ink') cssVar(h.el, '--ink-used', quantize(1 - (c.yielded || c.remaining) / Math.max(1, c.total)));
           cssVar(h.el, '--tension', tension(c, kind));
           cssVar(h.el, '--secs', wholeSecs(c));
           cssVar(h.el, '--secs-total', totalSecs(c));
@@ -560,6 +562,8 @@
 
       // What a still painter redraws for: the stage, its phase, who holds the floor and where the sides sit; for one
       // that followsClock, each clock's time used too, in steps.
+      // Equal clock totals can describe different orders of entry into a shared ink tank after an undo or reload.
+      if (paint && paint.still && v.turns !== lastView?.turns) paint.dirty = true;
       lastView = v;
       if (scene) scene.update(v);
       lastSig = [key, active ? active.phase : '', active ? active.side : '', seat].join('|');

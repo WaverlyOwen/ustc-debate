@@ -26,6 +26,27 @@
   }
   const rem = (s, clock, now, id) => E.remaining(E.getRun(s, id), clock, now);
 
+  DT.test('engine: dual speaking turns survive handoffs, time corrections and old saves', () => {
+    const initial = E.floor(at(3), 'pro', T0);
+    let s = E.floor(initial, 'con', T0 + 12000);
+    s = E.floor(s, 'pro', T0 + 20000);
+    s = E.pause(s, T0 + 25000);
+    const history = [['pro', 12000], ['con', 8000], ['pro', 5000]];
+    assert.deepEqual(E.getRun(s).turns, history);
+    const corrected = E.adjust(s, 7000, T0 + 26000, 'pro');
+    assert.deepEqual(E.getRun(corrected).turns, [['pro', 10000], ['con', 8000]]);
+    assert.deepEqual(E.getRun(E.undo(corrected, T0 + 27000)).turns, history);
+    const ended = E.tick(initial, T0 + 480000).session;
+    assert.deepEqual(E.getRun(ended).turns, [['pro', 240000], ['con', 240000]]);
+    assert.deepEqual(E.getRun(initial).turns, []);
+    const old = JSON.parse(JSON.stringify(s));
+    old.theme = 'ink';
+    delete E.getRun(old).turns;
+    assert.deepEqual(E.view(old, T0 + 25000).turns, [['con', 8000], ['pro', 17000]]);
+    const resumed = E.floor(old, 'con', T0 + 30000);
+    assert.deepEqual(E.view(resumed, T0 + 30000).turns, E.view(old, T0 + 25000).turns);
+  });
+
   DT.test('engine: createSession copies the format and starts at the title card', () => {
     const f = fx(); const s = E.createSession(f, MATCH, T0);
     assert.equal(s.cursor, -1);

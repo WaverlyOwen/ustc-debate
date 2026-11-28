@@ -63,6 +63,7 @@
     return {
       kind: stage.type,
       clocks: dual ? { pro: { total: ms, used: 0 }, con: { total: ms, used: 0 } } : { main: { total: ms, used: 0 } },
+      ...(dual ? { turns: [] } : {}),
       active: dual ? null : 'main',
       running: false,
       since: null,
@@ -85,9 +86,38 @@
     return run.kind === 'single' ? left : Math.max(0, left);
   }
 
+  // Settled speaking intervals, in order. Older saves only have totals: place the
+  // current speaker last so the live turn continues from the saved position.
+  function speakingTurns(run) {
+    if (run.turns) return run.turns;
+    const last = run.active || 'con';
+    return [other(last), last].map(id => [id, Math.max(0, run.clocks[id].used - (run.yielded[id] || 0))])
+      .filter(([, ms]) => ms > 0);
+  }
+
+  function addSpeakingTime(run, side, ms) {
+    if (run.kind !== 'dual' || !ms) return;
+    const turns = run.turns ||= speakingTurns(run);
+    if (ms > 0) {
+      const last = turns[turns.length - 1];
+      if (last && last[0] === side) last[1] += ms;
+      else turns.push([side, ms]);
+    } else {
+      for (let i = turns.length - 1; i >= 0 && ms < 0; i--) {
+        if (turns[i][0] !== side) continue;
+        const take = Math.min(-ms, turns[i][1]);
+        turns[i][1] -= take;
+        ms += take;
+        if (!turns[i][1]) turns.splice(i, 1);
+      }
+    }
+  }
+
   // Settle the running clock's time into `used`; it keeps running from `now`.
   function commit(run, now) {
     if (!run.running || !run.active) return;
+    const c = run.clocks[run.active];
+    addSpeakingTime(run, run.active, Math.min(now - run.since, Math.max(0, c.total - c.used)));
     run.clocks[run.active].used += now - run.since;
     run.since = now;
   }
@@ -99,6 +129,7 @@
   }
 
   function start(run, id, now) {
+    if (run.kind === 'dual') run.turns ||= speakingTurns(run);
     commit(run, now);
     run.active = id;
     run.running = true;
@@ -228,6 +259,8 @@
     return edit(session, (run, s) => {
       commit(run, now);
       const c = run.clocks[id];
+      const before = c.used - (run.yielded[id] || 0);
+      if (run.kind === 'dual') run.turns ||= speakingTurns(run);
       c.used = Math.max(0, c.used - deltaMs);
       if (run.kind !== 'single') c.used = Math.min(c.total, c.used);
       const left = c.total - c.used;
@@ -241,6 +274,7 @@
       // Re-arm bell points now above the remaining time and spend those it has passed. A stopped clock passes
       // them silently (spec §3.2); a running one rings the latest of them now, since tick would find it stale.
       const live = run.running && run.active === id;
+      addSpeakingTime(run, id, c.used - (run.yielded[id] || 0) - before);
       const fired = run.fired[id];
       const bells = effectiveBells(s.format, st);
       let crossed = null;
@@ -405,11 +439,12 @@
     const st = currentStage(session);
     const r0 = st && session.runs[st.id];
     if (!r0 || !r0.running) return { session, events: [] };
-    const run = clone(r0);
+    // Ordinary display frames only read the run. Copy its turn history when a bell or handoff changes it.
+    let run = r0;
+    const writable = () => { if (run === r0) run = clone(r0); return run; };
     const events = [];
     const bells = effectiveBells(session.format, st);
     const points = bellPoints(bells);
-    let changed = false;
     // Loop because a dual stage can hand over and run the second side out within the same tick.
     for (let guard = 0; guard < 3 && run.running; guard++) {
       const id = run.active;
@@ -418,8 +453,7 @@
       points.forEach(p => {
         const at = endAt - p.ms;
         if (at > now || run.fired[id].indexOf(p.key) >= 0) return;
-        run.fired[id].push(p.key);
-        changed = true;
+        writable().fired[id].push(p.key);
         if (now - at <= staleMs) events.push({ type: p.type, clock: id, key: p.key, at });
       });
       // Second n over rings at exactly endAt + n s. Only those within the stale window are reported; the count
@@ -430,12 +464,11 @@
         for (let n = Math.max(seen + 1, Math.ceil((now - staleMs - endAt) / 1000)); n <= over; n++) {
           events.push({ type: 'over', clock: id, key: 'o' + n, at: endAt + n * 1000 });
         }
-        run.over = Object.assign({}, run.over, { [id]: over });
-        changed = true;
+        writable().over = Object.assign({}, run.over, { [id]: over });
       }
       if (endAt > now || run.kind === 'single') break;
-      changed = true;
-      c.used = c.total;
+      addSpeakingTime(writable(), id, Math.max(0, c.total - c.used));
+      run.clocks[id].used = c.total;
       if (run.kind === 'dual') {
         run.locked[id] = true;
         const to = other(id);
@@ -450,7 +483,7 @@
       run.since = null;
       run.done = true;
     }
-    if (!changed) return { session, events };
+    if (run === r0) return { session, events };
     const runs = Object.assign({}, session.runs, { [st.id]: run });
     const updated = Object.assign({}, session, { runs });
     if (run.kind === 'dual' && (r0.active !== run.active || !run.running)) {
@@ -541,6 +574,7 @@
       first: st.type === 'dual' ? st.first || 'pro' : null,
     };
     out.clocks = (run.kind === 'dual' ? ['pro', 'con'] : ['main']).map(id => clockView(run, id, st, bells, now));
+    if (run.kind === 'dual' && session.theme === 'ink') out.turns = speakingTurns(run);
     out.running = run.running;
     const total = st.secs * 1000;
     const warnMs = bells.warn.length ? Math.max.apply(null, bells.warn) * 1000 : 0;

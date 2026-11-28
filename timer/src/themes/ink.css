@@ -1,6 +1,6 @@
-/* @theme id=ink name=墨 desc=五滴墨错落入水，朱砂与花青各随发言下沉，适合亮场投影 tone=light order=6 */
+/* @theme id=ink name=墨 desc=每个环节一缸水。单方发言时水铺满全屏，对辩与自由辩论时两方的墨滴在水中交融 tone=light order=6 */
 /* 墨 (spec 2026-11-27-ink-water-design): the stage is a tank of still water seen from the side, and the floor's ink is
-   dropped into it from the surface. Each drop sinks and pools before the next one enters. The depth of the diffuse
+   dropped into it from the surface. Each drop has time to bloom before the next one enters. The depth of the diffuse
    background ink follows the total time used. The water and its ink are themes/ink.js's WebGL painter, which reads the
    colours below; while it draws, the stage has data-painter="live". Without it (no WebGL) a plain column of the side's
    ink stands in, from the surface down to the front. The digits are always one colour: wherever they are, the painter
@@ -9,7 +9,7 @@
   --pro: #A3321F;           /* 朱砂: cinnabar, as dense ink; thinned in water it goes to a warm pink */
   --con: #2C4B5F;           /* 花青: indigo; thinned it goes to a grey-blue */
   --ink-neutral: #3A3D42;   /* the break's grey-black ink */
-  --ground: #EEF2F1;        /* the air over the tank, where the stage name and the speaker are */
+  --ground: #EEF2F1;        /* the air above the water on cards and in free debate */
   --ink-water-top: #E4ECED; /* cool, clear water: lit from above, a little deeper in colour toward the bed */
   --ink-water-deep: #C9D7DB;
   --pro-deep: var(--ink-water-deep);   /* where there is no ink: the water itself, at its deepest */
@@ -28,7 +28,7 @@
   --font-digits: "DT Digits", "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
   --font-title: "Source Han Serif SC", "Noto Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", "SimSun", serif;
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "DengXian", system-ui, sans-serif;
-  --text-field: var(--ground);   /* the stage name, the speaker and the top bar are in the air, over the water */
+  --text-field: var(--ground);
   --text-deep: var(--ground);
 }
 
@@ -55,6 +55,14 @@
 }
 .dt-stage[data-theme="ink"][data-side="pro"] { --ink-side: var(--pro); }
 .dt-stage[data-theme="ink"][data-side="con"] { --ink-side: var(--con); }
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"] {
+  --ink-surface: 0;
+  --ink-bed: 100;
+  --text-field: var(--side-color);
+  --text-deep: var(--side-deep);
+  --ink-dim: #24292c;
+}
+.dt-stage[data-theme="ink"][data-kind="single"] { --ink-cap: .48; }
 /* Overtime: the ink behind the digits is thinned further, so the ochre digits keep 3:1 on it. */
 .dt-stage[data-theme="ink"][data-phase="over"] { --ink-cap: .22; }
 /* The cards set their water higher: their text is in it, not under the air. */
@@ -203,10 +211,10 @@
   animation: dt-stamp 300ms var(--ease-out) 320ms backwards;
 }
 
-/* ---- free debate: each half is a column of water of its own, its ink sinking with its own clock ---- */
+/* The two clocks keep their seats while their pigments share the water beneath. */
+.dt-stage[data-theme="ink"] .dt-halves { grid-template-columns: 1fr 1fr; }
 
-/* --ink-clear (0 → 1 in 300 ms as a half locks) is read by the painter: a yield clears the half's ink where it was, a
-   side out of time keeps its ink on the bed, paler. The end state holds at once; only the transition waits for the
+/* --ink-clear (0 → 1 in 300 ms as a half locks) pales its fallback field. The end state holds at once; only the transition waits for the
    entrance to be over, and unlocking (undo, reset) is a cut. */
 @property --ink-clear { syntax: "<number>"; inherits: true; initial-value: 0; }
 .dt-stage[data-theme="ink"] .dt-half {
@@ -220,23 +228,30 @@
 .dt-stage[data-theme="ink"]:not(.is-entering) .dt-half[data-locked] {
   transition: filter 520ms var(--ease-out), --dim 520ms var(--ease-out), --remain 520ms var(--ease-out), --ink-clear 300ms ease;
 }
-/* The waiting side's ink stands still and pales (the painter, by --dim); its digits stay as crisp as the speaker's. */
+/* Keep the waiting clock legible over both colours. */
 .dt-stage[data-theme="ink"] .dt-halves:not([data-idle]) .dt-half:not([data-active]) { filter: none; }
 .dt-stage[data-theme="ink"] .dt-half .dt-clock { color: var(--ink); }
 .dt-stage[data-theme="ink"] .dt-half .dt-clock .dt-state { top: calc(100% + 1cqh); }
 .dt-stage[data-theme="ink"] .dt-half[data-locked] .dt-clock .dt-state { top: 50%; }   /* 时间到 where the digits were */
 .dt-stage[data-theme="ink"] .dt-team { color: var(--ink); }
-/* The speaker's floor line goes: who speaks is the ink that moves, in the wider column. */
+/* The moving ink and the active clock identify the speaker. */
 .dt-stage[data-theme="ink"] .dt-floorline { display: none; }
-/* Without the painter, each half's column of ink runs from the surface down to its own front, and the waiting one is
-   paler; a side out of time (or yielded: the stylesheet cannot tell them apart) drains to the bed and stays there,
-   faint. */
+/* The fallback keeps the depth reached by each speaker, including after a yield. */
 .dt-stage[data-theme="ink"] .dt-half .dt-half-field {
   inset: auto 0 auto 0;
   top: calc(var(--ink-surface) * 1cqh + 1px);
-  height: calc((var(--ink-gap) + (var(--ink-bed) - var(--ink-surface) - var(--ink-gap)) * (1 - var(--remain, 1))) * 1cqh + 2cqh);
+  height: calc((var(--ink-gap) + (var(--ink-bed) - var(--ink-surface) - var(--ink-gap)) * var(--ink-used, 0)) * 1cqh + 2cqh);
   clip-path: none;
   opacity: calc((1 - .55 * var(--dim)) * (1 - .65 * var(--ink-clear)));
+}
+.dt-stage[data-theme="ink"][data-kind="dual"]:not([data-painter="live"]) .dt-half { overflow: visible; }
+.dt-stage[data-theme="ink"][data-kind="dual"]:not([data-painter="live"]) .dt-half:first-child .dt-half-field {
+  right: -12cqw;
+  mask-image: linear-gradient(to right, #000 55%, transparent);
+}
+.dt-stage[data-theme="ink"][data-kind="dual"]:not([data-painter="live"]) .dt-half:last-child .dt-half-field {
+  left: -12cqw;
+  mask-image: linear-gradient(to left, #000 55%, transparent);
 }
 
 /* ---- cards ---- */
