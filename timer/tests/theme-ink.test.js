@@ -160,6 +160,36 @@
 
   // ---- what the theme is ----
 
+  DT.test('theme ink: the live HD projector retains detail from the pigment texture to the screen', () => {
+    if (!hasGL()) return;
+    const copies = [];
+    const proto = CanvasRenderingContext2D.prototype, drawImage = proto.drawImage;
+    proto.drawImage = function (source, ...args) {
+      if (source instanceof HTMLCanvasElement && source.parentNode === document.body) {
+        copies.push([source.width, this.canvas.width]);
+      }
+      return drawImage.call(this, source, ...args);
+    };
+    let mounted;
+    try {
+      mounted = mountInk(dualAt(25), 1920, 1080);
+      const display = mounted.root.querySelector('.dt-canvas');
+      const gl = display.getContext('webgl2') || display.getContext('webgl');
+      const info = gl.getExtension('WEBGL_debug_renderer_info');
+      const software = info && /swiftshader|llvmpipe|software rasterizer|basic render driver/i.test(gl.getParameter(info.UNMASKED_RENDERER_WEBGL));
+      const minWidth = software ? 1024 : 1920;
+      assert.ok(display.width >= minWidth && display.height >= minWidth * 9 / 16, 'HD projector pixel budget');
+      // A GPU with no half-float solver uses the 640-wide traced renderer.
+      const dyeWidth = Math.min(1920, gl.getParameter(gl.MAX_TEXTURE_SIZE));
+      assert.ok(copies.length && copies.every(([src, dest]) => src === dest &&
+        (software ? dest >= 440 : dest === 640 || dest >= dyeWidth - 1)),
+        'the pigment frames pass through the cache without downsampling');
+    } finally {
+      proto.drawImage = drawImage;
+      mounted?.stage.destroy();
+    }
+  });
+
   DT.test('theme ink: 墨 is a light theme with a WebGL painter that follows the clock, and the seals\' filters', () => {
     const meta = (DT.THEMES || []).find(t => t.id === 'ink');
     assert.ok(meta, 'ink is in DT.THEMES');

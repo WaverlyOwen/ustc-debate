@@ -359,7 +359,7 @@
     // ---- the theme's painter: its canvas sits above the backdrop and below the deco and the field ----
 
     // Size the canvas to the stage at up to 2x; true when the size changed (and the painter was told). A webgl
-    // painter sizes its drawing buffer itself (ink draws at a fraction of the stage's pixels), so the renderer keeps
+    // painter sizes its drawing buffer itself, so the renderer keeps
     // only the size it last told it of.
     function sizeCanvas() {
       const box = stage.getBoundingClientRect();

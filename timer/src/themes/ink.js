@@ -6,9 +6,8 @@
   // ---- where things are, in stage heights from the top (the surface itself comes from ink.css, --ink-surface) ----
   const GAP = 0.04;            // a stage's front with none of its time used: just under the surface
   const BED = 0.955;           // the front with all of it used: the ink lies on the bed of the tank
-  const RES = 0.5;             // the drawing buffer's share of the stage's device pixels: ink is soft, CSS scales it
-  const MIN_ROWS = 400;        // a small stage (the console's preview) draws at least this many rows, or its own
-  const MAX_ROWS = 900;
+  const MAX_STAGE_PIXELS = 3840 * 2160;
+  const SOFTWARE_STAGE_PIXELS = 1024 * 576;
   const ENTER_MS = 560;        // a new stage's drops fall to its front (wall time, the one thing that is)
   // Drop positions are fractions of the tank width and entry times are fractions of each speaker's clock.
   const DROPS = [[0.28, 0], [0.78, 0.14], [0.09, 0.34], [0.90, 0.55], [0.48, 0.77]];
@@ -18,7 +17,8 @@
   const DUEL_LAST_FRAME = 2 * FLUID_SECONDS * SUMI_HZ - 1;
   const DUEL_X = [0.445, 0.36, 0.475, 0.29, 0.42];  // mirrored entry points for the two pigments
   const NOT_DROPPED = 2;  // later than the end of the shared timeline at 1
-  const MASK_W = 384, MASK_H = 240;
+  // Keep the 8:5 tank. Full HD receives a whole dye sample per horizontal pixel.
+  const FLUID_ROWS = 1200, TRACED_ROWS = 400, SOFTWARE_ROWS = 275;
   const BELL_S = 1.1;          // a bell's drop falls to the front in this much time used...
   const MELT_S = 0.6;          // ...and melts into it in this much more
   const PAD = 0.012;           // a box the ink is thinned in reaches this far past its text...
@@ -111,16 +111,20 @@
     '  float wave = 0.0;',
     '  for (int i = 0; i < NR; i++) {',
     '    vec4 r = uRipple[i];',
+    '    if (r.z == 0.0) continue;',
     '    float dx = abs(p.x - r.x);',
     '    float reach = 0.03 + r.y * 0.5;',
     '    wave += r.z * exp(-r.y * 2.2) * sin(70.0 * dx - 16.0 * r.y) * smoothstep(reach, reach * 0.4, dx) * smoothstep(0.0, 0.05, r.y);',
     '  }',
     '  float S = uSurface + wave;',
     '  float wet = smoothstep(S - 0.0015, S + 0.0015, p.y);',
+    // Most live frames contain only the Sumi dye. Reserve noise and plume shading for bells, cards and overtime.
+    '  vec2 q = p;',
+    '  float D = 0.0, Dair = 0.0;',
+    '  if (uN > 0.0 || B.w > 0.0 || uThread.z > 0.0) {',
     // how old the ink here is: 0 at the front, 1 at the top of its column
     '  float age = clamp((front - p.y) / max(front - top, 0.03), 0.0, 1.0);',
     '  float amp = mix(0.010, 0.045, age);',
-    '  vec2 q = p;',
     '  vec2 v = N(q * 0.8 + C.xy + Dr.xy).rg * 2.0 - 1.0; q += v * amp;',
     '  v = N(q * 0.8 + C.xy + Dr.xy).rg * 2.0 - 1.0; q += v * amp;',
     '  v = N(q * 2.1 + C.yx + Dr.zw).rg * 2.0 - 1.0; q += v * amp * 0.45;',
@@ -129,7 +133,7 @@
     '    q += eddy * vec2(0.024, 0.017) * smoothstep(S, S + 0.12, p.y);',
     '  }',
     // the plumes of this column: each a head and its stem; cov is how far the old ink round the stems has spread
-    '  float heads = 0.0, stems = 0.0, cov = 0.0, Dair = 0.0;',
+    '  float heads = 0.0, stems = 0.0, cov = 0.0;',
     '  vec2 sw = vec2(0.0);',
     '  for (int i = 0; i < NP; i++) {',
     '    if (float(i) >= uN) break;',
@@ -202,7 +206,8 @@
     '  float streak = ridge(N(vec2(qd.x * 6.5, qd.y * 0.7) + C.xy * 2.1 + Dr.zw * 0.3).a);',
     '  stems *= 0.55 + 0.9 * streak * streak;',
     '  heads *= 0.6 + 0.55 * smoothstep(0.3, 0.7, f2) + 0.35 * lines;',
-    '  float D = (heads + stems + veil) * A.w * wet * (1.0 - apart) * step(B.x - 0.001, p.x) * step(p.x, B.y + 0.001);',
+    '  D = (heads + stems + veil) * A.w * wet * (1.0 - apart) * step(B.x - 0.001, p.x) * step(p.x, B.y + 0.001);',
+    '  }',
     // overtime: a thread of the accent's ink falling from the surface at the seat
     '  float Dt = 0.0;',
     '  if (uThread.z > 0.0) {',
@@ -322,6 +327,11 @@
     return gl;
   }
 
+  function softwareRenderer(gl) {
+    const info = gl.getExtension('WEBGL_debug_renderer_info');
+    return info && /swiftshader|llvmpipe|software rasterizer|basic render driver/i.test(gl.getParameter(info.UNMASKED_RENDERER_WEBGL));
+  }
+
   function program(gl) {
     const shader = (type, src) => {
       const s = gl.createShader(type);
@@ -379,9 +389,8 @@
   }
 
   // Single-colour stages reuse the same Sumi frames. A dual stage owns its tank because its
-  // injection times depend on the speakers. Each cache holds at most 16 canvases (under 6 MiB).
-  const singleTank = { masks: new Map(), sources: [null, null] };
-  const MASK_CACHE_SIZE = 16;
+  // injection times depend on the speakers. The title-to-speech fade needs both title pairs and the live pair.
+  const singleTank = { masks: new Map(), maxMasks: 6, sources: [null, null] };
   let consumers = 0;
   function closeSource(source) {
     for (const layer of source.layers) {
@@ -393,9 +402,13 @@
 
   function openSource(tank) {
     const layers = [];
+    const sizeLayer = (canvas, rows) => {
+      canvas.style.width = (rows * 8 / 5) + 'px';
+      canvas.style.height = rows + 'px';
+    };
     const layer = () => {
       const canvas = document.createElement('canvas');
-      canvas.style.cssText = 'position:fixed;left:-1000px;top:0;visibility:hidden;width:' + MASK_W + 'px;height:' + MASK_H + 'px';
+      canvas.style.cssText = 'position:fixed;right:100%;bottom:100%;visibility:hidden;pointer-events:none';
       canvas.setAttribute('aria-hidden', 'true');
       document.body.appendChild(canvas);   // upstream fitCanvas reads the CSS size
       const gl = canvas.getContext('webgl', { alpha: true, antialias: false, depth: false, premultipliedAlpha: true });
@@ -407,7 +420,7 @@
     const source = { layers, fluid: false, frame: -1 };
     try {
       const first = layer(), gl = first.gl;
-      const options = { seed: 1, color: '#000000', swirl: 0.6 };
+      const options = { seed: 1, color: '#000000', swirl: 0.6, pixelRatio: 1 };
       const shared = !!tank.starts;
       const fluidSeconds = shared ? 2 * FLUID_SECONDS : FLUID_SECONDS;
       const tracedSeconds = shared ? 18 : 11.5;
@@ -415,11 +428,14 @@
         const x = DUEL_X[Math.floor(i / 2)];
         return [i % 2 ? 1 - x : x, 0.075, start * run, i % 2 ? '#0000ff' : '#ff0000'];
       }) : DROPS.map(([x, progress]) => [x, 0.075, progress * run]);
-      const info = gl.getExtension('WEBGL_debug_renderer_info');
-      const software = info && /swiftshader|llvmpipe|software rasterizer|basic render driver/i.test(gl.getParameter(info.UNMASKED_RENDERER_WEBGL));
+      const software = softwareRenderer(gl);
       // The original fluid solver injects every drop into the same velocity field.
       let drops = dropsAt(fluidSeconds);
-      if (!software) first.painter = SumiInk.fluidPainter(first.canvas, gl, drops, options, fluidSeconds);
+      if (!software) {
+        options.inkRows = Math.min(FLUID_ROWS, Math.floor(gl.getParameter(gl.MAX_TEXTURE_SIZE) * 5 / 8));
+        sizeLayer(first.canvas, options.inkRows);
+        first.painter = SumiInk.fluidPainter(first.canvas, gl, drops, options, fluidSeconds);
+      }
       source.fluid = !!first.painter;
       if (!source.fluid) {
         drops = dropsAt(tracedSeconds);
@@ -428,6 +444,7 @@
         const batchSize = shared ? drops.length : 3;
         for (let i = 0; i < drops.length; i += batchSize) {
           const target = i === 0 ? first : layer();
+          sizeLayer(target.canvas, software ? SOFTWARE_ROWS : TRACED_ROWS);
           target.painter = SumiInk.tracedSide(target.canvas, target.gl, drops.slice(i, i + batchSize), options, tracedSeconds);
           if (!target.painter) throw new Error('墨：Sumi 无法绘制墨滴');
         }
@@ -457,17 +474,14 @@
       source = sources[side] = null;
     }
     if (!source) source = sources[side] = openSource(tank);
-    if (masks.size === MASK_CACHE_SIZE) {
+    if (masks.size === tank.maxMasks) {
       const oldest = masks.keys().next().value;
       mask = masks.get(oldest);
       masks.delete(oldest);
     } else {
       mask = document.createElement('canvas');
-      mask.width = MASK_W; mask.height = MASK_H;
     }
-    const sample = mask.getContext('2d'), layers = source.layers;
-    // The traced rendition settles higher in its canvas. Frame that tank around its actual descent.
-    const crop = source.fluid ? 1 : 0.80;
+    const layers = source.layers;
     for (const { painter, canvas, gl } of layers) {
       // The solver advances while its clock is below this time. Sampling inside the step avoids
       // duplicating or skipping a step due to floating-point rounding at an exact 1/60 boundary.
@@ -478,8 +492,13 @@
         sources[side] = null;
         throw new Error('墨：Sumi 的画布丢了');
       }
+      // Crop the traced rendition around its descent. Copy both renderers pixel for pixel into the texture.
+      const height = source.fluid ? canvas.height : Math.round(canvas.height * 0.80);
+      if (mask.width !== canvas.width) mask.width = canvas.width;
+      if (mask.height !== height) mask.height = height;
+      const sample = mask.getContext('2d');
       sample.globalCompositeOperation = canvas === layers[0].canvas ? 'copy' : 'source-over';
-      sample.drawImage(canvas, 0, 0, canvas.width, canvas.height * crop, 0, 0, MASK_W, MASK_H);
+      sample.drawImage(canvas, 0, 0, canvas.width, height, 0, 0, canvas.width, height);
     }
     source.frame = frame;
     masks.set(frame, mask);
@@ -490,6 +509,7 @@
     const still = !!(flags && (flags.thumbnail || flags.reducedMotion || flags.frozen));
     const motionless = !!(flags && flags.reducedMotion);
     const gl = contextOf(canvas);
+    const pixelBudget = !still && softwareRenderer(gl) ? SOFTWARE_STAGE_PIXELS : MAX_STAGE_PIXELS;
     let prog;
     try {
       prog = program(gl);
@@ -505,7 +525,7 @@
     LAYOUT.forEach(([name, n]) => { loc[name] = gl.getUniformLocation(prog, name + (ARRAYS.indexOf(name) >= 0 ? '[0]' : '')); });
     const uNoise = gl.getUniformLocation(prog, 'uNoise');
     const inkSamplers = ['uInk0', 'uNext0', 'uInk1', 'uNext1'].map(name => gl.getUniformLocation(prog, name));
-    const duelTank = { masks: new Map(), sources: [null], starts: Array(DROPS.length * 2).fill(NOT_DROPPED) };
+    const duelTank = { masks: new Map(), maxMasks: 4, sources: [null], starts: Array(DROPS.length * 2).fill(NOT_DROPPED) };
     const inkTextures = inkSamplers.map(() => {
       const texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -513,8 +533,8 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, MASK_W, MASK_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-      return { texture, frame: -1 };
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      return { texture, frame: -1, width: 1, height: 1 };
     });
     consumers++;
     const buf = gl.createBuffer();
@@ -927,7 +947,14 @@
         gl.uniform1i(inkSamplers[i], i + 1);
         if (frame >= 0 && (frame !== slot.frame || slot.tank !== tank)) {
           gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, tank === duelTank);
-          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, dropMask(frame, i < 2 || tank === duelTank ? 0 : 1, tank));
+          const mask = dropMask(frame, i < 2 || tank === duelTank ? 0 : 1, tank);
+          if (slot.width !== mask.width || slot.height !== mask.height) {
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mask);
+            slot.width = mask.width;
+            slot.height = mask.height;
+          } else {
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, mask);
+          }
           slot.tank = tank;
           slot.frame = frame;
         }
@@ -980,9 +1007,7 @@
       resize(w, h) {
         W = w; H = h;
         const ratio = Math.min(window.devicePixelRatio || 1, 2);
-        const rows = h * ratio;
-        const want = Math.max(Math.min(rows, MIN_ROWS), Math.min(rows * RES, MAX_ROWS));
-        const k = flags && flags.thumbnail ? ratio : want / Math.max(1, h);
+        const k = Math.min(ratio, Math.sqrt(pixelBudget / Math.max(1, w * h)));
         canvas.width = Math.max(1, Math.round(w * k));
         canvas.height = Math.max(1, Math.round(h * k));
         palette = null;

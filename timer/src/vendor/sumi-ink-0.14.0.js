@@ -4,7 +4,8 @@
    export function tracedSide(canvas, gl, drops, options, run) { return tracedPainter(canvas, gl, DROP_FRAGMENT, drops, options, run); }
    Bundle the following two exports from stdin with --bundle --format=iife --global-name=SumiInk --target=es2020 --charset=utf8:
    export { fluidPainter } from "./src/core/dropFluid.ts"; export { tracedSide } from "./src/core/timerInkSide.ts";
-   Local adaptation: the traced side renderer sizes its drop uniforms and accepts updated entry times for a live debate.
+   Local adaptations: the traced renderer accepts live drop times and counts. The projection can set the dye resolution
+   and the offscreen pixel ratio independently of the velocity grid.
 
 MIT License
 
@@ -197,9 +198,9 @@ void main() {
     gl.deleteProgram(program2);
     return null;
   }
-  function fitCanvas(gl, canvas, maxPixels = Infinity) {
+  function fitCanvas(gl, canvas, maxPixels = Infinity, pixelRatio = window.devicePixelRatio) {
     const area = Math.max(canvas.clientWidth * canvas.clientHeight, 1);
-    const scale = Math.min(window.devicePixelRatio, 2, Math.sqrt(maxPixels / area));
+    const scale = Math.min(pixelRatio, 2, Math.sqrt(maxPixels / area));
     const width = Math.max(1, Math.round(canvas.clientWidth * scale));
     const height = Math.max(1, Math.round(canvas.clientHeight * scale));
     if (canvas.width === width && canvas.height === height) return false;
@@ -284,7 +285,7 @@ void main() {
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     }
     /** Null when the device cannot render to and filter half-float textures, or the shaders fail. */
-    static open(gl, aspect) {
+    static open(gl, aspect, inkRows = INK_ROWS) {
       const half = gl.getExtension("OES_texture_half_float");
       if (!half || !gl.getExtension("OES_texture_half_float_linear")) return null;
       gl.getExtension("EXT_color_buffer_half_float");
@@ -295,7 +296,7 @@ void main() {
         programs[pass] = made;
       }
       const make = (rows) => target(gl, half.HALF_FLOAT_OES, Math.max(1, Math.round(rows * aspect)), rows);
-      const [a, b] = [make(INK_ROWS), make(INK_ROWS)];
+      const [a, b] = [make(inkRows), make(inkRows)];
       const [c, d, e, f, g, h] = Array.from({ length: 6 }, () => make(VELOCITY_ROWS));
       if (!a || !b || !c || !d || !e || !f || !g || !h) return null;
       const fields = { ink: new Pair(a, b), velocity: new Pair(c, d), pressure: new Pair(e, f), divergence: g, curl: h };
@@ -390,9 +391,9 @@ void main() {
     }
   }
   function fluidPainter(canvas, gl, drops, options, run) {
-    fitCanvas(gl, canvas);
+    fitCanvas(gl, canvas, Infinity, options.pixelRatio);
     const aspect = Math.min(Math.max(canvas.clientWidth / Math.max(canvas.clientHeight, 1), 0.25), 4);
-    const fluid = Fluid.open(gl, aspect);
+    const fluid = Fluid.open(gl, aspect, options.inkRows);
     if (!fluid) return null;
     const seed = random(options.seed ?? 1)() * 50;
     const swirl = Math.min(Math.max(options.swirl ?? 0.6, 0), 2);
@@ -415,7 +416,7 @@ void main() {
     return {
       duration: run / speed,
       draw(seconds) {
-        fitCanvas(gl, canvas);
+        fitCanvas(gl, canvas, Infinity, options.pixelRatio);
         advance(Math.min(seconds * speed, run));
         fluid.show(STRENGTH);
       },
@@ -567,7 +568,7 @@ void main() {
       },
       duration: run / speed,
       draw(seconds) {
-        fitCanvas(gl, canvas, MAX_PIXELS);
+        fitCanvas(gl, canvas, MAX_PIXELS, options.pixelRatio);
         gl.uniform2f(uSize, canvas.width, canvas.height);
         gl.uniform1f(uTime, Math.min(Math.max(seconds * speed, 1e-4), run));
         drawCover(gl);
