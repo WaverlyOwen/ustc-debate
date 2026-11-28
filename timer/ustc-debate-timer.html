@@ -8813,7 +8813,10 @@ void main() {
   // Drop positions are fractions of the tank width and entry times are fractions of each speaker's clock.
   const DROPS = [[0.28, 0], [0.78, 0.14], [0.09, 0.34], [0.90, 0.55], [0.48, 0.77]];
   const DROP_DEPTH = 0.035;    // the first Sumi splat overlaps the meniscus
+  const DROP_RADIUS = .012;
+  const DROP_TIP = DROP_RADIUS * 1.6 * .88;  // visible lower edge of the feathered bead
   const FALL_MS = 680;
+  const RIPPLE_SECONDS = 1.6;
   const fallTime = total => Math.min(FALL_MS, total * .05);  // room for separate entries on a short clock
   const FLUID_SECONDS = 23;
   const SUMI_HZ = 60;          // native integration rate of Sumi's fluidPainter
@@ -8869,12 +8872,14 @@ void main() {
     'uniform vec4 uW[NP];',        // squash, lean, stem, -
     'uniform vec4 uBox[NB];',      // small text only; the clock does not affect the water
     'uniform vec2 uCaps;',         // density limit for the small text, one per column
-    'uniform vec4 uRipple[NR];',   // x, age (s), amplitude, -
+    'uniform vec4 uRipple[NR];',   // impact x, distance travelled, inverse width, displacement
     'uniform vec4 uThread;',       // x, time over (s), strength, reach
     'uniform vec4 uThreadB;',      // bead phase, wobble phase, -, -
     'uniform vec3 uKThread;',
     'vec4 N(vec2 q) { return texture2D(uNoise, q); }',
     'float ridge(float n) { return 1.0 - abs(2.0 * n - 1.0); }',
+    // A depression with two raised shoulders. Its integral is zero, so passing waves leave the level unchanged.
+    'float pulse(float x) { float q = x*x; return (1.0 - 2.0*q) * exp(-q); }',
     'vec3 enc(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }',
     'vec3 lin(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }',
     // One inside a small text box; zero beyond its feather.
@@ -8912,15 +8917,19 @@ void main() {
     '  float top = A.x, front = A.y;',
     // the surface, and its ripples
     '  float wave = 0.0;',
-    '  for (int i = 0; i < NR; i++) {',
-    '    vec4 r = uRipple[i];',
-    '    if (r.z == 0.0) continue;',
-    '    float dx = abs(p.x - r.x);',
-    '    float reach = 0.03 + r.y * 0.5;',
-    '    wave += r.z * exp(-r.y * 2.2) * sin(70.0 * dx - 16.0 * r.y) * smoothstep(reach, reach * 0.4, dx) * smoothstep(0.0, 0.05, r.y);',
+    '  if (abs(p.y - uSurface) < 0.10) {',
+    '    for (int i = 0; i < NR; i++) {',
+    '      vec4 r = uRipple[i];',
+    '      if (r.w == 0.0) continue;',
+    '      float dx = p.x - r.x;',
+    '      if ((abs(dx) - r.y) * r.z > 4.0) continue;',
+    '      wave += r.w * (pulse((dx - r.y) * r.z) + pulse((dx + r.y) * r.z));',
+    '    }',
+    '    wave *= 1.0 - smoothstep(0.02, 0.10, abs(p.y - uSurface));',
     '  }',
     '  float S = uSurface + wave;',
-    '  float wet = smoothstep(S - 0.0015, S + 0.0015, p.y);',
+    '  float edge = max(0.0015, 0.75 / uRes.y);',
+    '  float wet = smoothstep(S - edge, S + edge, p.y);',
     // Most live frames contain only the Sumi dye. Reserve noise and plume shading for bells, cards and overtime.
     '  vec2 q = p;',
     '  float D = 0.0; vec3 Dair = vec3(0.0);',
@@ -8944,8 +8953,8 @@ void main() {
     '    if (P.w <= 0.0) continue;',
     '    float R = P.z;',
     '    if (Q.w > 3.5) {',      // a drop still falling through the air
-    '      vec2 e = (p - P.xy) / vec2(R, R * 1.6);',
-    '      Dair += mix(uK[0], uK[1], Q.x) * P.w * smoothstep(1.0, 0.5, length(e));',
+    '      vec2 e = (p - P.xy) / (R * mix(vec2(1.0, 1.6), vec2(1.28, 0.95), W.x));',
+    '      Dair += mix(uK[0], uK[1], Q.x) * P.w * (1.0 - smoothstep(0.5, 1.0, length(e)));',
     '      continue;',
     '    }',
     '    if (abs(Q.x - side) > 0.5 || q.y > P.y + 2.0 * R || q.y < min(Q.z - 0.004, P.y - 2.0 * R)) continue;',
@@ -9033,7 +9042,7 @@ void main() {
     // Composite the original Sumi side-view opacity at the water's scale. Its shape and movement come from Sumi.
     '  if (uDuel > 0.5 && A.z >= 0.0) {',
     '    vec4 tank = uDrop[0];',
-    '    vec2 coord = vec2((p.x - tank.x) / (tank.y - tank.x), (p.y - uSurface) / (tank.z - uSurface));',
+    '    vec2 coord = vec2((p.x - tank.x) / (tank.y - tank.x), (p.y - S) / (tank.z - S));',
     '    vec4 dye = mix(texture2D(uInk0, coord), texture2D(uNext0, coord), fract(A.z));',
     '    float con = dye.b / max(dye.r + dye.b, 0.0001);',
     '    float right = tank.y > tank.x ? con : 1.0 - con;',
@@ -9042,15 +9051,15 @@ void main() {
     '    F = mix(uFloor[0], uFloor[1], right);',
     '  } else if (A.z >= 0.0) {',
     '    vec4 drop = mix(uDrop[0], uDrop[1], side);',
-    '    vec2 coord = vec2((p.x - drop.x) / (drop.y - drop.x), (p.y - uSurface) / (drop.z - uSurface));',
+    '    vec2 coord = vec2((p.x - drop.x) / (drop.y - drop.x), (p.y - S) / (drop.z - S));',
     '    float ink = side < 0.5 ? mix(texture2D(uInk0, coord).a, texture2D(uNext0, coord).a, fract(A.z))',
     '                           : mix(texture2D(uInk1, coord).a, texture2D(uNext1, coord).a, fract(A.z));',
     '    float opacity = ink * drop.w * A.w * wet * (1.0 - apart);',
     '    opacity *= step(0.0, coord.x) * step(coord.x, 1.0) * step(coord.y, 1.0);',
     '    col = lin(mix(enc(col), enc(uDeep * exp(-K)), opacity));',
     '  }',
-    '  float line = exp(-pow((p.y - S) / 0.0017, 2.0));',
-    '  float men = exp(-pow((p.y - S - 0.005) / 0.0032, 2.0));',
+    '  float line = exp(-pow(abs(p.y - S) / max(0.0017, edge), 2.0));',
+    '  float men = exp(-pow(abs(p.y - S - 0.005) / 0.0032, 2.0));',
     '  col = mix(uAir, col, wet);',
     '  col *= 1.0 - 0.17 * line;',
     '  col += 0.045 * men * wet;',
@@ -9544,17 +9553,31 @@ void main() {
       const frontOf = used => S + GAP + (bed - S - GAP) * clamp01(used);
       const usedOf = c => Math.max(0, c.total - c.remaining);
       const across = (c, at) => (c.seat >= 0 ? c.x0 + at * (c.x1 - c.x0) : c.x1 - at * (c.x1 - c.x0));
+      function surfaceRipple(x, seconds, strength) {
+        if (seconds <= 0 || seconds >= RIPPLE_SECONDS) return;
+        const width = .030 + .021 * seconds;
+        const attack = 1 - Math.exp(-seconds / .035);
+        const tail = clamp01((RIPPLE_SECONDS - seconds) / .5);
+        const decay = Math.exp(-1.15 * seconds) * .030 / width;
+        const amplitude = strength * attack * decay * tail * tail * (3 - 2 * tail);
+        sc.ripples.push([x, .27 * seconds, 1 / width, amplitude]);
+      }
       // Age is measured from contact, using the same clock and x coordinate as the fluid injection.
       function fallingDrop(x, col, age, flight) {
-        if (motionless || age < -flight || age > 1000) return;
+        if (motionless || age < -flight || age >= RIPPLE_SECONDS * 1000) return;
         const settle = Math.min(180, flight / 2), depth = (bed - S) * DROP_DEPTH;
         if (age < settle) {
           const t = clamp01(1 + age / flight);
-          const y = age < 0 ? S - .09 * (1 - t*t) : S + depth * easeOut(age / settle);
-          const fade = age < 0 ? 1 : 1 - age / settle;
-          sc.plumes.push({x, y, r:.012, s:1.65*fade, col, phase:0, top:S, kind:4, squash:0, lean:0, stem:0});
+          const fall = .09;  // distance the lower edge travels before contact
+          const enter = clamp01(age / settle);
+          const squash = enter * enter * (3 - 2 * enter);
+          // The lower edge touches first. Carry the incoming speed into the water,
+          // then slow the bead and flatten it as it merges with the Sumi dye.
+          const travel = (depth + DROP_TIP) * squash + (2 * fall / flight) * settle * enter * (1 - enter) ** 2;
+          const y = S - DROP_TIP - fall * (1 - t*t) + travel;
+          sc.plumes.push({x, y, r:DROP_RADIUS, s:1.65*(1-squash), col, phase:0, top:S, kind:4, squash, lean:0, stem:0});
         }
-        if (age >= 0) sc.ripples.push({x, age:age / 1000, amp:.0045});
+        surfaceRipple(x, age / 1000, .008);
       }
       // A column of water, x0..x1, its seat (+1 at x0, -1 at x1, 0 none), its ink, its turbulence's time t (s), the top
       // and front of its ink.
@@ -9611,7 +9634,8 @@ void main() {
             const x = across(c, gap >= 0 ? (list[gap].at + list[gap + 1].at) / 2 : 0.25 + 0.1 * j);
             const fall = 0.1;
             if (age < fall) {
-              sc.plumes.push({ x, y: S - 0.05 + 0.05 * (age / fall), r: 0.007, s: 2.2, col: idx, phase: 0, top: S, kind: 4, squash: 0, lean: 0, stem: 0 });
+              const tip = .007 * DROP_TIP / DROP_RADIUS;
+              sc.plumes.push({ x, y: S - .05 + (.05 - tip) * (age / fall) ** 2, r: .007, s: 2.2, col: idx, phase: 0, top: S, kind: 4, squash: 0, lean: 0, stem: 0 });
               return;
             }
             const k = easeOut((age - fall) / (BELL_S - fall));
@@ -9619,7 +9643,7 @@ void main() {
             const target = Math.min(c.front - 0.03, BED - 0.03);
             sc.plumes.push({ x, y: S + 0.02 + (target - S - 0.02) * k, r: (0.024 + 0.02 * k) * (1 + 0.7 * melt), s: 1.7 * (1 - melt) * c.amount,
               col: idx, phase: wrap(age * 0.9) * TAU, top: S, kind: 1, squash: 0, lean: 0, stem: 0.8 * (1 - melt) });
-            if (j === 0 || b.type === 'end') sc.ripples.push({ x, age: age - fall, amp: b.type === 'end' ? 0.006 : 0.004 });
+            if (j === 0 || b.type === 'end') surfaceRipple(x, age - fall, b.type === 'end' ? .009 : .006);
           });
         });
       };
@@ -9735,7 +9759,7 @@ void main() {
         set('uW', 4 * i, [pl.squash, pl.lean, pl.stem, 0]);
       });
       sc.text.filter(Boolean).slice(0, NB).forEach((b, i) => set('uBox', 4 * i, b));
-      sc.ripples.slice(0, NR).forEach((r, i) => set('uRipple', 4 * i, [r.x, r.age, r.amp, 0]));
+      sc.ripples.slice(0, NR).forEach((r, i) => set('uRipple', 4 * i, r));
       if (sc.thread) {
         set('uThread', 0, [sc.thread.x, sc.thread.over, 1, sc.thread.reach]);
         set('uThreadB', 0, [sc.thread.beads, sc.thread.wobble, 0, 0]);

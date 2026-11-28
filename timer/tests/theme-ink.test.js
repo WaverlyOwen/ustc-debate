@@ -708,6 +708,45 @@
     } finally { DT.clock.reset(); }
   });
 
+  DT.test('theme ink: impact dimples the water locally and sends a fading wave in both directions', () => {
+    if (!hasGL()) return;
+    let now = T0;
+    DT.clock.set(() => now);
+    const ready = session(OPENING), run = E.toggle(ready, T0);
+    const {stage, root} = mountInk(E.view(ready, now), 960, 540);
+    try {
+      function frame(ms) {
+        now = T0 + ms;
+        stage.update(E.view(run, now));
+        return picture(root);
+      }
+      // Interpolate the air-side edge between pixels, away from the falling bead.
+      function edge(pic, offset) {
+        const x = .28 * pic.W + offset * pic.H, y = pic.surface * pic.H;
+        const step = 1 / pic.k, top = y - .02 * pic.H;
+        const air = pic.at(x, top)[0], cutoff = air - 5;
+        let previous = air;
+        for (let dy = step; dy <= .04 * pic.H; dy += step) {
+          const v = pic.at(x, top + dy)[0];
+          if (v <= cutoff) return top + dy - step + step * (previous - cutoff) / (previous - v);
+          previous = v;
+        }
+        throw Error('missing waterline at ' + offset);
+      }
+      const dry = frame(500), impact = frame(750), outward = frame(1020);
+      const late = frame(1460), settled = frame(2700);
+      for (const dir of [-1, 1]) {
+        const shift = (pic, dx) => edge(pic, dir * dx) - edge(dry, dir * dx);
+        assert.ok(shift(impact, .017) > .8, 'the point of impact presses the surface down');
+        assert.near(shift(impact, .092), 0, .35, 'distant water is still before the wave arrives');
+        assert.ok(shift(outward, .092) > .8, 'the disturbance travels away from the drop');
+        assert.near(shift(late, .092), 0, .45, 'the surface settles behind the passing wave');
+        assert.ok(shift(late, .21) > .45, 'the weaker wave continues outwards');
+        assert.near(shift(settled, .21), 0, .35, 'the water returns to its starting level');
+      }
+    } finally { stage.destroy(); DT.clock.reset(); }
+  });
+
   DT.test('theme ink: airborne and submerged drops keep their proportions across tank widths', () => {
     if (!hasGL()) return;
     function bounds(pic, above) {
