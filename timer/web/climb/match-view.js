@@ -32,7 +32,7 @@ function clockState(phase, clockPhase, active, value) {
   return '';
 }
 
-export function createMatchView(host) {
+export function createMatchView(host, finishLoading) {
   const doc = host.ownerDocument, win = doc.defaultView, stage = host.parentElement;
   host.classList.add('dt-climb-host');
   host.dataset.style = 'poster';
@@ -131,16 +131,21 @@ export function createMatchView(host) {
         for (const layer of scene.querySelectorAll('g[data-layer]')) layer.removeAttribute('id');
       }
       draw(data.progress, still ? 0 : visualTime, moving, shot, dt, snap || still, data.secondsPerTeam, data.footprintClock);
+      if (!host.hasAttribute('data-ready')) {
+        const face = scene.querySelector('[data-layer="mountain"] path[d]:not([d=""])');
+        if (!face || /NaN|Infinity/.test(face.getAttribute('d'))) {
+          const bounds = scene.getBoundingClientRect();
+          if (bounds.width < 2 || bounds.height < 2) return;
+          throw Error('山体首帧缺少有效路径');
+        }
+        host.setAttribute('data-ready','');
+        stage.classList.add('has-climb-view');
+        finishLoading?.();
+      }
     } catch (error) {
       destroy();
       win.console.error('登山场景无法绘制', error);
       return;
-    }
-    if (!host.hasAttribute('data-ready')) {
-      const face = scene.querySelector('[data-layer="mountain"] path[d]');
-      if (!face || face.getAttribute('d').includes('NaN')) return;
-      host.setAttribute('data-ready','');
-      stage.classList.add('has-climb-view');
     }
     previousShot = camera.shot || shot;
     snap = false;
@@ -217,6 +222,7 @@ export function createMatchView(host) {
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    finishLoading?.();
     win.cancelAnimationFrame(raf);
     win.clearTimeout(wake);
     size.disconnect();

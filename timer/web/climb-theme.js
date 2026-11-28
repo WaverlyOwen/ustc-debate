@@ -196,20 +196,45 @@
   }
 
   function mount(stage) {
-    const host = stage.ownerDocument.createElement('div');
-    stage.prepend(host);
+    const doc = stage.ownerDocument, win = doc.defaultView;
+    const host = doc.createElement('div'), loading = doc.createElement('div');
+    loading.className = 'climb-loading';
+    loading.setAttribute('role','status');
+    loading.innerHTML = '<svg viewBox="0 0 32 24" aria-hidden="true" focusable="false">' +
+      '<circle cx="22" cy="7" r="4" fill="#d97943"/>' +
+      '<path d="m1 21 10-13 5 6 4-5 11 12Z" fill="#816370"/>' +
+      '<path d="m6 15 5-7 4 5-3-1-2 2-1-2Z" fill="#ffebc9"/></svg>正在加载攀登场景';
+    stage.prepend(host, loading);
     let last, view, destroyed=false;
     const still=stage.hasAttribute('data-still');
-    import(moduleURL).then(({createMatchView}) => {
-      if (destroyed) return;
-      view=createMatchView(host);
-      if (last) view.update(matchData(last,still));
-    }).catch(error => {
-      if (!destroyed) console.warn('攀登场景未能载入，继续显示比赛计时',error);
+    async function load() {
+      try {
+        const {createMatchView} = await import(moduleURL);
+        if (destroyed) return;
+        view=createMatchView(host, () => loading.remove());
+        if (last) view.update(matchData(last,still));
+      } catch (error) {
+        if (destroyed) return;
+        view?.destroy();
+        loading.remove();
+        console.warn('攀登场景未能载入，继续显示比赛计时',error);
+      }
+    }
+    // Paint the regular clocks and status before building even a cached scene.
+    let task = 0;
+    const frame = win.requestAnimationFrame(() => {
+      task = win.setTimeout(load, 0);
     });
     return {
       update(v) { last=v; if (view) view.update(matchData(v,still)); },
-      destroy() { destroyed=true; if (view) view.destroy(); host.remove(); },
+      destroy() {
+        destroyed=true;
+        win.cancelAnimationFrame(frame);
+        win.clearTimeout(task);
+        if (view) view.destroy();
+        loading.remove();
+        host.remove();
+      },
     };
   }
   // Each study opens a spot on the route with the regular match clocks and controls.

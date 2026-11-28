@@ -293,6 +293,12 @@ class InlineTests(unittest.TestCase):
     def test_generated_banner(self):
         self.assertIn("由 timer/build.py 生成", self.html[:400])
 
+    def test_offline_and_web_ship_sumi_with_its_permission_notice(self):
+        formats = build.parse_all(FORMATS)
+        for script in (self.html, build.core_assets(formats)[1]):
+            self.assertTrue("Copyright (c) 2026 TenguByte" in script, "missing upstream copyright")
+            self.assertTrue("Permission is hereby granted" in script, "missing upstream license")
+
     def test_demo_names_match_screenshots(self):
         import re
         demo_js = (build.SRC / "demo.js").read_text(encoding="utf-8")

@@ -1,17 +1,15 @@
-const frameMs = 1000 / 24;
+const frameMs = 1000 / 60;
 
-// Keep the 24 Hz deadlines on one timeline. A late refresh can render once
-// for its current slot without shifting the remaining deadlines.
+// Follow each refresh on a 60 Hz display and every other one at 120 Hz.
+// Re-anchor on the delivered refresh so a missed frame never queues catch-up work.
 export function createFrameClock() {
-  let origin = 0, previousSlot = -1, lastDraw = null;
+  let lastDraw = null;
   return {
     reset() { lastDraw = null; },
     sample(now, force = false) {
-      if (lastDraw === null || force) { origin = now; previousSlot = -1; }
-      const slot = Math.floor((now - origin + .001) / frameMs);
-      if (slot <= previousSlot) return null;
       const dt = lastDraw === null ? 0 : Math.max(0,(now - lastDraw) / 1000);
-      previousSlot = slot;
+      // Chromium timestamps can round a 16.667 ms interval down to 16.6 ms.
+      if (!force && lastDraw !== null && now - lastDraw < frameMs - .5) return null;
       lastDraw = now;
       return dt;
     },

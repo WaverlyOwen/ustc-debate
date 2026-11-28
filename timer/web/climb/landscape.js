@@ -16,9 +16,40 @@ function path(parent, attributes = {}) {
   return node;
 }
 
+// Keep the moving mountain in the same SVG stacking position as the still
+// artwork. One bitmap repaint avoids reparsing thousands of SVG path strings
+// when a pan changes every projected coordinate.
+function movingLayer(group) {
+  const doc=group.ownerDocument, win=doc.defaultView;
+  if (!win?.SVGForeignObjectElement) return null;
+  const layer=doc.createElementNS(ns,'foreignObject'), canvas=doc.createElement('canvas');
+  const ctx=canvas.getContext?.('2d');
+  if (!ctx) return null;
+  layer.setAttribute('data-moving-mountain','');
+  layer.style.pointerEvents='none';
+  canvas.style.cssText='display:block;width:100%;height:100%';
+  layer.appendChild(canvas);
+  group.after(layer);
+  let cssWidth=0,cssHeight=0;
+  return {layer,begin(width,height,ratio) {
+    const w=Math.max(1,Math.round(width*ratio)),h=Math.max(1,Math.round(height*ratio));
+    if (canvas.width!==w || canvas.height!==h || cssWidth!==width || cssHeight!==height) {
+      cssWidth=width;cssHeight=height;
+      canvas.width=w; canvas.height=h;
+      layer.setAttribute('width',width); layer.setAttribute('height',height);
+      ctx.setTransform(w/width,0,0,h/height,0,0);
+      ctx.lineWidth=.62; ctx.lineJoin='round';
+    }
+    ctx.clearRect(0,0,width,height);
+    return ctx;
+  }};
+}
+
 // Project each shared mountain vertex once. The depth order only depends on
 // camera direction, so a dolly along the same sightline reuses the ordering.
 export function mountMountain(group, faces) {
+  if (group.nextElementSibling?.hasAttribute('data-moving-mountain')) group.nextElementSibling.remove();
+  group.style.display='';
   const vertices = [], keys = new Map();
   function indexOf(point) {
     const key = point.join(',');
@@ -37,10 +68,10 @@ export function mountMountain(group, faces) {
     const polygon = path(owner, { fill:face.color, stroke:face.color, 'stroke-width':'.62' });
     const details = new Map();
     for (const mark of marks) {
-      if (!details.has(mark.color)) details.set(mark.color, { node:path(owner,{fill:mark.color}), pieces:[] });
+      if (!details.has(mark.color)) details.set(mark.color, { color:mark.color,node:path(owner,{fill:mark.color}), pieces:[] });
       details.get(mark.color).pieces.push(mark.points.map(indexOf));
     }
-    return { polygon, node:marks.length ? owner : polygon, indices:surfaces[i], paintRank:i,
+    return { color:face.color,polygon, node:marks.length ? owner : polygon, indices:surfaces[i], paintRank:i,
       details:[...details.values()], bridgeHardware:face.bridgeHardware, snowWall:face.material==='firn' };
   });
   // At a snowline the high end of a long rock face can project closer than
@@ -78,13 +109,31 @@ export function mountMountain(group, faces) {
   // can share it across frames while a paused match holds its camera still.
   const tiles = [], tileSize = 40;
   let columns = 0, viewWidth = 0, viewHeight = 0;
+  // A diagonal handline can span a whole screen tile while covering only a
+  // thin strip. Reject boxes outside a triangle edge before clipping clothing.
+  function outsideEdge(a,b,sign,left,right,top,bottom) {
+    const nx=(a.y-b.y)*sign,ny=(b.x-a.x)*sign;
+    return nx*((nx>=0?right:left)-a.x)+ny*((ny>=0?bottom:top)-a.y)<-1e-8;
+  }
+  function triangleOverlaps(a,b,c,left,right,top,bottom) {
+    const sign=Math.sign((b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x));
+    return sign && !outsideEdge(a,b,sign,left,right,top,bottom) &&
+      !outsideEdge(b,c,sign,left,right,top,bottom) && !outsideEdge(c,a,sign,left,right,top,bottom);
+  }
   function bridgeOverlaps(xmin,xmax,ymin,ymax,farthest) {
     const right=Math.min(columns-1,Math.floor(xmax/tileSize));
     const bottom=Math.min(Math.ceil(viewHeight/tileSize)-1,Math.floor(ymax/tileSize));
     for (let y=Math.max(0,Math.floor(ymin/tileSize)); y<=bottom; y++) {
       for (let x=Math.max(0,Math.floor(xmin/tileSize)); x<=right; x++) {
         const hardware=tiles[y*columns+x]?.hardware;
-        if (hardware?.some(f=>f.near<farthest && f.xmax>xmin && f.xmin<xmax && f.ymax>ymin && f.ymin<ymax)) return true;
+        if (!hardware) continue;
+        for (const f of hardware) {
+          if (f.near>=farthest || f.xmax<=xmin || f.xmin>=xmax || f.ymax<=ymin || f.ymin>=ymax) continue;
+          const ids=f.indices,a=projected[ids[0]];
+          for (let j=1;j<ids.length-1;j++) {
+            if (triangleOverlaps(a,projected[ids[j]],projected[ids[j+1]],xmin,xmax,ymin,ymax)) return true;
+          }
+        }
       }
     }
     return false;
@@ -147,7 +196,10 @@ export function mountMountain(group, faces) {
             face.ymax<=box.top || face.ymin>=box.bottom || seen?.has(face)) continue;
         seen?.add(face);
         const ids=face.indices;
-        for (let i=1;i<ids.length-1;i++) visit(projected[ids[0]],projected[ids[i]],projected[ids[i+1]]);
+        for (let i=1;i<ids.length-1;i++) {
+          const a=projected[ids[0]],b=projected[ids[i]],c=projected[ids[i+1]];
+          if (triangleOverlaps(a,b,c,box.left,box.right,box.top,box.bottom)) visit(a,b,c);
+        }
       }
     }
   }
@@ -163,8 +215,19 @@ export function mountMountain(group, faces) {
     const digits=decimalText[rounded] ||= (rounded/10).toFixed(1);
     return value<0?'-'+digits:digits;
   }
-  return (project, yaw, pitch, width, height, viewKey) => {
-    if (viewKey===lastView && width===viewWidth && height===viewHeight) return;
+  let raster, wasRaster=false,lastRatio=1;
+  return (project, yaw, pitch, width, height, viewKey, motion=false) => {
+    if (motion && raster===undefined) raster=movingLayer(group);
+    const useRaster=Boolean(motion && raster);
+    const ratio=useRaster ? Math.min(2,group.ownerDocument.defaultView.devicePixelRatio||1) : 1;
+    if (viewKey===lastView && width===viewWidth && height===viewHeight && useRaster===wasRaster && ratio===lastRatio) return;
+    const resumeSvg=wasRaster && !useRaster;
+    if (wasRaster!==useRaster) {
+      raster.layer.style.display=useRaster?'':'none';
+      group.style.display=useRaster?'none':'';
+    }
+    wasRaster=useRaster;lastRatio=ratio;
+    const ctx=useRaster ? raster.begin(width,height,ratio) : null;
     lastView=viewKey;
     frame++;
     visible.length=0;
@@ -198,6 +261,14 @@ export function mountMountain(group, faces) {
       }
       return d+'Z';
     }
+    function trace(indices) {
+      for (let j=0;j<indices.length;j++) {
+        const i=indices[j],p=projected[i];
+        if (i>=surfaceVertices && p.frame!==frame) {project(vertices[i],p);p.frame=frame;}
+        if (j===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y);
+      }
+      ctx.closePath();
+    }
     const angle = Math.round(yaw * 90) + '/' + Math.round(pitch * 90);
     let reorder=angle!==lastAngle;
     if (reorder) {
@@ -221,14 +292,14 @@ export function mountMountain(group, faces) {
         }
         hidden=area>=0;
       }
-      if (hidden !== face.hidden) {
+      if (!ctx && hidden !== face.hidden) {
         face.node.style.display = hidden ? 'none' : '';
         if (face.hidden && !hidden) reorder=true;
         if (hidden) face.paintRank=-1;
         face.hidden=hidden;
       }
       if (hidden) continue;
-      visible.push(face);
+      if (!ctx) visible.push(face);
       let xmin=width, xmax=0, ymin=height, ymax=0, near=Infinity;
       for (const i of face.indices) {
         const p=projected[i];
@@ -246,14 +317,25 @@ export function mountMountain(group, faces) {
           if (face.bridgeHardware) (cell.hardware ||= []).push(face);
         }
       }
-      const d=polygonPath(face.indices);
-      if (d!==face.d) {face.polygon.setAttribute('d',d);face.d=d;}
-      for (const detail of face.details) {
-        const marks=detail.pieces.map(polygonPath).join('');
-        if (marks!==detail.d) {detail.node.setAttribute('d',marks);detail.d=marks;}
+      if (ctx) {
+        ctx.beginPath(); trace(face.indices);
+        ctx.fillStyle=face.color; ctx.fill();
+        ctx.strokeStyle=face.color; ctx.stroke();
+        for (const detail of face.details) {
+          ctx.beginPath();
+          for (const piece of detail.pieces) trace(piece);
+          ctx.fillStyle=detail.color;ctx.fill();
+        }
+      } else {
+        const d=polygonPath(face.indices);
+        if (d!==face.d) {face.polygon.setAttribute('d',d);face.d=d;}
+        for (const detail of face.details) {
+          const marks=detail.pieces.map(polygonPath).join('');
+          if (marks!==detail.d) {detail.node.setAttribute('d',marks);detail.d=marks;}
+        }
       }
     }
-    if (reorder) {
+    if (!ctx && (reorder || resumeSvg)) {
       // Changing the angle mostly leaves neighbours in the same order. Keep
       // those nodes connected and insert only the faces that passed a neighbour
       // or have just entered the viewport. Hidden siblings can stay in place.
@@ -472,7 +554,7 @@ export function createLandscape(svg, cameraState = {}) {
     sky({width,height,yaw:rig.yaw,pitch,focusX:rig.x/terrain.scale,focusY:rig.y/terrain.scale,time:atmosphereTime});
     project.width = width; project.height = height;
     const viewKey=width+'x'+height+'/'+matrix.elements.map(n=>Math.round(n*1e6)).join('/');
-    drawMountain(project,rig.yaw,pitch,width,height,viewKey);
+    drawMountain(project,rig.yaw,pitch,width,height,viewKey,!immediate);
     drawTracks(project,viewKey,progress,secondsPerTeam,parties.members,footprintClock);
     parties.draw(groups.parties,project);
     weather.sample(camera,project,width,height,atmosphereTime,reducedMotion);

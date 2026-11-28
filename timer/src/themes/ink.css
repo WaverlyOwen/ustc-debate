@@ -1,7 +1,7 @@
-/* @theme id=ink name=墨 desc=往一缸清水里滴墨，朱砂对花青，墨随用掉的时间沉向缸底，适合亮场投影 tone=light order=6 */
+/* @theme id=ink name=墨 desc=五滴墨错落入水，朱砂与花青各随发言下沉，适合亮场投影 tone=light order=6 */
 /* 墨 (spec 2026-11-27-ink-water-design): the stage is a tank of still water seen from the side, and the floor's ink is
-   dropped into it from the surface. The time used is how deep its front has sunk: just under the surface at the start,
-   on the bed of the tank when the time is up. The water and its ink are themes/ink.js's WebGL painter, which reads the
+   dropped into it from the surface. Each drop sinks and pools before the next one enters. The depth of the diffuse
+   background ink follows the total time used. The water and its ink are themes/ink.js's WebGL painter, which reads the
    colours below; while it draws, the stage has data-painter="live". Without it (no WebGL) a plain column of the side's
    ink stands in, from the surface down to the front. The digits are always one colour: wherever they are, the painter
    thins the ink behind them to at most --ink-cap of its strength, which is --side-color. */

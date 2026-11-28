@@ -345,18 +345,93 @@
 
   // ---- the tank: the surface, the front, the tick ----
 
-  // Spec: the front's depth is the time used, linearly: just under the surface at the start, on the bed at 0.
-  DT.test('theme ink: the painter\'s ink reaches as deep as the time used, and comes back up when time is given back', () => {
+  DT.test('theme ink: starting the clock keeps the ink already in the water', () => {
     if (!hasGL()) return;
-    const depths = [0.15, 0.4, 0.65, 0.9].map(u => {
-      const { stage, root } = still(singleAt(OPENING, u * 180), 640, 360);
-      const pic = picture(root);
-      const y = lowestInk(pic, 0, pic.W);
-      stage.destroy();
-      assert.ok(y >= frontAt(u) - 0.04 && y <= frontAt(u) + 0.09, 'used ' + u + ': the ink ends at ' + y.toFixed(3) + ', its front ' + frontAt(u).toFixed(3));
-      return y;
-    });
-    for (let i = 1; i < depths.length; i++) assert.ok(depths[i] > depths[i - 1], 'deeper as the time goes: ' + depths.join(', '));
+    let now = T0;
+    DT.clock.set(() => now);
+    const ready = session(OPENING);
+    const { stage, root } = mountInk(E.view(ready, T0), 640, 360);
+    try {
+      now += 1200;
+      stage.update(E.view(ready, now));
+      const before = picture(root);
+      const run = E.toggle(ready, now);
+      const first = now + 1;
+      now += 50;
+      stage.update(E.view(run, first));
+      const after = picture(root);
+      let n = 0, changed = 0;
+      before.each([0, before.H * SURFACE, before.W, before.H * 0.43], (rgb, x, y) => {
+        if (warmth(rgb) < 15) return;
+        n++;
+        const next = after.at(x + 0.1, y + 0.1);
+        if (rgb.some((v, i) => Math.abs(v - next[i]) > 8)) changed++;
+      });
+      assert.ok(n > 20 && changed < 0.03 * n, changed + ' of ' + n + ' ink pixels jumped on start');
+    } finally { stage.destroy(); DT.clock.reset(); }
+  });
+
+  DT.test('theme ink: the opening card fades into the first speaking clock', () => {
+    if (!hasGL()) return;
+    let now = T0;
+    DT.clock.set(() => now);
+    const { stage, root } = mountInk(titleCard(), 640, 360);
+    try {
+      now += 1200;
+      stage.update(titleCard());
+      const old = picture(root);
+      const region = [0, 80, 640, 300];
+      const difference = pic => {
+        let sum = 0, n = 0;
+        old.each(region, (rgb, x, y) => {
+          const b = pic.at(x + 0.1, y + 0.1);
+          sum += Math.abs(rgb[1] - b[1]); n++;
+        });
+        return sum / n;
+      };
+      const frame = dt => { now += dt; stage.update(singleAt(OPENING, (now - T0 - 1300) / 1000)); return difference(picture(root)); };
+      const first = frame(100), middle = frame(260), last = frame(500);
+      assert.ok(first < 1 && middle > first + 1 && last > middle + 1, [first, middle, last].join(' / '));
+    } finally { stage.destroy(); DT.clock.reset(); }
+  });
+
+  DT.test('theme ink: multiple distinct ink streams enter the water in the same cycle', () => {
+    if (!hasGL()) return;
+    const { stage, root } = still(singleAt(OPENING, 0), 640, 360);
+    try {
+      const columns = new Uint8Array(640);
+      for (const seconds of [0.08, 0.28, 0.61, 0.94, 1.26]) {
+        stage.update(singleAt(OPENING, seconds));
+        const pic = picture(root);
+        pic.each([0, pic.H * (SURFACE + 0.06), pic.W, pic.H * (SURFACE + 0.105)], (c, x) => {
+          if (warmth(c) > 38) columns[Math.floor(x)] = 1;
+        });
+      }
+      const starts = [];
+      for (let x = 0; x < columns.length; x++) {
+        if (columns[x] && (x === 0 || !columns[x - 1])) starts.push(x);
+      }
+      assert.ok(starts.length >= 4, 'at least four separate entry points are visible: ' + starts.join(', '));
+    } finally { stage.destroy(); }
+  });
+
+  DT.test('theme ink: a drop reaches the bed in seconds and another enters while its wake disperses', () => {
+    if (!hasGL()) return;
+    const { stage, root } = still(singleAt(OPENING, 0), 640, 360);
+    const frame = secs => { stage.update(singleAt(OPENING, secs)); return picture(root); };
+    try {
+      const early = frame(0.5), falling = frame(3), landed = frame(6), next = frame(7.5);
+      const low = pic => lowestInk(pic, 0, pic.W);
+      assert.ok(low(early) < 0.55 && low(falling) > low(early) + 0.18 && low(landed) > BED - 0.05,
+        'early, falling, landed depths: ' + [low(early), low(falling), low(landed)].join(' / '));
+      const strongInk = pic => pic.mean([0, pic.H * 0.35, pic.W, pic.H * 0.55], c => warmth(c) > 55 ? 1 : 0);
+      assert.ok(strongInk(next) > strongInk(landed) + 0.003, 'fresh ink at the surface after landing');
+      assert.ok(low(next) > BED - 0.05, 'the previous drop stays on the bed');
+    } finally { stage.destroy(); }
+  });
+
+  DT.test('theme ink: giving time back restores the drop and wake of that moment', () => {
+    if (!hasGL()) return;
     // Undo and ↑↓ give time back: the same stage shown at less time used is the picture of that moment, not of the
     // deepest it has been.
     const fresh = still(singleAt(OPENING, 72), 640, 360);
@@ -472,7 +547,10 @@
     const draws = [];
     const protos = [window.WebGLRenderingContext, window.WebGL2RenderingContext].filter(Boolean).map(C => C.prototype);
     const saved = protos.map(p => p.drawArrays);
-    protos.forEach((p, i) => { p.drawArrays = function () { draws.push(1); return saved[i].apply(this, arguments); }; });
+    protos.forEach((p, i) => { p.drawArrays = function () {
+      if (this.canvas.classList.contains('dt-canvas')) draws.push(1);  // Sumi has its own offscreen drawing passes
+      return saved[i].apply(this, arguments);
+    }; });
     let now = 50000;
     DT.clock.set(() => now);
     try {
@@ -589,7 +667,7 @@
 
   // Spec 自由辩: each half is a column of water of its own, its own ink sinking with its own clock; the waiting side's
   // ink is paler, so the speaker shows at a glance.
-  DT.test('theme ink: in free debate each half is its own column of its own ink, the speaker\'s the denser', () => {
+  DT.test('theme ink: in free debate only the speaking side\'s coloured drop moves', () => {
     ['left', 'right'].forEach(seat => {
       const view = dualAt(130, seat);   // 反方 speaking, 110 s used; 正方 waiting, 20 s used
       if (hasGL()) {
@@ -601,15 +679,20 @@
           return [r.left - box.left + 0.03 * pic.H, pic.H * (SURFACE + 0.005), r.right - box.left - 0.03 * pic.H, pic.H * 0.9];
         };
         const pro = half('pro'), con = half('con');
-        const water = warmth(pic.at(pic.W / 2, pic.H * 0.995));
-        assert.ok(pic.mean(pro, warmth) > water + 6, seat + ': 正方\'s half is cinnabar: ' + pic.mean(pro, warmth).toFixed(1) + ' vs ' + water);
-        assert.ok(pic.mean(con, warmth) < water - 2, seat + ': 反方\'s half is indigo: ' + pic.mean(con, warmth).toFixed(1));
-        const dark = r => pic.mean([r[0], r[1], r[2], pic.H * (SURFACE + 0.12)], c => 1 - lumOf(c));
-        assert.ok(dark(con) > dark(pro) * 1.4, seat + ': the speaker\'s ink is the denser: ' + dark(con).toFixed(3) + ' vs ' + dark(pro).toFixed(3));
-        // Each sinks by its own clock: 反方 (110 s of 4:00) well below 正方 (20 s).
-        const lowPro = lowestInk(pic, pro[0], pro[2]), lowCon = lowestInk(pic, con[0], con[2]);
-        assert.ok(lowCon > lowPro + 0.15, seat + ': ' + lowCon.toFixed(3) + ' below ' + lowPro.toFixed(3));
-        assert.near(lowCon, frontAt(110 / 240) + 0.025, 0.065, seat + ': 反方\'s front');
+        assert.ok(pic.mean(pro, c => warmth(c) > 15 ? 1 : 0) > 0.01, seat + ': cinnabar in the pro half');
+        assert.ok(pic.mean(con, c => warmth(c) < -32 ? 1 : 0) > 0.01, seat + ': indigo in the con half');
+        stage.update(dualAt(132, seat));
+        const later = picture(root);
+        const changed = r => {
+          let count = 0;
+          pic.each(r, (rgb, x, y) => {
+            const next = later.at(x + 0.1, y + 0.1);
+            if (rgb.some((v, i) => Math.abs(v - next[i]) > 5)) count++;
+          });
+          return count;
+        };
+        assert.equal(changed(pro), 0, seat + ': the waiting side holds its drop');
+        assert.ok(changed(con) > 100, seat + ': the speaking drop moves');
         stage.destroy();
       }
       withoutWebGL(() => {
@@ -705,9 +788,11 @@
       const { stage, root } = still(titleCard(seat));
       const pic = picture(root);
       const third = i => [pic.W * i / 3, pic.H * 0.2, pic.W * (i + 1) / 3, pic.H * 0.9];
-      const [l, r] = [pic.mean(third(0), warmth), pic.mean(third(2), warmth)];
-      const warm = seat === 'left' ? l - r : r - l;
-      assert.ok(warm > 10, 'title / ' + seat + ': 正方\'s ink on its own side, 反方\'s on the other: ' + l.toFixed(1) + ' / ' + r.toFixed(1));
+      const pro = third(seat === 'left' ? 0 : 2), con = third(seat === 'left' ? 2 : 0);
+      const red = c => warmth(c) > 20 ? 1 : 0, blue = c => warmth(c) < -28 ? 1 : 0;
+      assert.ok(pic.mean(pro, red) > 0.01 && pic.mean(con, red) === 0, 'cinnabar on the pro side only');
+      const conBlue = pic.mean(con, blue), proBlue = pic.mean(pro, blue);
+      assert.ok(conBlue > 0.01 && proBlue === 0, 'indigo on the con side only: ' + conBlue + ' / ' + proBlue);
       // and the blooms keep to their sides, clear of the motions in the middle
       const dark = rr => pic.mean(rr, c => 1 - lumOf(c));
       const mid = dark([pic.W * 0.42, pic.H * 0.2, pic.W * 0.58, pic.H * 0.9]);
@@ -718,8 +803,8 @@
       const { stage, root } = still(breakAt(12));
       const pic = picture(root);
       const dark = r => pic.mean(r, c => 1 - lumOf(c));
-      const mid = dark([pic.W * 0.4, pic.H * 0.2, pic.W * 0.6, pic.H * 0.7]);
-      const side = dark([0, pic.H * 0.2, pic.W * 0.15, pic.H * 0.7]);
+      const mid = dark([pic.W * 0.4, pic.H * 0.2, pic.W * 0.6, pic.H * BED]);
+      const side = dark([0, pic.H * 0.2, pic.W * 0.15, pic.H * BED]);
       assert.ok(mid > side + 0.04, 'break: the drop is in the middle: ' + mid.toFixed(3) + ' vs ' + side.toFixed(3));
       let tinted = 0;
       pic.each([pic.W * 0.3, pic.H * 0.2, pic.W * 0.7, pic.H * 0.7], c => { if (Math.abs(warmth(c)) > 30) tinted++; });

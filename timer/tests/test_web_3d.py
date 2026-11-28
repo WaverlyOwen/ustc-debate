@@ -54,7 +54,9 @@ for (const hz of [60,120]) {
   for (let i=0;i<2*hz;i++) step(1000/hz);
   for (const [index,calls] of views.entries()) {
     const start = starts[index], name = index ? 'match' : 'preview';
-    if (calls.length-start !== 48) errors.push(name+' drew '+(calls.length-start)+' at '+hz+' Hz');
+    if (calls.length-start !== 120) errors.push(name+' drew '+(calls.length-start)+' at '+hz+' Hz');
+    if (calls.slice(start).some(call=>Math.abs(call.dt-1/60)>.00001))
+      errors.push(name+' paced frames unevenly at '+hz+' Hz');
     for (let i=start;i<calls.length;i++) {
       if (Math.abs(calls[i].dt-(calls[i].at-calls[i-1].at)/1000)>1e-6) errors.push(name+' wrong dt');
     }
@@ -147,6 +149,14 @@ try {
     const current=getComputedStyle(footer.querySelector('[data-state="current"]'),'::after');
     check(current.display!=='none' && parseFloat(current.height)>0,'Missing current stage indicator');
   }
+  view.update(DT.engine.view(restored,0));
+  const card = stage.querySelector('.dt-card');
+  transparent(card);
+  check(getComputedStyle(card).boxShadow === 'none','Title still has a card shadow');
+  for (const side of ['pro','con']) {
+    const name = card.querySelector('.dt-teams [data-side="'+side+'"]');
+    check(name && name.getBoundingClientRect().width > 0,'Missing opening team '+side);
+  }
   document.getElementById('result').textContent='ok';
 } catch (error) { document.getElementById('result').textContent=String(error); }
 finally { view.destroy(); screen.remove(); }
@@ -193,7 +203,10 @@ try {
   for (const [w,h] of [[320,568],[390,844],[1280,800]]) {
     screen.style.width = w+'px'; screen.style.height = h+'px';
     const [active,idle] = inspect({},'', 'pro/con');
-    if (active <= idle || active < Math.min(w*.16,h*.20)) throw Error('Clock too small at '+w);
+    if (active <= idle || active < Math.min(w*.195,h*.25) || idle < Math.min(w*.15,h*.18))
+      throw Error('Dual clocks too small at '+w+': '+active+' / '+idle);
+    const [single] = inspect({dual:false,stageSide:'pro',mainClock:'9:59'},'main','pro');
+    if (single < Math.min(w*.28,h*.29)) throw Error('Single clock too small at '+w+': '+single);
     inspect({active:'con',clocks:{pro:'+12345:59',con:'+12345:59'}},'con','pro/con');
     inspect({dual:false,stageSide:'con',mainClock:'+12345:59'},'main','con');
     inspect({dual:false,active:null,mainClock:'0:05',clockPhases:{main:'warn'}},'main','neutral');
@@ -544,6 +557,14 @@ try {
   draw(project,0,0,176,108,'0');
   if (!same(project.terrainDepth(55,52),7) || project.terrainDepth(55,22)!==Infinity)
     throw Error('Height changed but the original depth tiles survived');
+  const rail=mountMountain(document.querySelector('g'),[
+    {bridgeHardware:true,color:'#678',points:[[0,0,6],[35,35,6],[35,33,6],[2,0,6]]},
+  ]);
+  offset=vertical=0;
+  rail(project,0,0,96,48,'rail');
+  if (project.bridgeOverlaps(2,4,24,26,10) || !project.bridgeOverlaps(3,4,2,3,10) ||
+      !project.bridgeOverlaps(10,11,5,20,10) || project.bridgeOverlaps(3,4,2,3,5))
+    throw Error('Bridge clipping must follow the thin diagonal rail and its depth');
   document.querySelector('output').textContent='ok';
 } catch(e) { document.querySelector('output').textContent=String(e); }
 </script>"""
@@ -590,6 +611,50 @@ try {
         with serve_pages() as (site, url):
             (site / 'web/climb/snow-lip-test.html').write_text(page, encoding='utf-8')
             dom = dump(url + 'web/climb/snow-lip-test.html')
+        self.assertIn('<output>ok</output>', dom[:2000])
+
+    def test_moving_mountain_preserves_detail_depth_and_screen_resolution(self):
+        page = """<!doctype html><output></output><svg width="90" height="60">
+<g id="mountain"></g><g id="tracks"></g></svg><script type="module">
+import {mountMountain} from './landscape.js';
+try {
+  Object.defineProperty(window,'devicePixelRatio',{value:2});
+  const group=document.querySelector('#mountain');
+  const rect=(l,t,r,b,z)=>[[l,t,z],[r,t,z],[r,b,z],[l,b,z]];
+  const draw=mountMountain(group,[
+    {points:rect(2,2,60,38,12),color:'#ff0000',details:[{points:rect(8,8,20,20,12),color:'#0000ff'}]},
+    {points:rect(32,6,48,27,4),color:'#00ff00'},
+  ]);
+  let offset=0;
+  const project=([x,y,depth],out={})=>Object.assign(out,{x:x+offset,y,depth});
+  draw(project,0,0,80,40,'still');
+  const snapshot=group.querySelector('path').getAttribute('d');
+  offset=1;
+  draw(project,0,0,80,40,'moving',true);
+  const canvas=document.querySelector('canvas');
+  if (!canvas || canvas.width!==160 || canvas.height!==80) throw Error('Missing high-resolution moving layer');
+  const pixel=(x,y)=>[...canvas.getContext('2d').getImageData(x*2,y*2,1,1).data].join(',');
+  if (pixel(5,5)!=='255,0,0,255' || pixel(12,12)!=='0,0,255,255' || pixel(38,14)!=='0,255,0,255')
+    throw Error('Mountain face, etched detail or foreground paint order was lost');
+  if (Math.abs(project.terrainDepth(38,14)-4)>1e-6 || group.querySelector('path').getAttribute('d')!==snapshot)
+    throw Error('Depth and the retained SVG did not follow their respective views');
+  draw(project,0,0,90,60,'moving',true);
+  if (document.querySelector('canvas')!==canvas || canvas.width!==180 || canvas.height!==120)
+    throw Error('Resize lost the moving layer or retained its old resolution');
+  draw(project,0,0,90,60,'moving');
+  if (!group.getBoundingClientRect().width || group.querySelector('path').getAttribute('d')===snapshot ||
+      canvas.getBoundingClientRect().width) throw Error('Static mountain did not resume at the current camera');
+  const fallback=document.querySelector('#tracks');
+  HTMLCanvasElement.prototype.getContext=()=>null;
+  mountMountain(fallback,[{points:rect(2,2,8,8,10),color:'#345'}])(project,0,0,90,60,'fallback',true);
+  if (!fallback.getBoundingClientRect().width || !fallback.querySelector('path[d]'))
+    throw Error('Missing SVG mountain when Canvas is unavailable');
+  document.querySelector('output').textContent='ok';
+} catch(e) {document.querySelector('output').textContent=String(e);}
+</script>"""
+        with serve_pages() as (site, url):
+            (site / 'web/climb/moving-mountain.html').write_text(page, encoding='utf-8')
+            dom = dump(url + 'web/climb/moving-mountain.html')
         self.assertIn('<output>ok</output>', dom[:2000])
 
     def test_summit_follow_keeps_the_climbers_in_view(self):

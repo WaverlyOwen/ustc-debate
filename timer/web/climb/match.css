@@ -1,3 +1,30 @@
+/* Keep the regular clocks usable while the mountain is being drawn. */
+.dt-stage > .climb-loading {
+  position: absolute;
+  z-index: 6;
+  bottom: 14cqh;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: .55em;
+  padding: .35em .85em .35em .55em;
+  border: 1px solid #af8a6e;
+  border-radius: .25em;
+  background: #fff1d9;
+  color: #503e3e;
+  font: 600 clamp(12px, 2.2cqh, 24px)/1.35 "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.dt-stage > .climb-loading svg { width: 1.8em; height: 1.35em; }
+@media (prefers-reduced-motion: no-preference) {
+  .dt-stage:not([data-still]) > .climb-loading circle {
+    animation: climb-loading-sun 1.6s ease-in-out infinite alternate;
+  }
+}
+@keyframes climb-loading-sun { from { transform: translateY(3px); } to { transform: translateY(-1px); } }
+
 /* The live stage owns its title, record, bell notices and next-stage rail. */
 .dt-climb-host {
   position: absolute;
@@ -79,7 +106,7 @@
 }
 .climb-clock {
   --team-ink: var(--climb-ink);
-  --digit-size: min(24cqh, 25cqw, calc(145cqw / var(--time-chars, 5)));
+  --digit-size: min(30cqh, 30cqw, calc(166cqw / var(--time-chars, 5)));
   display: grid;
   grid-template-columns: minmax(0,1fr);
   box-sizing: border-box;
@@ -95,7 +122,7 @@
 .climb-clock[data-side="neutral"] { grid-column: 1 / -1; justify-self: center; text-align: center; }
 .climb-readouts[data-layout="single"] .climb-clock { grid-column: 1 / -1; }
 .climb-readouts[data-layout="dual"] .climb-clock {
-  --digit-size: min(22cqh, 17.5cqw, calc(78cqw / var(--time-chars, 5)));
+  --digit-size: min(27cqh, 20.5cqw, calc(85cqw / var(--time-chars, 5)));
 }
 .climb-clock-label { display: flex; align-items: baseline; gap: .7cqw; min-width: 0; line-height: 1.25; }
 .climb-clock[data-side="con"] .climb-clock-label { justify-content: flex-end; }
@@ -122,7 +149,7 @@
   white-space: nowrap;
 }
 .climb-readouts[data-layout="dual"]:has(.climb-clock[data-active="true"]:not([hidden])) .climb-clock[data-active="false"] {
-  --digit-size: min(16.5cqh, 13.5cqw, calc(74cqw / var(--time-chars, 5)));
+  --digit-size: min(20cqh, 16cqw, calc(81cqw / var(--time-chars, 5)));
 }
 .climb-clock:is([data-urgency="warn"], [data-urgency="count"]) .climb-clock-state { color: #88510f; }
 .climb-clock[data-urgency="over"] .climb-clock-state { color: #992e22; }
@@ -163,7 +190,7 @@
   right: 3.2cqw;
   bottom: 6.7cqh;
 }
-.dt-stage.has-climb-view:is([data-mode="title"],[data-mode="end"]) > .dt-card,
+.dt-stage.has-climb-view[data-mode="end"] > .dt-card,
 .dt-stage.has-climb-view[data-mode="end"] > .dt-head {
   box-sizing: border-box;
   align-self: center;
@@ -175,12 +202,27 @@
 }
 .dt-stage.has-climb-view[data-mode="title"] > .dt-card {
   flex: 0 1 auto;
+  align-self: center;
+  max-width: 92cqw;
   gap: 5cqh;
   margin: auto 0;
-  padding: 4cqh 3.4cqw;
-  border-top: max(2px,.45cqh) solid var(--climb-ink);
+  padding: 0 3.4cqw;
+  text-shadow: var(--climb-text-shadow);
 }
-.dt-stage.has-climb-view[data-mode="title"] .dt-motion { max-width: 77cqw; font-size: min(4.7cqh,4.5cqw); }
+.dt-stage.has-climb-view[data-mode="title"] :is(.dt-motion, .dt-teams)::before { display: none; }
+.dt-stage.has-climb-view[data-mode="title"] :is(.dt-motion, .dt-teams) {
+  font-family: "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  font-weight: 700;
+  paint-order: stroke fill;
+  -webkit-text-stroke: .075em var(--climb-paper);
+}
+.dt-stage.has-climb-view[data-mode="title"] .dt-teams span::before {
+  color: inherit;
+  -webkit-text-stroke: 0;
+}
+.dt-stage.has-climb-view[data-mode="title"] .dt-card [data-side="pro"] { color: var(--climb-red); }
+.dt-stage.has-climb-view[data-mode="title"] .dt-card [data-side="con"] { color: var(--climb-blue); }
+.dt-stage.has-climb-view[data-mode="title"] .dt-motion { max-width: 77cqw; padding-left: 0; font-size: min(4.7cqh,4.5cqw); }
 .dt-stage.has-climb-view[data-mode="title"] .dt-teams { font-size: min(4cqh,4cqw); }
 .dt-stage.has-climb-view[data-mode="end"] > .dt-head { margin: 4.3cqh auto 0; padding: 1.4cqh 2.6cqw; }
 .dt-stage.has-climb-view[data-mode="end"] > .dt-card { margin: 1.2cqh auto 0; padding: 1.5cqh 2.4cqw; }
