@@ -55,8 +55,10 @@
 }
 .dt-stage[data-theme="ink"][data-side="pro"] { --ink-side: var(--pro); }
 .dt-stage[data-theme="ink"][data-side="con"] { --ink-side: var(--con); }
-.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"] {
+.dt-stage[data-theme="ink"][data-mode="stage"]:is([data-kind="single"], [data-kind="break"]) {
   --ink-bed: 100;
+}
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"] {
   --text-field: var(--side-color);
   --text-deep: var(--side-deep);
   --ink-dim: #24292c;
@@ -94,13 +96,9 @@
   height: calc(var(--ink-front) - var(--ink-surface) * 1cqh + 2cqh);
   clip-path: none;
 }
-/* A break's ink is neutral, and sinks in the middle. */
+/* Intermission uses neutral ink across the full stage at its original water level. */
 .dt-stage[data-theme="ink"][data-mode="stage"][data-kind="break"] .dt-field {
   display: block;
-  left: 30cqw;
-  right: 30cqw;
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 35% 65%, transparent);
-  mask-image: linear-gradient(to right, transparent, #000 35% 65%, transparent);
 }
 .dt-stage[data-theme="ink"][data-painter="live"] .dt-field,
 .dt-stage[data-theme="ink"][data-painter="live"] .dt-half-field { visibility: hidden; }

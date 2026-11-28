@@ -678,7 +678,7 @@
     let now = T0;
     DT.clock.set(() => now);
     try {
-      for (const [name, side, x] of [[OPENING, 'pro', .28], [REBUTTAL, 'con', .72], ['评委打分', 'neutral', .412],
+      for (const [name, side, x] of [[OPENING, 'pro', .28], [REBUTTAL, 'con', .72], ['评委打分', 'neutral', .28],
         ['正反方二辩对辩', 'con', .555], ['自由辩论', 'pro', .445]]) {
         const two = name === '正反方二辩对辩' || name === '自由辩论';
         let s = session(name);
@@ -708,7 +708,7 @@
     } finally { DT.clock.reset(); }
   });
 
-  DT.test('theme ink: impact dimples the water locally and sends a fading wave in both directions', () => {
+  DT.test('theme ink: the visible waterline stays still as a drop enters and spreads', () => {
     if (!hasGL()) return;
     let now = T0;
     DT.clock.set(() => now);
@@ -733,16 +733,12 @@
         }
         throw Error('missing waterline at ' + offset);
       }
-      const dry = frame(500), impact = frame(750), outward = frame(1020);
-      const late = frame(1460), settled = frame(2700);
-      for (const dir of [-1, 1]) {
-        const shift = (pic, dx) => edge(pic, dir * dx) - edge(dry, dir * dx);
-        assert.ok(shift(impact, .017) > .8, 'the point of impact presses the surface down');
-        assert.near(shift(impact, .092), 0, .35, 'distant water is still before the wave arrives');
-        assert.ok(shift(outward, .092) > .8, 'the disturbance travels away from the drop');
-        assert.near(shift(late, .092), 0, .45, 'the surface settles behind the passing wave');
-        assert.ok(shift(late, .21) > .45, 'the weaker wave continues outwards');
-        assert.near(shift(settled, .21), 0, .35, 'the water returns to its starting level');
+      const dry = frame(500);
+      for (const ms of [680, 750, 1020, 1460, 2700]) {
+        const pic = frame(ms);
+        for (const dx of [-.21, -.092, -.04, .04, .092, .21]) {
+          assert.near(edge(pic, dx), edge(dry, dx), .35, 'fixed surface at ' + dx + ' after ' + ms + ' ms');
+        }
       }
     } finally { stage.destroy(); DT.clock.reset(); }
   });
@@ -782,7 +778,7 @@
       const {stage,root} = mountInk(view(0),640,360);
       try {
         for (const [at, position] of [[.14,.78],[.34,.09],[.55,.90],[.77,.48]]) {
-          const x = side==='con' ? 1-position : side==='neutral' ? .3+.4*position : position;
+          const x = side==='con' ? 1-position : position;
           const sample = offset => { stage.update(view(at*secs+offset)); return beadHeight(picture(root),x,side); };
           const high = sample(-.50), low = sample(-.22);
           assert.ok(high!==null && low!==null && low>high+.012, side+' drop '+at+' descends: '+high+' to '+low);
@@ -1069,9 +1065,40 @@
 
   // ---- the cards, and the thumbnail ----
 
-  // Spec 卡片: the title card's two drops bloom each on its own side; the break's neutral drop sinks in the middle;
-  // the end card's two inks lie in layers.
-  DT.test('theme ink: the cards: two blooms on their own sides, a grey drop in the middle, two layers at the end', () => {
+  DT.test('theme ink: intermission uses the full tank in the painter and CSS fallback', () => {
+    const format = DT.BUILTIN_FORMATS.find(f => f.id === 'recruit-1v1');
+    const index = format.stages.findIndex(s => s.name === '中场休息');
+    const ready = E.goto(E.createSession(format, MATCH, T0, {theme: 'ink'}), index, T0);
+    const run = E.toggle(ready, T0);
+    const view = secs => E.view(run, T0 + secs * 1000);
+    const end = format.stages[index].secs;
+    withoutWebGL(() => {
+      const {stage, root} = still(view(end));
+      try {
+        const field = root.querySelector('.dt-field'), tank = field.getBoundingClientRect(), page = root.getBoundingClientRect();
+        assert.near(tank.left, page.left, .5, 'left wall');
+        assert.near(tank.right, page.right, .5, 'right wall');
+        assert.ok(tank.bottom >= page.bottom, 'the water reaches the bottom of the page');
+        assert.equal(getComputedStyle(field).maskImage, 'none', 'the sides are visible');
+        assert.equal(surfaceOf(root), .19, 'original intermission level');
+      } finally { stage.destroy(); }
+    });
+    if (!hasGL()) return;
+    const {stage, root} = still(view(0));
+    try {
+      for (const [start, x] of [[.34,.09], [.55,.90]]) {
+        stage.update(view(start * end + .7));
+        const pic = picture(root);
+        const area = [pic.W*(x-.04), pic.H*(pic.surface+.01), pic.W*(x+.04), pic.H*(pic.surface+.14)];
+        assert.ok(pic.mean(area, rgb => Number(rgb[0] < 170 && Math.abs(warmth(rgb)) < 30)) > .005, 'neutral dye near wall ' + x);
+      }
+      stage.update(view(end));
+      const pic = picture(root);
+      assert.ok(lowestInk(pic, 0, pic.W) > .96, 'pigment can reach the bottom of the tank');
+    } finally { stage.destroy(); }
+  });
+
+  DT.test('theme ink: the title has two blooms on their own sides and the end card has two settled layers', () => {
     if (!hasGL()) return;
     ['left', 'right'].forEach(seat => {
       const { stage, root } = still(titleCard(seat));
@@ -1088,18 +1115,6 @@
       assert.ok(mid < dark(third(0)) && mid < dark(third(2)), 'title / ' + seat + ': the middle is the clearest: ' + mid.toFixed(3));
       stage.destroy();
     });
-    {
-      const { stage, root } = still(breakAt(12));
-      const pic = picture(root);
-      const dark = r => pic.mean(r, c => 1 - lumOf(c));
-      const mid = dark([pic.W * 0.4, pic.H * 0.2, pic.W * 0.6, pic.H * BED]);
-      const side = dark([0, pic.H * 0.2, pic.W * 0.15, pic.H * BED]);
-      assert.ok(mid > side + 0.01, 'break: the drop is in the middle: ' + mid.toFixed(3) + ' vs ' + side.toFixed(3));
-      let tinted = 0;
-      pic.each([pic.W * 0.3, pic.H * 0.2, pic.W * 0.7, pic.H * 0.7], c => { if (Math.abs(warmth(c)) > 30) tinted++; });
-      assert.equal(tinted, 0, 'break: neutral ink, neither side\'s');
-      stage.destroy();
-    }
     {
       const { stage, root } = still(endCard(), 960, 540);
       const pic = picture(root);

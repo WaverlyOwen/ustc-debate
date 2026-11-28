@@ -4024,8 +4024,10 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
 }
 .dt-stage[data-theme="ink"][data-side="pro"] { --ink-side: var(--pro); }
 .dt-stage[data-theme="ink"][data-side="con"] { --ink-side: var(--con); }
-.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"] {
+.dt-stage[data-theme="ink"][data-mode="stage"]:is([data-kind="single"], [data-kind="break"]) {
   --ink-bed: 100;
+}
+.dt-stage[data-theme="ink"][data-mode="stage"][data-kind="single"] {
   --text-field: var(--side-color);
   --text-deep: var(--side-deep);
   --ink-dim: #24292c;
@@ -4063,13 +4065,9 @@ button[data-armed] .dt-arm-ask { visibility: visible; }
   height: calc(var(--ink-front) - var(--ink-surface) * 1cqh + 2cqh);
   clip-path: none;
 }
-/* A break's ink is neutral, and sinks in the middle. */
+/* Intermission uses neutral ink across the full stage at its original water level. */
 .dt-stage[data-theme="ink"][data-mode="stage"][data-kind="break"] .dt-field {
   display: block;
-  left: 30cqw;
-  right: 30cqw;
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 35% 65%, transparent);
-  mask-image: linear-gradient(to right, transparent, #000 35% 65%, transparent);
 }
 .dt-stage[data-theme="ink"][data-painter="live"] .dt-field,
 .dt-stage[data-theme="ink"][data-painter="live"] .dt-half-field { visibility: hidden; }
@@ -8816,7 +8814,6 @@ void main() {
   const DROP_RADIUS = .012;
   const DROP_TIP = DROP_RADIUS * 1.6 * .88;  // visible lower edge of the feathered bead
   const FALL_MS = 680;
-  const RIPPLE_SECONDS = 1.6;
   const fallTime = total => Math.min(FALL_MS, total * .05);  // room for separate entries on a short clock
   const FLUID_SECONDS = 23;
   const SUMI_HZ = 60;          // native integration rate of Sumi's fluidPainter
@@ -8833,7 +8830,7 @@ void main() {
   const PAD = 0.012;           // a box the ink is thinned in reaches this far past its text...
   const FEATHER = 0.035;       // ...and fades out over this much more
   const STILL_T = 47;          // under reduced motion the water's turbulence stands at this many seconds
-  const NP = 16, NB = 6, NR = 4;   // the shader's plume, box and ripple slots
+  const NP = 16, NB = 6;   // the shader's plume and text-box slots
   const SETTLE_MS = 800;       // the layout is read on every frame for this long after anything that moves it changes
   const RING_GAP_S = 0.32;     // an end bell's second drop (render.js RING_GAP_MS)
   const DIM = 0.5;             // the waiting side's ink at half strength
@@ -8850,7 +8847,7 @@ void main() {
   const VERT = 'attribute vec2 aPos; void main() { gl_Position = vec4(aPos, 0.0, 1.0); }';
   const FRAG = [
     '#ifdef GL_FRAGMENT_PRECISION_HIGH', 'precision highp float;', '#else', 'precision mediump float;', '#endif',
-    '#define NP ' + NP, '#define NB ' + NB, '#define NR ' + NR,
+    '#define NP ' + NP, '#define NB ' + NB,
     'uniform vec2 uRes;',          // the drawing buffer, px
     'uniform float uAspect;',      // stage width / height
     'uniform sampler2D uNoise;',
@@ -8872,14 +8869,11 @@ void main() {
     'uniform vec4 uW[NP];',        // squash, lean, stem, -
     'uniform vec4 uBox[NB];',      // small text only; the clock does not affect the water
     'uniform vec2 uCaps;',         // density limit for the small text, one per column
-    'uniform vec4 uRipple[NR];',   // impact x, distance travelled, inverse width, displacement
     'uniform vec4 uThread;',       // x, time over (s), strength, reach
     'uniform vec4 uThreadB;',      // bead phase, wobble phase, -, -
     'uniform vec3 uKThread;',
     'vec4 N(vec2 q) { return texture2D(uNoise, q); }',
     'float ridge(float n) { return 1.0 - abs(2.0 * n - 1.0); }',
-    // A depression with two raised shoulders. Its integral is zero, so passing waves leave the level unchanged.
-    'float pulse(float x) { float q = x*x; return (1.0 - 2.0*q) * exp(-q); }',
     'vec3 enc(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }',
     'vec3 lin(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }',
     // One inside a small text box; zero beyond its feather.
@@ -8915,19 +8909,7 @@ void main() {
     '  vec3 K = mix(uK[0], uK[1], side), F = mix(uFloor[0], uFloor[1], side);',
     '  float cap = mix(uCaps.x, uCaps.y, side);',
     '  float top = A.x, front = A.y;',
-    // the surface, and its ripples
-    '  float wave = 0.0;',
-    '  if (abs(p.y - uSurface) < 0.10) {',
-    '    for (int i = 0; i < NR; i++) {',
-    '      vec4 r = uRipple[i];',
-    '      if (r.w == 0.0) continue;',
-    '      float dx = p.x - r.x;',
-    '      if ((abs(dx) - r.y) * r.z > 4.0) continue;',
-    '      wave += r.w * (pulse((dx - r.y) * r.z) + pulse((dx + r.y) * r.z));',
-    '    }',
-    '    wave *= 1.0 - smoothstep(0.02, 0.10, abs(p.y - uSurface));',
-    '  }',
-    '  float S = uSurface + wave;',
+    '  float S = uSurface;',
     '  float edge = max(0.0015, 0.75 / uRes.y);',
     '  float wet = smoothstep(S - edge, S + edge, p.y);',
     // Most live frames contain only the Sumi dye. Reserve noise and plume shading for bells, cards and overtime.
@@ -9164,10 +9146,10 @@ void main() {
   const LAYOUT = [
     ['uRes', 2], ['uAspect', 1], ['uAir', 3], ['uTop', 3], ['uDeep', 3], ['uSurface', 1], ['uSplit', 4], ['uDuel', 1],
     ['uColA', 8], ['uColB', 8], ['uColC', 8], ['uColD', 8], ['uDrop', 8], ['uK', 6], ['uFloor', 6],
-    ['uN', 1], ['uP', 4 * NP], ['uQ', 4 * NP], ['uW', 4 * NP], ['uBox', 4 * NB], ['uCaps', 2], ['uRipple', 4 * NR],
+    ['uN', 1], ['uP', 4 * NP], ['uQ', 4 * NP], ['uW', 4 * NP], ['uBox', 4 * NB], ['uCaps', 2],
     ['uThread', 4], ['uThreadB', 4], ['uKThread', 3],
   ];
-  const ARRAYS = ['uColA', 'uColB', 'uColC', 'uColD', 'uDrop', 'uK', 'uFloor', 'uP', 'uQ', 'uW', 'uBox', 'uRipple'];
+  const ARRAYS = ['uColA', 'uColB', 'uColC', 'uColD', 'uDrop', 'uK', 'uFloor', 'uP', 'uQ', 'uW', 'uBox'];
   const VEC3 = ['uAir', 'uTop', 'uDeep', 'uK', 'uFloor', 'uKThread'];
   const OFFSET = {};
   let FLOATS = 0;
@@ -9342,7 +9324,7 @@ void main() {
     let prog;
     try {
       prog = program(gl);
-      if (gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) < 3 * NP + NB + NR + 40) throw new Error('墨：显卡的着色器常量不够');
+      if (gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) < 3 * NP + NB + 40) throw new Error('墨：显卡的着色器常量不够');
     } catch (e) {
       // A card that cannot run the shader gives its context back now, not when the canvas is collected: a browser keeps
       // only a few live. The theme carries on with its stylesheet (render.js stops the painter on this throw).
@@ -9547,37 +9529,25 @@ void main() {
       const S = palette.surface;
       const seat = v.proSeat === 'right' ? 'right' : 'left';
       const st = v.mode === 'stage' ? v.stage : null;
-      const sc = { aspect, columns: [], plumes: [], text: [], ripples: [], thread: null, split: { at: 0, axis: 0, band: 0 } };
+      const sc = { aspect, columns: [], plumes: [], text: [], thread: null, split: { at: 0, axis: 0, band: 0 } };
       const timeOf = ms => (motionless ? STILL_T : ms / 1000);
-      const bed = st?.type === 'single' ? 1 : BED;
+      const bed = st?.type === 'single' || st?.type === 'break' ? 1 : BED;
       const frontOf = used => S + GAP + (bed - S - GAP) * clamp01(used);
       const usedOf = c => Math.max(0, c.total - c.remaining);
       const across = (c, at) => (c.seat >= 0 ? c.x0 + at * (c.x1 - c.x0) : c.x1 - at * (c.x1 - c.x0));
-      function surfaceRipple(x, seconds, strength) {
-        if (seconds <= 0 || seconds >= RIPPLE_SECONDS) return;
-        const width = .030 + .021 * seconds;
-        const attack = 1 - Math.exp(-seconds / .035);
-        const tail = clamp01((RIPPLE_SECONDS - seconds) / .5);
-        const decay = Math.exp(-1.15 * seconds) * .030 / width;
-        const amplitude = strength * attack * decay * tail * tail * (3 - 2 * tail);
-        sc.ripples.push([x, .27 * seconds, 1 / width, amplitude]);
-      }
       // Age is measured from contact, using the same clock and x coordinate as the fluid injection.
       function fallingDrop(x, col, age, flight) {
-        if (motionless || age < -flight || age >= RIPPLE_SECONDS * 1000) return;
-        const settle = Math.min(180, flight / 2), depth = (bed - S) * DROP_DEPTH;
-        if (age < settle) {
-          const t = clamp01(1 + age / flight);
-          const fall = .09;  // distance the lower edge travels before contact
-          const enter = clamp01(age / settle);
-          const squash = enter * enter * (3 - 2 * enter);
-          // The lower edge touches first. Carry the incoming speed into the water,
-          // then slow the bead and flatten it as it merges with the Sumi dye.
-          const travel = (depth + DROP_TIP) * squash + (2 * fall / flight) * settle * enter * (1 - enter) ** 2;
-          const y = S - DROP_TIP - fall * (1 - t*t) + travel;
-          sc.plumes.push({x, y, r:DROP_RADIUS, s:1.65*(1-squash), col, phase:0, top:S, kind:4, squash, lean:0, stem:0});
-        }
-        surfaceRipple(x, age / 1000, .008);
+        const settle = Math.min(180, flight / 2);
+        if (motionless || age < -flight || age >= settle) return;
+        const depth = (bed - S) * DROP_DEPTH, t = clamp01(1 + age / flight);
+        const fall = .09;  // distance the lower edge travels before contact
+        const enter = clamp01(age / settle);
+        const squash = enter * enter * (3 - 2 * enter);
+        // The lower edge touches first. Carry the incoming speed into the water,
+        // then slow the bead and flatten it as it merges with the Sumi dye.
+        const travel = (depth + DROP_TIP) * squash + (2 * fall / flight) * settle * enter * (1 - enter) ** 2;
+        const y = S - DROP_TIP - fall * (1 - t*t) + travel;
+        sc.plumes.push({x, y, r:DROP_RADIUS, s:1.65*(1-squash), col, phase:0, top:S, kind:4, squash, lean:0, stem:0});
       }
       // A column of water, x0..x1, its seat (+1 at x0, -1 at x1, 0 none), its ink, its turbulence's time t (s), the top
       // and front of its ink.
@@ -9593,7 +9563,7 @@ void main() {
         return c;
       };
       // Schedule each side's Sumi drops using only its own elapsed speaking time.
-      const rain = (c, clock, inset = 0) => {
+      const rain = (c, clock) => {
         const used = usedOf(clock), total = Math.max(1, clock.total);
         if (!clock.running && used === 0) return;
         const flight = fallTime(total), firstAge = used - flight;
@@ -9604,7 +9574,7 @@ void main() {
         const at = motionless ? DROPS.reduce((last, [, start]) => progress >= start ? start + .01 : last, 0)
           : progress < second ? second * Math.max(0, firstAge) / (second * total - flight) : progress;
         c.frame = !motionless && firstAge < 0 ? -1 : clamp01(at) * LAST_FRAME;
-        c.drop = [across(c, inset), across(c, 1 - inset), bed, motionless ? 1 : easeOut(firstAge / Math.min(180, flight / 2))];
+        c.drop = [across(c, 0), across(c, 1), bed, motionless ? 1 : easeOut(firstAge / Math.min(180, flight / 2))];
         DROPS.forEach(([position, start], i) => {
           const x = c.drop[0] + (c.drop[1] - c.drop[0]) * position;
           const contact = i === 0 ? flight : contactFrame(start, LAST_FRAME) * total / LAST_FRAME;
@@ -9643,7 +9613,6 @@ void main() {
             const target = Math.min(c.front - 0.03, BED - 0.03);
             sc.plumes.push({ x, y: S + 0.02 + (target - S - 0.02) * k, r: (0.024 + 0.02 * k) * (1 + 0.7 * melt), s: 1.7 * (1 - melt) * c.amount,
               col: idx, phase: wrap(age * 0.9) * TAU, top: S, kind: 1, squash: 0, lean: 0, stem: 0.8 * (1 - melt) });
-            if (j === 0 || b.type === 'end') surfaceRipple(x, age - fall, b.type === 'end' ? .009 : .006);
           });
         });
       };
@@ -9697,10 +9666,10 @@ void main() {
         const used = clock ? usedOf(clock) : 0;
         const total = clock ? Math.max(1, clock.total) : 1;
         if (st.type === 'break') {
-          // Neutral ink sinks in the middle during the break.
+          // Neutral ink uses the full tank during an intermission.
           const c = column({ x0: 0, x1: aspect, ink: 'neutral', t: timeOf(used), front: frontOf(used / total), spread: 0,
             seedKey: 'break/' + st.id });
-          rain(c, clock, 0.30);
+          rain(c, clock);
           sc.text.push(m.motions);
         } else {
           const side = st.side === 'con' ? 'con' : 'pro';
@@ -9759,7 +9728,6 @@ void main() {
         set('uW', 4 * i, [pl.squash, pl.lean, pl.stem, 0]);
       });
       sc.text.filter(Boolean).slice(0, NB).forEach((b, i) => set('uBox', 4 * i, b));
-      sc.ripples.slice(0, NR).forEach((r, i) => set('uRipple', 4 * i, r));
       if (sc.thread) {
         set('uThread', 0, [sc.thread.x, sc.thread.over, 1, sc.thread.reach]);
         set('uThreadB', 0, [sc.thread.beads, sc.thread.wobble, 0, 0]);
