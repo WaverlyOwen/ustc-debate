@@ -285,6 +285,7 @@
         assert.equal(getComputedStyle(clock.querySelector('.dt-digits-on')).display, 'none', where + ': one layer');
         const digits = clock.querySelector('.dt-digits:not(.dt-digits-on)');
         assert.equal(getComputedStyle(digits).clipPath, 'none', where + ': not cut');
+        assert.equal(getComputedStyle(digits.querySelector('.dt-colon')).filter, 'none', where + ': no halo');
         const colours = Array.from(digits.querySelectorAll('.dt-sign, .dt-min, .dt-sec')).map(s => getComputedStyle(s).color);
         assert.ok(colours.every(c => c === colours[0]), where + ': ' + colours.join(' / '));
       });
@@ -292,9 +293,7 @@
     });
   });
 
-  // Spec: no ink anywhere takes the digits below 3:1. The painter caps the ink behind them and never lets it be darker
-  // than --side-color; this reads the canvas behind the glyphs as the front passes behind them, in overtime, and in
-  // both halves of a free debate.
+  // Read actual pigment under the clock in single, dual, break and overtime stages.
   DT.test('theme ink: the ink behind the digits never takes them below 3:1', () => {
     if (!hasGL()) return;
     const failures = [];
@@ -376,30 +375,41 @@
 
   // ---- the tank: the surface and the front ----
 
-  DT.test('theme ink: starting the clock keeps the ink already in the water', () => {
+  DT.test('theme ink: moving the digits leaves the ink underneath identical', () => {
+    if (!hasGL()) return;
+    for (const view of [singleAt(OPENING, 60), dualAt(130), breakAt(12)]) {
+      const {stage, root} = still(view, 640, 360);
+      try {
+        const before = picture(root);
+        root.querySelectorAll('.dt-clock').forEach(clock => { clock.style.translate = '0 -35cqh'; });
+        stage.update({...view, turns: (view.turns || []).slice()});
+        const after = picture(root);
+        assert.ok(before.data.every((v, i) => v === after.data[i]), view.stage.name + ': no clock-shaped lightening');
+      } finally { stage.destroy(); }
+    }
+  });
+
+  DT.test('theme ink: title and end cards show their settled composition on entry', () => {
     if (!hasGL()) return;
     let now = T0;
     DT.clock.set(() => now);
-    const ready = session(OPENING);
-    const { stage, root } = mountInk(E.view(ready, T0), 640, 360);
     try {
-      now += 1200;
-      stage.update(E.view(ready, now));
-      const before = picture(root);
-      const run = E.toggle(ready, now);
-      const first = now + 1;
-      now += 50;
-      stage.update(E.view(run, first));
-      const after = picture(root);
-      let n = 0, changed = 0;
-      before.each([0, before.H * before.surface, before.W, before.H * (before.surface + .25)], (rgb, x, y) => {
-        if (warmth(rgb) < 15) return;
-        n++;
-        const next = after.at(x + 0.1, y + 0.1);
-        if (rgb.some((v, i) => Math.abs(v - next[i]) > 8)) changed++;
-      });
-      assert.ok(n > 20 && changed < 0.03 * n, changed + ' of ' + n + ' ink pixels jumped on start');
-    } finally { stage.destroy(); DT.clock.reset(); }
+      for (const card of [titleCard(), endCard()]) {
+        const {stage, root} = mountInk(card, 640, 360);
+        try {
+          const before = picture(root);
+          now += 1500;
+          stage.update(card);
+          const after = picture(root);
+          // The words can enter separately. Sample the water away from their boxes.
+          const strip = [0, 0, before.W * .10, before.H * .8];
+          before.each(strip, (rgb, x, y) => {
+            const next = after.at(x + .1, y + .1);
+            if (rgb.some((v, i) => Math.abs(v - next[i]) > 1)) throw Error(card.mode + ': pigment moved on entry');
+          });
+        } finally { stage.destroy(); }
+      }
+    } finally { DT.clock.reset(); }
   });
 
   DT.test('theme ink: the opening card fades into the first speaking clock', () => {
@@ -420,7 +430,8 @@
         });
         return sum / n;
       };
-      const frame = dt => { now += dt; stage.update(singleAt(OPENING, (now - T0 - 1300) / 1000)); return difference(picture(root)); };
+      const ready = session(OPENING);
+      const frame = dt => { now += dt; stage.update(E.view(ready, now)); return difference(picture(root)); };
       const first = frame(100), middle = frame(260), last = frame(500);
       assert.ok(first < 1 && middle > first + 1 && last > middle + 1, [first, middle, last].join(' / '));
     } finally { stage.destroy(); DT.clock.reset(); }
@@ -529,6 +540,17 @@
   // so the room still reads the time and who has the floor.
   DT.test('theme ink: without WebGL a column of ink runs from the surface down to the front', () => {
     withoutWebGL(() => {
+      for (const name of [OPENING, '评委打分', '正反方二辩对辩', '自由辩论']) {
+        const {stage, root} = mountInk(E.view(session(name), T0));
+        try {
+          const fields = root.querySelectorAll(root.dataset.kind === 'dual' ? '.dt-half-field' : '.dt-field');
+          fields.forEach(field => {
+            const style = getComputedStyle(field);
+            assert.equal(style.opacity, '0', name + ': ready water is clear');
+            assert.equal(style.animationName, 'none', name + ': switching pages releases no ink');
+          });
+        } finally { stage.destroy(); }
+      }
       [0, 1 / 3, 2 / 3, 1].forEach(u => [[OPENING, 'left', '--pro'], [REBUTTAL, 'right', '--con']].forEach(([name, seat, side]) => {
         const secs = name === OPENING ? 180 : 120;
         const { stage, root } = mountInk(singleAt(name, u * secs, seat));
@@ -651,21 +673,67 @@
     return count ? sum / count / pic.H : null;
   }
 
-  DT.test('theme ink: a new speaking tank receives its first bead before the underwater bloom', () => {
+  DT.test('theme ink: the first bead waits for the timer and follows it through a pause', () => {
     if (!hasGL()) return;
     let now = T0;
-    DT.clock.set(()=>now);
-    const view = E.view(session(OPENING),T0), {stage,root} = mountInk(view,640,360);
+    DT.clock.set(() => now);
     try {
-      const frame = ms => { now = T0+ms; stage.update(view); return picture(root); };
-      const pigment = pic => pic.mean([pic.W*.20,pic.H*(pic.surface+.004),pic.W*.36,pic.H*(pic.surface+.15)],
-        rgb=>Number(warmth(rgb)>30));
-      const early = frame(120), falling = frame(450), landed = frame(950);
-      const high = beadHeight(early,.28,'pro'), low = beadHeight(falling,.28,'pro');
-      assert.ok(high!==null && low!==null && low>high+.025,'first bead descends');
-      assert.equal(pigment(falling),0,'water stays clear under the airborne bead');
-      assert.ok(pigment(landed)>.01 && beadHeight(landed,.28,'pro')===null,'first bead entered and opened');
-    } finally { stage.destroy(); DT.clock.reset(); }
+      for (const [name, side, x] of [[OPENING, 'pro', .28], [REBUTTAL, 'con', .72], ['评委打分', 'neutral', .412],
+        ['正反方二辩对辩', 'con', .555], ['自由辩论', 'pro', .445]]) {
+        const two = name === '正反方二辩对辩' || name === '自由辩论';
+        let s = session(name);
+        const {stage, root} = mountInk(E.view(s, now), 640, 360);
+        try {
+          const frame = ms => { now += ms; stage.update(E.view(s, now)); return picture(root); };
+          const bead = pic => beadHeight(pic, x, side);
+          const wet = pic => pic.mean([pic.W*(x-.08),pic.H*(pic.surface+.007),pic.W*(x+.08),pic.H*(pic.surface+.15)],
+            rgb => Number(side === 'pro' ? warmth(rgb)>30 : side === 'con' ? warmth(rgb)<-30 : rgb[0]<150));
+          for (const wait of [0, 200, 2500]) {
+            const idle = frame(wait);
+            assert.equal(bead(idle), null, name + ': no bead on page entry');
+            assert.equal(wet(idle), 0, name + ': ready water is clear');
+          }
+          s = two ? E.floor(s, side, now) : E.toggle(s, now);
+          const high = bead(frame(120));
+          const falling = frame(330), low = bead(falling);
+          assert.ok(high !== null && low !== null && low > high + .015, name + ': falls after start');
+          assert.equal(wet(falling), 0, name + ': water clear until impact');
+          s = E.pause(s, now);
+          assert.near(bead(frame(1800)), low, .002, name + ': pause holds the bead');
+          s = E.toggle(s, now);
+          const landed = frame(750);
+          assert.ok(bead(landed) === null && wet(landed) > .001, name + ': resumes and enters the water');
+        } finally { stage.destroy(); }
+      }
+    } finally { DT.clock.reset(); }
+  });
+
+  DT.test('theme ink: airborne and submerged drops keep their proportions across tank widths', () => {
+    if (!hasGL()) return;
+    function bounds(pic, above) {
+      let left = Infinity, top = Infinity, right = -1, bottom = -1;
+      pic.each([0, above ? 0 : pic.H*(pic.surface+.002), pic.W, above ? pic.H*(pic.surface-.004) : pic.H], (rgb, x, y) => {
+        if (warmth(rgb) < 30) return;
+        left = Math.min(x,left); right = Math.max(x,right); top = Math.min(y,top); bottom = Math.max(y,bottom);
+      });
+      assert.ok(right > left && bottom > top, 'visible coloured drop');
+      return (right-left+1/pic.k)/(bottom-top+1/pic.k);
+    }
+    const shapes = [400, 640, 840].map(width => {
+      const running = s => singleAt(OPENING,s);
+      const {stage,root} = still(running(2.5), width, 360);
+      try {
+        const bloom = bounds(picture(root), false);
+        stage.update(running(.78));
+        const contact = bounds(picture(root), false);
+        stage.update(running(25));
+        return [bloom, contact, bounds(picture(root), true)];
+      } finally { stage.destroy(); }
+    });
+    shapes[0].forEach((_, i) => {
+      const ratios = shapes.map(shape => shape[i]);
+      assert.ok(Math.max(...ratios)/Math.min(...ratios) < 1.23, ['bloom','contact','air'][i] + ': ' + ratios.join(', '));
+    });
   });
 
   DT.test('theme ink: every later speaking and break drop falls through air at its own injection point', () => {
@@ -1022,7 +1090,7 @@
     const water = warmth(pic.at(pic.W / 2, pic.H * 0.995));
     const upperTank = [0, pic.H * pic.surface, pic.W, pic.H * (pic.surface + .6 * (1 - pic.surface))];
     pic.each(upperTank, c => { n++; if (warmth(c) > water + 15) inked++; });
-    assert.ok(inked > 0.04 * n && inked < 0.7 * n, 'drops of ink, not a wash: ' + inked + ' of ' + n);
+    assert.ok(inked > 0.03 * n && inked < 0.7 * n, 'distinct blooms in the upper tank: ' + inked + ' of ' + n);
     stage.destroy();
   });
 

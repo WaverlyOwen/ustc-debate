@@ -8,7 +8,7 @@
   const BED = 0.955;           // the front with all of it used: the ink lies on the bed of the tank
   const MAX_STAGE_PIXELS = 3840 * 2160;
   const SOFTWARE_STAGE_PIXELS = 1024 * 576;
-  const ENTER_MS = 560;        // a new stage's drops fall to its front (wall time, the one thing that is)
+  const ENTER_MS = 560;        // title-to-ready crossfade (wall time)
   // Drop positions are fractions of the tank width and entry times are fractions of each speaker's clock.
   const DROPS = [[0.28, 0], [0.78, 0.14], [0.09, 0.34], [0.90, 0.55], [0.48, 0.77]];
   const DROP_DEPTH = 0.035;    // the first Sumi splat overlaps the meniscus
@@ -21,8 +21,9 @@
   const DUEL_X = [0.445, 0.36, 0.475, 0.29, 0.42];  // mirrored entry points for the two pigments
   const NOT_DROPPED = 2;  // later than the end of the shared timeline at 1
   const contactFrame = (at, lastFrame) => Math.ceil(at * lastFrame);
-  // Keep the 8:5 tank. Full HD receives a whole dye sample per horizontal pixel.
+  // Per-renderer budgets; the simulation itself follows the visible water's aspect.
   const FLUID_ROWS = 1200, TRACED_ROWS = 400, SOFTWARE_ROWS = 275;
+  const TRACED_CROP = .80;
   const BELL_S = 1.1;          // a bell's drop falls to the front in this much time used...
   const MELT_S = 0.6;          // ...and melts into it in this much more
   const PAD = 0.012;           // a box the ink is thinned in reaches this far past its text...
@@ -41,8 +42,7 @@
   // diffused ink between the surface and the front, all looked up through a few steps of curl noise (older ink,
   // higher up, has been stirred further), then textured with filaments that are sharp near the front and soft above
   // it. The water's colour is then thinned per channel by Beer–Lambert, exp(-D K), K the ink's optical density. In
-  // the boxes round the text the density is held under a cap worked out from the stylesheet's --side-color (and
-  // --ink-cap-text), so the ink there is never darker than it; a per-channel floor at that colour backs it up.
+  // the boxes round the small footer and card text only, --ink-cap-text limits the pigment density.
   const VERT = 'attribute vec2 aPos; void main() { gl_Position = vec4(aPos, 0.0, 1.0); }';
   const FRAG = [
     '#ifdef GL_FRAGMENT_PRECISION_HIGH', 'precision highp float;', '#else', 'precision mediump float;', '#endif',
@@ -61,15 +61,13 @@
     'uniform vec4 uColC[2];',      // seed, how far across its old ink has spread, flowing drops
     'uniform vec4 uColD[2];',      // the drift of its water: two offsets, wrapped
     'uniform vec3 uK[2];',         // its ink's optical density, per channel
-    'uniform vec3 uFloor[2];',     // the darkest the digits' box may be over its ink (linear)
-    'uniform vec3 uFloorT[2];',    // and any other text's
+    'uniform vec3 uFloor[2];',     // minimum background for card and footer text (linear)
     'uniform float uN;',           // how many plume slots are in use
     'uniform vec4 uP[NP];',        // a plume: head x, head y, radius, strength
     'uniform vec4 uQ[NP];',        // column, phase, top of its stem, kind (0 ring, 1 bell, 2 bloom, 3 settled, 4 drop)
     'uniform vec4 uW[NP];',        // squash, lean, stem, -
-    'uniform vec4 uBox[NB];',      // boxes round the text: the digits' first (uDigits of them), then the rest
-    'uniform float uDigits;',
-    'uniform vec2 uCaps[2];',      // the most ink, as density, behind the digits and behind other text, per column
+    'uniform vec4 uBox[NB];',      // small text only; the clock does not affect the water
+    'uniform vec2 uCaps;',         // density limit for the small text, one per column
     'uniform vec4 uRipple[NR];',   // x, age (s), amplitude, -
     'uniform vec4 uThread;',       // x, time over (s), strength, reach
     'uniform vec4 uThreadB;',      // bead phase, wobble phase, -, -
@@ -78,16 +76,16 @@
     'float ridge(float n) { return 1.0 - abs(2.0 * n - 1.0); }',
     'vec3 enc(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }',
     'vec3 lin(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }',
-    // how far inside the digits' boxes (x) and the other text's (y) a point is: 1 inside, 0 a feather away
-    'vec2 boxes(vec2 p) {',
-    '  vec2 m = vec2(0.0);',
+    // One inside a small text box; zero beyond its feather.
+    'float boxes(vec2 p) {',
+    '  float m = 0.0;',
     '  for (int i = 0; i < NB; i++) {',
     '    vec4 b = uBox[i];',
     '    vec2 h = 0.5 * (b.zw - b.xy);',
     '    vec2 d = abs(p - 0.5 * (b.xy + b.zw)) - h;',
     '    float sd = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);',
     '    float k = (1.0 - smoothstep(0.0, ' + FEATHER.toFixed(4) + ', sd)) * step(0.0001, h.x);',
-    '    if (float(i) < uDigits) m.x = max(m.x, k); else m.y = max(m.y, k);',
+    '    m = max(m, k);',
     '  }',
     '  return m;',
     '}',
@@ -108,8 +106,8 @@
     '  float apart = two * (1.0 - smoothstep(0.25 * uSplit.z, 1.6 * uSplit.z, abs(along - split)));',
     '  vec4 A = mix(uColA[0], uColA[1], side), B = mix(uColB[0], uColB[1], side);',
     '  vec4 C = mix(uColC[0], uColC[1], side), Dr = mix(uColD[0], uColD[1], side);',
-    '  vec3 K = mix(uK[0], uK[1], side), F = mix(uFloor[0], uFloor[1], side), FT = mix(uFloorT[0], uFloorT[1], side);',
-    '  vec2 caps = mix(uCaps[0], uCaps[1], side);',
+    '  vec3 K = mix(uK[0], uK[1], side), F = mix(uFloor[0], uFloor[1], side);',
+    '  float cap = mix(uCaps.x, uCaps.y, side);',
     '  float top = A.x, front = A.y;',
     // the surface, and its ripples
     '  float wave = 0.0;',
@@ -227,9 +225,9 @@
     // the water and its light, the ink in it, the air over it
     '  vec3 water = mix(uTop, uDeep, smoothstep(S, 1.0, p.y));',
     '  water *= 1.0 + 0.05 * exp(-max(0.0, p.y - S) * 12.0);',
-    '  vec2 m = boxes(p);',
-    '  D = mix(mix(D, held(D, caps.y), m.y), held(D, caps.x), m.x);',
-    '  Dt = mix(Dt, min(Dt, 0.15), max(m.x, m.y));',
+    '  float m = boxes(p);',
+    '  D = mix(D, held(D, cap), m);',
+    '  Dt = mix(Dt, min(Dt, 0.15), m);',
     '  vec3 col = water * exp(-(D * K + Dt * uKThread));',
     // Composite the original Sumi side-view opacity at the water's scale. Its shape and movement come from Sumi.
     '  if (uDuel > 0.5 && A.z >= 0.0) {',
@@ -240,7 +238,7 @@
     '    float right = tank.y > tank.x ? con : 1.0 - con;',
     '    vec3 pigment = mix(enc(uDeep * exp(-uK[0])), enc(uDeep * exp(-uK[1])), right);',
     '    col = lin(mix(enc(col), pigment, dye.a * tank.w * wet * step(coord.y, 1.0)));',
-    '    F = mix(uFloor[0], uFloor[1], right); FT = mix(uFloorT[0], uFloorT[1], right);',
+    '    F = mix(uFloor[0], uFloor[1], right);',
     '  } else if (A.z >= 0.0) {',
     '    vec4 drop = mix(uDrop[0], uDrop[1], side);',
     '    vec2 coord = vec2((p.x - drop.x) / (drop.y - drop.x), (p.y - uSurface) / (drop.z - uSurface));',
@@ -256,8 +254,7 @@
     '  col *= 1.0 - 0.17 * line;',
     '  col += 0.045 * men * wet;',
     '  col *= exp(-Dair);',
-    '  col = mix(col, max(col, FT), m.y);',
-    '  col = mix(col, max(col, F), m.x);',
+    '  col = mix(col, max(col, F), m);',
     '  gl_FragColor = vec4(enc(clamp(col, 0.0, 1.0)), 1.0);',
     '}',
   ].join('\n');
@@ -356,12 +353,12 @@
   // The uniforms, in the order they are packed: each a name and its length in floats.
   const LAYOUT = [
     ['uRes', 2], ['uAspect', 1], ['uAir', 3], ['uTop', 3], ['uDeep', 3], ['uSurface', 1], ['uSplit', 4], ['uDuel', 1],
-    ['uColA', 8], ['uColB', 8], ['uColC', 8], ['uColD', 8], ['uDrop', 8], ['uK', 6], ['uFloor', 6], ['uFloorT', 6],
-    ['uN', 1], ['uP', 4 * NP], ['uQ', 4 * NP], ['uW', 4 * NP], ['uBox', 4 * NB], ['uDigits', 1], ['uCaps', 4], ['uRipple', 4 * NR],
+    ['uColA', 8], ['uColB', 8], ['uColC', 8], ['uColD', 8], ['uDrop', 8], ['uK', 6], ['uFloor', 6],
+    ['uN', 1], ['uP', 4 * NP], ['uQ', 4 * NP], ['uW', 4 * NP], ['uBox', 4 * NB], ['uCaps', 2], ['uRipple', 4 * NR],
     ['uThread', 4], ['uThreadB', 4], ['uKThread', 3],
   ];
-  const ARRAYS = ['uColA', 'uColB', 'uColC', 'uColD', 'uDrop', 'uK', 'uFloor', 'uFloorT', 'uCaps', 'uP', 'uQ', 'uW', 'uBox', 'uRipple'];
-  const VEC3 = ['uAir', 'uTop', 'uDeep', 'uK', 'uFloor', 'uFloorT', 'uKThread'];
+  const ARRAYS = ['uColA', 'uColB', 'uColC', 'uColD', 'uDrop', 'uK', 'uFloor', 'uP', 'uQ', 'uW', 'uBox', 'uRipple'];
+  const VEC3 = ['uAir', 'uTop', 'uDeep', 'uK', 'uFloor', 'uKThread'];
   const OFFSET = {};
   let FLOATS = 0;
   LAYOUT.forEach(([name, n]) => { OFFSET[name] = FLOATS; FLOATS += n; });
@@ -394,8 +391,7 @@
 
   // Single-colour stages reuse the same Sumi frames. A dual stage owns its tank because its
   // injection times depend on the speakers. The title-to-speech fade needs both title pairs and the live pair.
-  const singleTank = { masks: new Map(), maxMasks: 6, sources: [null, null] };
-  let consumers = 0;
+  const singleTanks = new Map();  // views with the same tank shape can reuse source frames
   function closeSource(source) {
     for (const layer of source.layers) {
       if (layer.painter) layer.painter.dispose();
@@ -404,11 +400,20 @@
     }
   }
 
+  function clearTank(tank) {
+    tank.sources.forEach(source => { if (source) closeSource(source); });
+    tank.sources.fill(null);
+    tank.masks.clear();
+  }
+
   function openSource(tank) {
     const layers = [];
-    const sizeLayer = (canvas, rows) => {
-      canvas.style.width = (rows * 8 / 5) + 'px';
-      canvas.style.height = rows + 'px';
+    const sizeLayer = (canvas, rows, aspect, limit) => {
+      const width = Math.max(1, Math.min(limit, Math.round(Math.min(rows, limit) * aspect)));
+      const height = Math.max(1, Math.min(rows, limit, Math.round(width / aspect)));
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      return height;
     };
     const layer = () => {
       const canvas = document.createElement('canvas');
@@ -435,16 +440,19 @@
         if (start === 0 || start === NOT_DROPPED) return start * run;
         return (contactFrame(start, lastFrame) + .5) * run / (fluid ? lastFrame + 1 : lastFrame);
       }
-      const dropsAt = (run, fluid) => shared ? tank.starts.map((start, i) => {
-        const x = DUEL_X[Math.floor(i / 2)];
-        return [i % 2 ? 1 - x : x, DROP_DEPTH, injectAt(start, run, fluid), i % 2 ? '#0000ff' : '#ff0000'];
-      }) : DROPS.map(([x, progress]) => [x, DROP_DEPTH, injectAt(progress, run, fluid)]);
+      const dropsAt = (run, fluid) => {
+        const depth = DROP_DEPTH * (fluid ? 1 : TRACED_CROP);
+        return shared ? tank.starts.map((start, i) => {
+          const x = DUEL_X[Math.floor(i / 2)];
+          return [i % 2 ? 1 - x : x, depth, injectAt(start, run, fluid), i % 2 ? '#0000ff' : '#ff0000'];
+        }) : DROPS.map(([x, progress]) => [x, depth, injectAt(progress, run, fluid)]);
+      };
       const software = softwareRenderer(gl);
       // The original fluid solver injects every drop into the same velocity field.
       let drops = dropsAt(fluidSeconds, true);
-      if (!software) {
-        options.inkRows = Math.min(FLUID_ROWS, Math.floor(gl.getParameter(gl.MAX_TEXTURE_SIZE) * 5 / 8));
-        sizeLayer(first.canvas, options.inkRows);
+      if (!software && tank.aspect >= .25 && tank.aspect <= 4) {
+        const limit = Math.min(1920, gl.getParameter(gl.MAX_TEXTURE_SIZE));
+        options.inkRows = sizeLayer(first.canvas, FLUID_ROWS, tank.aspect, limit);
         first.painter = SumiInk.fluidPainter(first.canvas, gl, drops, options, fluidSeconds);
       }
       source.fluid = !!first.painter;
@@ -455,7 +463,7 @@
         const batchSize = shared ? drops.length : 3;
         for (let i = 0; i < drops.length; i += batchSize) {
           const target = i === 0 ? first : layer();
-          sizeLayer(target.canvas, software ? SOFTWARE_ROWS : TRACED_ROWS);
+          sizeLayer(target.canvas, software ? SOFTWARE_ROWS : TRACED_ROWS, tank.aspect * TRACED_CROP, software ? 440 : 640);
           target.painter = SumiInk.tracedSide(target.canvas, target.gl, drops.slice(i, i + batchSize), options, tracedSeconds);
           if (!target.painter) throw new Error('墨：Sumi 无法绘制墨滴');
         }
@@ -504,7 +512,7 @@
         throw new Error('墨：Sumi 的画布丢了');
       }
       // Crop the traced rendition around its descent. Copy both renderers pixel for pixel into the texture.
-      const height = source.fluid ? canvas.height : Math.round(canvas.height * 0.80);
+      const height = source.fluid ? canvas.height : Math.max(1, Math.round(canvas.height * TRACED_CROP));
       if (mask.width !== canvas.width) mask.width = canvas.width;
       if (mask.height !== height) mask.height = height;
       const sample = mask.getContext('2d');
@@ -537,6 +545,14 @@
     const uNoise = gl.getUniformLocation(prog, 'uNoise');
     const inkSamplers = ['uInk0', 'uNext0', 'uInk1', 'uNext1'].map(name => gl.getUniformLocation(prog, name));
     const duelTank = { masks: new Map(), maxMasks: 4, sources: [null], starts: Array(DROPS.length * 2).fill(NOT_DROPPED) };
+    let singleTank = null;
+    function releaseSingleTank() {
+      if (singleTank && --singleTank.users === 0) {
+        clearTank(singleTank);
+        singleTanks.delete(singleTank.aspect);
+      }
+      singleTank = null;
+    }
     const inkTextures = inkSamplers.map(() => {
       const texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -547,7 +563,6 @@
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
       return { texture, frame: -1, width: 1, height: 1 };
     });
-    consumers++;
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -564,9 +579,9 @@
     const probe2d = (() => { const c = document.createElement('canvas'); c.width = c.height = 1; return c.getContext('2d', { willReadFrequently: true }); })();
     let W = 0, H = 0;          // the stage, CSS px
     let palette = null, paletteSig = null;
-    let lastKey = null, enterAt = null, firstDropAt = null, openingFrame = null;
+    let lastKey = null, enterAt = null, openingFrame = null;
     let bells = [];            // the bells this stage has rung: {clock, ms, type}
-    const layout = { sig: null, steps: null, until: -Infinity, m: null };
+    const layout = { sig: null, until: -Infinity, m: null };
     const plumeCache = {};
     let drawn = null;          // the uniforms last drawn
     const u = new Float32Array(FLOATS);
@@ -634,24 +649,34 @@
         air: colour('--ink-air'), top: colour('--ink-water-top'), deep: colour('--ink-water-deep'),
         pro: colour('--pro'), con: colour('--con'), neutral: colour('--ink-neutral'), accent: colour('--accent'),
       };
+      const digitColor = colour(el.dataset.phase === 'over' ? '--over-ink' : '--digits-off-field');
       probe.remove();
       const lin = c => c.map(toLinear);
       const deep = lin(srgb.deep);
-      const cap = clamp01(num('--ink-cap', 0.6)), capText = clamp01(num('--ink-cap-text', 0.3));
-      const mixed = (name, k) => srgb[name].map((v, i) => toLinear(srgb.deep[i] + (v - srgb.deep[i]) * k));
+      const capText = clamp01(num('--ink-cap-text', 0.3));
+      const luminance = c => .2126*c[0] + .7152*c[1] + .0722*c[2];
+      const minLuminance = 3.04 * (luminance(lin(digitColor)) + .05) - .05;
       const ink = name => {
         // the ink's optical density: how much of each channel of the water a unit of it takes away
         const K = lin(srgb[name]).map((v, i) => Math.max(0.02, -Math.log(Math.max(v, 1e-4) / deep[i])));
-        // ink.css's --side-color, color-mix(in srgb, the ink --ink-cap, the water at the bed), is the darkest the ink
-        // may make anything behind the digits; as a density, the most of this ink that leaves every channel of the
-        // water at its bed at least that light. The ink behind the text is held under it, softly, so it keeps its
-        // grain; the floor itself is only a backstop.
-        const floor = mixed(name, cap), floorText = mixed(name, capText);
-        const most = f => Math.min.apply(null, K.map((k, i) => (f[i] < deep[i] ? -Math.log(f[i] / deep[i]) / k : Infinity)));
-        return { K, floor, floorText, caps: [most(floor), most(floorText)] };
+        const floor = srgb[name].map((v, i) => toLinear(srgb.deep[i] + (v - srgb.deep[i]) * capText));
+        const cap = Math.min(...K.map((k, i) => floor[i] < deep[i] ? -Math.log(floor[i] / deep[i]) / k : Infinity));
+        // Thin submerged dye uniformly across the tank just enough for the digits to read.
+        let opacity = 1;
+        if (el.dataset.mode === 'stage' && luminance(lin(srgb[name])) < minLuminance) {
+          let lo = 0, hi = 1;
+          for (let i = 0; i < 10; i++) {
+            const mid = (lo + hi) / 2;
+            const mix = srgb[name].map((v, j) => srgb.deep[j] + mid * (v - srgb.deep[j]));
+            if (luminance(lin(mix)) < minLuminance) hi = mid;
+            else lo = mid;
+          }
+          opacity = lo;
+        }
+        return { K, floor, cap, opacity };
       };
       return {
-        air: lin(srgb.air), top: lin(srgb.top), deep, cap, capText, surface: num('--ink-surface', 19) / 100,
+        air: lin(srgb.air), top: lin(srgb.top), deep, surface: num('--ink-surface', 19) / 100,
         pro: ink('pro'), con: ink('con'), neutral: ink('neutral'), accent: ink('accent'),
       };
     }
@@ -663,56 +688,39 @@
       if (!r.width || !r.height) return null;
       return [(r.left - box.left) / box.height, (r.top - box.top) / box.height, (r.right - box.left) / box.height, (r.bottom - box.top) / box.height];
     }
-    const union = list => list.filter(Boolean).reduce((a, b) => (a ? [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])] : b), null);
     const pad = r => (r ? [r[0] - PAD, r[1] - PAD, r[2] + PAD, r[3] + PAD] : null);
-    // The digits' box and, when they show, the overtime sign and 「暂停」 / 时间到 beside them.
-    function clockBox(clock, box) {
-      if (!clock || getComputedStyle(clock).display === 'none') return null;
-      const parts = [rectOf(clock, box)];
-      clock.querySelectorAll('.dt-digits:not(.dt-digits-on) > span, .dt-state').forEach(el => { if (el.textContent) parts.push(rectOf(el, box)); });
-      return pad(union(parts));
-    }
     const varOf = (el, name) => { const x = parseFloat(getComputedStyle(el).getPropertyValue(name)); return isFinite(x) ? x : 0; };
     const sel = (el, s) => el.querySelector(s);
 
-    // What moves the layout: the stage and its attributes, the halves', the digits' length and tension. Inline
-    // styles and attributes only, so working it out costs no style or layout.
+    // Card and footer text move on entry; the halves can fade after a handoff.
     function layoutSig(el, v) {
       const parts = [W, H, v.mode, v.stage ? v.stage.id : '', v.proSeat, el.classList.contains('is-entering'),
         el.getAttribute('data-kind'), el.getAttribute('data-side'), el.getAttribute('data-phase')];
       el.querySelectorAll('.dt-half').forEach(h => parts.push(h.getAttribute('data-side'), h.hasAttribute('data-active'),
         h.hasAttribute('data-locked')));
       v.clocks.forEach(c => parts.push(c.phase, c.running));
-      const steps = [el.style.getPropertyValue('--tension')];
-      el.querySelectorAll('.dt-half').forEach(h => steps.push(h.style.getPropertyValue('--tension')));
-      v.clocks.forEach(c => steps.push(c.text.length));
-      return { moves: parts.join('|'), steps: steps.join('|') };
+      return parts.join('|');
     }
 
     function measure(el) {
       const box = el.getBoundingClientRect();
       const halves = Array.from(el.querySelectorAll('.dt-half')).map(h => ({
         side: h.getAttribute('data-side') === 'con' ? 'con' : 'pro',
-        dim: varOf(h, '--dim'), clear: varOf(h, '--ink-clear'), clock: clockBox(sel(h, '.dt-clock'), box),
+        dim: varOf(h, '--dim'), clear: varOf(h, '--ink-clear'),
       }));
       return {
         aspect: box.width / Math.max(1, box.height), halves,
-        clock: clockBox(sel(el, '.dt-clock[data-clock="main"]'), box),
         motions: pad(rectOf(sel(el, '.dt-motions'), box)), teams: pad(rectOf(sel(el, '.dt-teams'), box)),
         record: pad(rectOf(sel(el, '.dt-record'), box)), next: pad(rectOf(sel(el, '.dt-next'), box)),
         progress: pad(rectOf(sel(el, '.dt-progress'), box)),
       };
     }
 
-    // Read on every frame for a while after anything that moves it has changed (the divider's spring, a half's fade,
-    // the digits' size, the text rising in), once after a step (the digits' tension, a minute's digit), and otherwise
-    // kept: read on every frame, it would lay the page out twice on every frame.
+    // Reuse the measured layout once the entry or handoff transition is over.
     function layoutOf(el, v, now) {
       const sig = layoutSig(el, v);
-      let fresh = !layout.m || still;
-      if (sig.moves !== layout.sig) { layout.sig = sig.moves; layout.until = now + SETTLE_MS; }
-      if (sig.steps !== layout.steps) { layout.steps = sig.steps; fresh = true; }
-      if (fresh || now <= layout.until) layout.m = measure(el);
+      if (sig !== layout.sig) { layout.sig = sig; layout.until = now + SETTLE_MS; }
+      if (!layout.m || still || now <= layout.until) layout.m = measure(el);
       return layout.m;
     }
 
@@ -724,14 +732,12 @@
     }
     function plumes(key, n, spread) { return plumeCache[key + '|' + n] || (plumeCache[key + '|' + n] = plumesOf(key, n, spread)); }
 
-    function scene(v, m, now) {
+    function scene(v, m) {
       const aspect = m.aspect;
       const S = palette.surface;
       const seat = v.proSeat === 'right' ? 'right' : 'left';
       const st = v.mode === 'stage' ? v.stage : null;
-      const sc = { aspect, columns: [], plumes: [], digits: [], text: [], ripples: [], thread: null, split: { at: 0, axis: 0, band: 0 } };
-      const entryAge = enterAt === null ? Infinity : Math.max(0, now - enterAt);
-      const entering = clamp01(entryAge / ENTER_MS);
+      const sc = { aspect, columns: [], plumes: [], text: [], ripples: [], thread: null, split: { at: 0, axis: 0, band: 0 } };
       const timeOf = ms => (motionless ? STILL_T : ms / 1000);
       const bed = st?.type === 'single' ? 1 : BED;
       const frontOf = used => S + GAP + (bed - S - GAP) * clamp01(used);
@@ -750,11 +756,10 @@
         if (age >= 0) sc.ripples.push({x, age:age / 1000, amp:.0045});
       }
       // A column of water, x0..x1, its seat (+1 at x0, -1 at x1, 0 none), its ink, its turbulence's time t (s), the top
-      // and front of its ink; its old ink pours in with the drops as the stage comes in.
+      // and front of its ink.
       const column = o => {
         const c = Object.assign({ top: S, veil: 0, amount: 1, seat: 0, spread: 1 }, o);
         c.flow = st && !motionless ? 1 : 0;
-        c.veil *= clamp01(entering * 1.6 - 0.2);
         c.seed = seedOf(o.seedKey);
         // Some lookups scale these offsets by .3, .6 or .8. Ten tiles is a full period for all of them.
         // Signed remainders also let a negative current start at zero without jumping a tile on the first tick.
@@ -764,41 +769,31 @@
         return c;
       };
       // Schedule each side's Sumi drops using only its own elapsed speaking time.
-      const rain = (c, used, total, inset = 0) => {
-        const progress = used / total, flight = fallTime(total);
-        // Reduced motion holds a still for each entry until the next drop is due.
-        const at = motionless ? DROPS.reduce((last, [, start]) => progress >= start ? start + 0.01 : last, 0) : progress;
-        c.frame = clamp01(at) * LAST_FRAME;
-        // A ready single clock already owns its first drop. Starting it leaves that drop in place.
-        const firstAge = firstDropAt === null ? Infinity : Math.max(used, now - firstDropAt) - flight;
-        c.drop = [across(c, inset), across(c, 1 - inset), bed, easeOut(firstAge / Math.min(180, flight / 2))];
+      const rain = (c, clock, inset = 0) => {
+        const used = usedOf(clock), total = Math.max(1, clock.total);
+        if (!clock.running && used === 0) return;
+        const flight = fallTime(total), firstAge = used - flight;
+        const progress = used / total;
+        const second = contactFrame(DROPS[1][1], LAST_FRAME) / LAST_FRAME;
+        // Sumi's first sample contains dye. Start that sample at contact, then catch
+        // up to the original schedule by the time the next drop arrives.
+        const at = motionless ? DROPS.reduce((last, [, start]) => progress >= start ? start + .01 : last, 0)
+          : progress < second ? second * Math.max(0, firstAge) / (second * total - flight) : progress;
+        c.frame = !motionless && firstAge < 0 ? -1 : clamp01(at) * LAST_FRAME;
+        c.drop = [across(c, inset), across(c, 1 - inset), bed, motionless ? 1 : easeOut(firstAge / Math.min(180, flight / 2))];
         DROPS.forEach(([position, start], i) => {
           const x = c.drop[0] + (c.drop[1] - c.drop[0]) * position;
-          const contact = contactFrame(start, LAST_FRAME) * total / LAST_FRAME;
-          fallingDrop(x, 0, i === 0 ? firstAge : used - contact, flight);
+          const contact = i === 0 ? flight : contactFrame(start, LAST_FRAME) * total / LAST_FRAME;
+          fallingDrop(x, 0, used - contact, flight);
         });
       };
       // The end card's two bands of settled pigment sit behind the match record.
       const settledBand = (c, idx) => {
         plumes(c.seedKey, 3, 0.8).forEach(pl => {
           const x = across(c, pl.at), R = 1.2 * pl.r;
-          let y = Math.min(c.front + pl.lead - 0.7 * R, BED - 0.45 * R);
-          let radius = R, strength = pl.s, kind = 3;
-          const e = clamp01(entering * 1.35 - 0.35 * pl.lag);
-          if (e < 1) {
-            const hit = 0.22;
-            if (e < hit) {
-              const k = e / hit;
-              kind = 4; radius = 0.008 + 0.004 * k; y = S - 0.07 + 0.07 * k * k; strength = 2.2 * c.amount;
-            } else {
-              const k = easeOut((e - hit) / (1 - hit));
-              radius = R * (0.35 + 0.65 * k);
-              y = S + 0.01 + (y - S - 0.01) * k;
-              sc.ripples.push({ x, age: (e - hit) * ENTER_MS / 1000, amp: 0.0045 });
-            }
-          }
-          sc.plumes.push({ x, y, r: radius, s: strength, col: idx, phase: wrap((pl.phase + pl.spin * c.t) / TAU) * TAU,
-            top: c.top, kind, squash: 1, lean: 0, stem: 0 });
+          const y = Math.min(c.front + pl.lead - 0.7 * R, BED - 0.45 * R);
+          sc.plumes.push({ x, y, r: R, s: pl.s, col: idx, phase: wrap((pl.phase + pl.spin * c.t) / TAU) * TAU,
+            top: c.top, kind: 3, squash: 1, lean: 0, stem: 0 });
         });
       };
       // A bell's drop falls on the speaking side and punches a crisp ring down to the front, then melts into it; an
@@ -833,21 +828,18 @@
         const left = seat === 'left' ? 'pro' : 'con', right = left === 'pro' ? 'con' : 'pro';
         [[left, 0, aspect / 2, 1], [right, aspect / 2, aspect, -1]].forEach(([side, x0, x1, dir], i) => {
           const c = column({ x0, x1, seat: dir, ink: side, t: 31 + 7 * i, front: 0.66, veil: 0.3, seedKey: 'title/' + side });
-          const age = entryAge - i * 240 - FALL_MS;
-          fallingDrop(across(c, DROPS[0][0]), i, age, FALL_MS);
-          c.frame = easeOut(age / 1400) * (0.095 + i * 0.015) * LAST_FRAME;
-          c.drop = [across(c, 0), across(c, 1), BED, easeOut(age / 180)];
+          c.frame = (0.095 + i * 0.015) * LAST_FRAME;
+          c.drop = [across(c, 0), across(c, 1), BED, 1];
         });
         sc.split = { at: aspect / 2, axis: 0, band: 0.03 };
         sc.text.push(m.motions, m.teams);
       } else if (v.mode === 'end') {
         // Both inks at rest in the tank, in two layers, 正方's over 反方's.
-        const k = easeOut(entering), lift = 0.05 * (1 - k);
-        const c0 = column({ x0: 0, x1: aspect, ink: 'pro', t: 63, top: 0.6 - lift, front: 0.76 - lift, veil: 0.75, seedKey: 'end/pro' });
-        const c1 = column({ x0: 0, x1: aspect, ink: 'con', t: 74, top: 0.79 - lift, front: 0.97 - lift, veil: 0.85, seedKey: 'end/con' });
+        const c0 = column({ x0: 0, x1: aspect, ink: 'pro', t: 63, top: 0.6, front: 0.76, veil: 0.75, seedKey: 'end/pro' });
+        const c1 = column({ x0: 0, x1: aspect, ink: 'con', t: 74, top: 0.79, front: 0.97, veil: 0.85, seedKey: 'end/con' });
         settledBand(c0, 0);
         settledBand(c1, 1);
-        sc.split = { at: 0.775 - lift, axis: 1, band: 0.012 };
+        sc.split = { at: 0.775, axis: 1, band: 0.012 };
         sc.text.push(m.record);
       } else if (st && st.type === 'dual') {
         sc.duel = true;
@@ -873,7 +865,6 @@
             fallingDrop(aspect * (i === 0 ? position : 1 - position), i, elapsed - contact, contact - release);
           });
           bellDrops(c, i, h.side, clock, list);
-          sc.digits.push(h.clock);
         });
         sc.split = { at: split, axis: 0, band: 0.011 };
       } else if (st) {
@@ -884,8 +875,7 @@
           // Neutral ink sinks in the middle during the break.
           const c = column({ x0: 0, x1: aspect, ink: 'neutral', t: timeOf(used), front: frontOf(used / total), spread: 0,
             seedKey: 'break/' + st.id });
-          rain(c, used, total, 0.30);
-          sc.digits.push(m.clock);
+          rain(c, clock, 0.30);
           sc.text.push(m.motions);
         } else {
           const side = st.side === 'con' ? 'con' : 'pro';
@@ -893,7 +883,7 @@
           const c = column({ x0: 0, x1: aspect, seat: left ? 1 : -1, ink: side, t: timeOf(used), front: frontOf(used / total),
             seedKey: st.id + '/' + side });
           const list = plumes(st.id + '/' + side, 4, 0.8);
-          rain(c, used, total);
+          rain(c, clock);
           bellDrops(c, 0, 'main', clock, list);
           if (clock && clock.phase === 'over') {
             // The time spilling over: a thread of the accent's ink falling from the surface at the seat, reaching the
@@ -902,7 +892,6 @@
             sc.thread = { x: left ? 0.075 * aspect : aspect - 0.075 * aspect, over, reach: S + (BED - S) * clamp01(over / 1.8),
               beads: wrap(over * 0.45) * TAU, wobble: wrap(over * 0.05) * TAU };
           }
-          sc.digits.push(m.clock);
         }
       }
       sc.text.push(m.next, m.progress);
@@ -925,16 +914,18 @@
         set('uColB', 4 * i, [c.x0, c.x1, c.seat, c.veil]);
         set('uColC', 4 * i, [c.seed[0], c.seed[1], c.spread, c.flow]);
         set('uColD', 4 * i, c.drift);
-        if (c.drop) set('uDrop', 4 * i, c.drop);
+        if (c.drop) {
+          const opacity = sc.duel ? Math.min(pal.pro.opacity, pal.con.opacity) : ink.opacity;
+          set('uDrop', 4 * i, [c.drop[0], c.drop[1], c.drop[2], c.drop[3] * opacity]);
+        }
         set('uK', 3 * i, ink.K);
         set('uFloor', 3 * i, ink.floor);
-        set('uFloorT', 3 * i, ink.floorText);
-        set('uCaps', 2 * i, ink.caps);
+        set('uCaps', i, [ink.cap]);
       });
       if (sc.columns.length === 1) {   // a lone column's values on both sides of a split that is never crossed
         ['uColA', 'uColB', 'uColC', 'uColD', 'uDrop'].forEach(n => u.copyWithin(OFFSET[n] + 4, OFFSET[n], OFFSET[n] + 4));
-        ['uK', 'uFloor', 'uFloorT'].forEach(n => u.copyWithin(OFFSET[n] + 3, OFFSET[n], OFFSET[n] + 3));
-        u.copyWithin(OFFSET.uCaps + 2, OFFSET.uCaps, OFFSET.uCaps + 2);
+        ['uK', 'uFloor'].forEach(n => u.copyWithin(OFFSET[n] + 3, OFFSET[n], OFFSET[n] + 3));
+        u[OFFSET.uCaps + 1] = u[OFFSET.uCaps];
       }
       set('uN', 0, [Math.min(NP, sc.plumes.length)]);
       sc.plumes.slice(0, NP).forEach((pl, i) => {
@@ -942,9 +933,7 @@
         set('uQ', 4 * i, [pl.col, pl.phase, pl.top, pl.kind]);
         set('uW', 4 * i, [pl.squash, pl.lean, pl.stem, 0]);
       });
-      const digits = sc.digits.filter(Boolean), text = sc.text.filter(Boolean);
-      digits.concat(text).slice(0, NB).forEach((b, i) => set('uBox', 4 * i, b));
-      set('uDigits', 0, [digits.length]);
+      sc.text.filter(Boolean).slice(0, NB).forEach((b, i) => set('uBox', 4 * i, b));
       sc.ripples.slice(0, NR).forEach((r, i) => set('uRipple', 4 * i, [r.x, r.age, r.amp, 0]));
       if (sc.thread) {
         set('uThread', 0, [sc.thread.x, sc.thread.over, 1, sc.thread.reach]);
@@ -963,7 +952,33 @@
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.uniform1i(uNoise, 0);
       const left = values[OFFSET.uColA + 2], right = values[OFFSET.uColA + 6];
-      const tank = values[OFFSET.uDuel] ? duelTank : singleTank;
+      let tank = null;
+      if (left >= 0 || right >= 0) {
+        const at = OFFSET.uDrop;
+        const width = Math.abs(values[at + 1] - values[at]);
+        const height = values[at + 2] - values[OFFSET.uSurface];
+        // Fractional layout pixels must not repeatedly restart a fluid solver.
+        const aspect = Math.max(.01, Math.round(100 * width / height) / 100);
+        if (values[OFFSET.uDuel]) {
+          tank = duelTank;
+          if (tank.aspect !== aspect) {
+            clearTank(tank);
+            tank.aspect = aspect;
+            for (const slot of inkTextures) if (slot.tank === tank) slot.frame = -1;
+          }
+        } else {
+          if (singleTank?.aspect !== aspect) {
+            releaseSingleTank();
+            singleTank = singleTanks.get(aspect);
+            if (!singleTank) {
+              singleTank = { aspect, masks: new Map(), maxMasks: 6, sources: [null, null], users: 0 };
+              singleTanks.set(aspect, singleTank);
+            }
+            singleTank.users++;
+          }
+          tank = singleTank;
+        }
+      }
       const frames = [Math.floor(left), Math.ceil(left), Math.floor(right), Math.ceil(right)];
       frames.forEach((frame, i) => {
         // The previous upper neighbour becomes the next lower one. Rebind its existing texture.
@@ -1005,21 +1020,18 @@
         if (!el) return;
         const key = v.mode + '|' + (v.stage ? v.stage.id : '');
         if (key !== lastKey) {
-          // A new stage is a new tank: its drops fall in as it comes in (never in a still), and its bells are gone.
+          // Only the title-to-ready crossfade follows wall time. All timed drops follow the match clock.
           openingFrame = !still && lastKey === 'title|' && v.mode === 'stage' ? drawn : null;
           lastKey = key;
           enterAt = !still && el.classList.contains('is-entering') ? now : null;
-          const clock = v.clocks[0], used = clock ? Math.max(0, clock.total - clock.remaining) : 0;
-          firstDropAt = enterAt !== null && clock && v.mode === 'stage' && v.stage.type !== 'dual' &&
-            used < fallTime(clock.total) ? now - used : null;
           bells = [];
         }
         const active = v.clocks.find(c => c.active) || v.clocks[0];
         const sig = [v.mode, el.getAttribute('data-kind'), el.getAttribute('data-side'), active ? active.phase : '',
           el.style.getPropertyValue('--ink-header-bottom')].join('|');
         if (!palette || sig !== paletteSig) { palette = readPalette(el); paletteSig = sig; }
-        pack(scene(v, layoutOf(el, v, now), now));
-        if (openingFrame && enterAt !== null && now - enterAt < ENTER_MS) {
+        pack(scene(v, layoutOf(el, v, now)));
+        if (openingFrame && !v.running && !v.clocks.some(c => c.remaining < c.total) && enterAt !== null && now - enterAt < ENTER_MS) {
           draw(openingFrame);
           gl.enable(gl.BLEND);
           const p = clamp01((now - enterAt) / ENTER_MS);
@@ -1055,12 +1067,8 @@
       destroy() {
         drawn = null;
         try {
-          const tanks = --consumers === 0 ? [singleTank, duelTank] : [duelTank];
-          for (const tank of tanks) {
-            tank.sources.forEach(source => { if (source) closeSource(source); });
-            tank.sources.fill(null);
-            tank.masks.clear();
-          }
+          releaseSingleTank();
+          clearTank(duelTank);
           inkTextures.forEach(slot => gl.deleteTexture(slot.texture));
           gl.deleteTexture(tex);
           gl.deleteBuffer(buf);

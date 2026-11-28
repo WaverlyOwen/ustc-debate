@@ -3,8 +3,7 @@
    dropped into it from the surface. Each drop has time to bloom before the next one enters. The depth of the diffuse
    background ink follows the total time used. The water and its ink are themes/ink.js's WebGL painter, which reads the
    colours below; while it draws, the stage has data-painter="live". Without it (no WebGL) a plain column of the side's
-   ink stands in, from the surface down to the front. The digits are always one colour: wherever they are, the painter
-   thins the ink behind them to at most --ink-cap of its strength, which is --side-color. */
+   ink stands in, from the surface down to the front. The clock is drawn directly over the water. */
 [data-theme="ink"] {
   --pro: #A3321F;           /* 朱砂: cinnabar, as dense ink; thinned in water it goes to a warm pink */
   --con: #2C4B5F;           /* 花青: indigo; thinned it goes to a grey-blue */
@@ -38,10 +37,10 @@
   --ink-air: var(--ground);
   --ink-gap: 4;
   --ink-bed: 95.5;
-  --ink-cap: .62;           /* the most ink, of its full strength, left behind the digits */
-  --ink-cap-text: .3;       /* and behind the other text in the water (the bottom bar, a card's words) */
+  --ink-cap: .62;           /* maximum density of the CSS fallback field */
+  --ink-cap-text: .3;       /* density behind small card and footer text */
   --ink-side: var(--ink-neutral);
-  /* What the digits lie on where the ink is at its thickest: the ink at --ink-cap in the water at its deepest. */
+  /* The densest colour of the CSS fallback column, used by shared stage styles. */
   --side-color: color-mix(in srgb, var(--ink-side) calc(var(--ink-cap) * 100%), var(--ink-water-deep));
   --ink-front: calc((var(--ink-surface) + var(--ink-gap) + (var(--ink-bed) - var(--ink-surface) - var(--ink-gap)) * var(--used)) * 1cqh);
   background: var(--ground);
@@ -72,11 +71,6 @@
 .dt-stage[data-theme="ink"] .dt-digits-on { display: none; }
 .dt-stage[data-theme="ink"][data-kind][data-side][data-pro-seat] .dt-digits:not(.dt-digits-on),
 .dt-stage[data-theme="ink"] .dt-half .dt-digits:not(.dt-digits-on) { clip-path: none; }
-/* In warn the colon turns ochre, with a rim of water round it, so it reads on the ink too. */
-.dt-stage[data-theme="ink"] .dt-clock[data-phase="warn"] .dt-colon,
-.dt-stage[data-theme="ink"] .dt-clock[data-phase="count"] .dt-colon {
-  filter: drop-shadow(0 0 .02em var(--ink-water-top)) drop-shadow(0 0 .02em var(--ink-water-top));
-}
 /* 「暂停」 hangs under the digits, in the ink's water. Emptied on resume it keeps its word (stage.css :empty::before)
    while it fades, so it must still go to 0 here. */
 .dt-stage[data-theme="ink"] .dt-clock .dt-state { color: var(--ink); opacity: .8; }
@@ -84,8 +78,7 @@
 
 /* ---- without the painter: a plain column of the side's ink, from the surface down to the front ---- */
 
-/* The field is the ink between the surface and the front, thicker toward the front, with a soft lower edge. Its
-   thickest is --ink-cap of the ink, as the painter's is behind the digits: --side-color is true here too. */
+/* The fallback field thickens toward the front and ends in a soft edge. */
 .dt-stage[data-theme="ink"] .dt-field,
 .dt-stage[data-theme="ink"] .dt-half-field {
   --ink-thin: color-mix(in srgb, var(--ink-side) 14%, transparent);
@@ -95,6 +88,7 @@
 }
 /* [data-mode] ranks this with stage.css's per-seat clip-path rules, which it replaces. */
 .dt-stage[data-theme="ink"][data-mode] .dt-field {
+  opacity: clamp(0, calc(var(--used) * 1000), 1);
   top: calc(var(--ink-surface) * 1cqh + 1px);
   bottom: auto;
   height: calc(var(--ink-front) - var(--ink-surface) * 1cqh + 2cqh);
@@ -110,10 +104,8 @@
 }
 .dt-stage[data-theme="ink"][data-painter="live"] .dt-field,
 .dt-stage[data-theme="ink"][data-painter="live"] .dt-half-field { visibility: hidden; }
-/* The ink pours in from the surface as a stage comes in, rather than sweeping in from a side. */
-.dt-stage[data-theme="ink"].is-entering .dt-field,
-.dt-stage[data-theme="ink"].is-entering .dt-half .dt-half-field { animation: dt-ink-pour 560ms var(--ease-out) backwards; }
-@keyframes dt-ink-pour { from { clip-path: inset(0 0 100% 0); } }
+.dt-stage[data-theme="ink"][data-mode="stage"].is-entering .dt-field,
+.dt-stage[data-theme="ink"][data-mode="stage"].is-entering .dt-half .dt-half-field { animation: none; }
 
 .dt-stage[data-theme="ink"] .dt-warnline { display: none; }
 
@@ -224,7 +216,7 @@
   top: calc(var(--ink-surface) * 1cqh + 1px);
   height: calc((var(--ink-gap) + (var(--ink-bed) - var(--ink-surface) - var(--ink-gap)) * var(--ink-used, 0)) * 1cqh + 2cqh);
   clip-path: none;
-  opacity: calc((1 - .55 * var(--dim)) * (1 - .65 * var(--ink-clear)));
+  opacity: calc(clamp(0, var(--ink-used, 0) * 1000, 1) * (1 - .55 * var(--dim)) * (1 - .65 * var(--ink-clear)));
 }
 .dt-stage[data-theme="ink"][data-kind="dual"]:not([data-painter="live"]) .dt-half { overflow: visible; }
 .dt-stage[data-theme="ink"][data-kind="dual"]:not([data-painter="live"]) .dt-half:first-child .dt-half-field {
